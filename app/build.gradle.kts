@@ -16,8 +16,11 @@ android {
         applicationId = "com.kipu.app"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        val appVersionCode: Int = providers.gradleProperty("appVersionCode").map { it.toInt() }.getOrElse(1)
+        val appVersionName: String = providers.gradleProperty("appVersionName").getOrElse("0.1.0")
+
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
