@@ -117,7 +117,7 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 - **Restricciones de plataforma**: En un dispositivo Android real se prueban Doze, restricción de batería y detención forzada. Esos estados no están sujetos al plazo de 15 minutos mientras el sistema operativo impida ejecutar trabajo; deben conservar la operación y sincronizarla en la primera oportunidad permitida o al reabrir la aplicación.
 - **Comprensión comercial**: Al menos 20 participantes representativos responden preguntas sobre permanencia de Free, voluntariedad del Trial, precio posterior, renovación, cancelación y ausencia de compra en Sprint 1.
 - **Accesibilidad**: Los ocho recorridos críticos se completan con lector de pantalla y con texto ampliado al 200%, verificando foco, orden de lectura, estado seleccionado, precios, condiciones y acción principal.
-- **Aislamiento**: Se prueban `SELECT`, `INSERT` y `UPDATE` con dos cuentas distintas tanto por el límite de servicio como por el acceso directo permitido al almacén remoto.
+- **Aislamiento**: Se prueban `SELECT`, `INSERT` y `UPDATE` con dos cuentas distintas por el límite de servicio y mediante intentos directos controlados contra el almacén remoto; los grants directos de producción permanecen revocados.
 
 ## Requirements *(mandatory)*
 
@@ -133,7 +133,7 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 - **FR-001**: El sistema DEBE presentar la Pantalla 1B secuencialmente después del registro exitoso de una cuenta Kipu.
 - **FR-002**: La Pantalla 1B DEBE permitir seleccionar Kipu Free o una única alternativa Premium informativa antes de confirmar el plan.
 - **FR-003**: La tarjeta Kipu Free DEBE mostrar S/ 0 de por vida, ausencia de tarjeta y publicidad, uso manual local y los límites de 4 instrumentos, 5 categorías personalizadas, 2 deudas, 2 metas y 2 presupuestos.
-- **FR-004**: La tarjeta Premium DEBE presentar una oferta informativa de 7 días únicamente cuando la persona sea elegible y DEBE permitir consultar Mensual por S/ 4.99, Anual por S/ 29.99 y Pago Único Lifetime por S/ 49.99.
+- **FR-004**: La tarjeta Premium DEBE presentar el Trial de 7 días como aplicable únicamente cuando la persona sea elegible. Con elegibilidad desconocida PUEDE informar que existe una oferta sujeta a verificación, sin prometer duración ni aplicación. La tarjeta DEBE permitir consultar Mensual por S/ 4.99, Anual por S/ 29.99 y Pago Único Lifetime por S/ 49.99.
 - **FR-005**: Al seleccionar Mensual o Anual con elegibilidad confirmada, la pantalla DEBE mostrar antes de la confirmación los 7 días de prueba, el precio exacto posterior, la frecuencia de renovación y las condiciones de cancelación.
 - **FR-006**: Al seleccionar Lifetime, la pantalla DEBE informar que corresponde a un pago único, sin renovación, y NO DEBE prometer un Trial de 7 días.
 - **FR-007**: Si la persona ya consumió el Trial o su elegibilidad no está confirmada, la pantalla NO DEBE prometer otro periodo gratuito.
@@ -156,12 +156,12 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 - **FR-024**: La modalidad Mensual, Anual o Lifetime seleccionada DEBE utilizarse para presentar las condiciones y decidir el tipo de intención, pero NO DEBE persistirse como modalidad de compra en Sprint 1; una compra futura exigirá una nueva selección y confirmación en HU-53.
 - **FR-025**: Mostrar o abandonar la Pantalla 1B NO DEBE crear una fila de preferencia. El default `'FREE'` solo aplica cuando se realiza una inserción explícita sin otro valor y no constituye evidencia de confirmación, Trial o compra.
 - **FR-026**: Todo precio que se almacene o transporte de forma autoritativa DEBE representarse en unidades monetarias menores enteras junto con la moneda `PEN`; la interfaz DEBE mostrar los importes equivalentes en soles.
-- **FR-027**: El límite de monetización EP-PLA DEBE entregar a Pantalla 1B un `TrialEligibilitySnapshot` con estado `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`, procedencia y momento de verificación. Solo el historial de cuenta verificado PUEDE producir los dos primeros estados; ausencia, error o evidencia no confiable DEBE producir `UNKNOWN` sin promesa de Trial.
+- **FR-027**: El límite de monetización EP-PLA DEBE entregar a Pantalla 1B un `TrialEligibilitySnapshot` con estado `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`, procedencia, momento de verificación y vigencia cuando corresponda. Solo el historial de cuenta verificado y vigente PUEDE producir los dos primeros estados; ausencia, expiración, error o evidencia no confiable DEBE producir `UNKNOWN` sin promesa de Trial.
 - **FR-028**: Todo cambio de esquema local o remoto requerido por esta historia DEBE usar una migración versionada, revisable y no destructiva, validada con datos existentes representativos.
 - **FR-029**: Una solicitud sin autenticación, con versión no soportada o payload inválido DEBE rechazarse sin modificar estado ni exponer datos; una indisponibilidad transitoria DEBE conservar la operación local como pendiente y reintentable, siempre sin alterar el acceso Kipu Free.
 - **FR-030**: Cada confirmación DEBE establecer `selected_at` al momento de la nueva selección y `updated_at` al mismo momento local; cada aplicación remota exitosa DEBE reemplazar `updated_at` por el momento asignado por servidor.
 - **FR-031**: El límite remoto DEBE conservar, durante la vida de la cuenta, un recibo por combinación de usuario y `operation_id`, el hash canónico del payload y la mayor `selection_revision` aceptada; esta metadata DEBE eliminarse con la cuenta y su esquema físico se define en el plan.
-- **FR-032**: RLS DEBE estar habilitado para `plan_preferences`; operaciones `SELECT`, `INSERT` y `UPDATE` que no satisfagan `user_id = auth.uid()` DEBEN ser denegadas incluso si omiten el límite `/plans/selection`.
+- **FR-032**: RLS DEBE estar habilitado y forzado para `plan_preferences` y para toda tabla remota user-owned de esta historia; las operaciones del rol ejecutor que no satisfagan `user_id = auth.uid()` DEBEN ser denegadas. Los clientes no reciben DML directo. Una escritura privilegiada de historial verificado DEBE usar una identidad server-only, alcance mínimo y validación explícita del propietario.
 
 ### Trazabilidad de Requisitos y Evidencia
 
@@ -257,7 +257,7 @@ Estos importes son configuración comercial informativa de Sprint 1. Google Play
 
 #### Fuente de Elegibilidad
 
-El límite de monetización EP-PLA es propietario del contrato de lectura `TrialEligibilitySnapshot`, compuesto por `status`, `source` y `verified_at`. `status` admite `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`; los dos primeros requieren `source = VERIFIED_ACCOUNT_HISTORY` y un `verified_at` vigente según la configuración de producto. Sin esa evidencia, el productor devuelve `UNKNOWN`.
+El límite de monetización EP-PLA es propietario del contrato de lectura `TrialEligibilitySnapshot`, compuesto por `status`, `source`, `verified_at` y `valid_until`. `status` admite `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`; los dos primeros requieren `source = VERIFIED_ACCOUNT_HISTORY`, `verified_at` y una vigencia verificable. Una elegibilidad positiva expirada se degrada a `UNKNOWN`; una inelegibilidad por consumo confirmado puede ser permanente y usar `valid_until = null`. Sin esa evidencia, el productor devuelve `UNKNOWN`.
 
 En Sprint 1, `UNKNOWN` es un resultado válido y no bloqueante: la persona puede conocer la oferta marcada como sujeta a elegibilidad y registrar interés, pero no recibe una promesa ni derechos. La integración que alimente este contrato desde Google Play pertenece a HU-53/HU-54. Un cache local puede conservar una denegación verificada, pero nunca transformar `UNKNOWN` en `ELIGIBLE`.
 
@@ -271,7 +271,8 @@ RLS debe estar habilitado en `plan_preferences`. Sus políticas `SELECT`, `INSER
 
 #### Contratos de Capacidades y Selección
 
-- **`/plans/selection`**: Límite autenticado que persiste exclusivamente preferencias, nunca compras, suscripciones ni entitlements. La versión inicial del contrato es `1`.
+- **`GET /plans/eligibility`**: Lectura autenticada y no editable por cliente de la proyección de historial verificado. Devuelve `UNKNOWN` cuando no existe evidencia vigente.
+- **`POST /plans/selection`**: Límite autenticado que persiste exclusivamente preferencias, nunca compras, suscripciones ni entitlements. La versión inicial del contrato es `1`.
 - **`FeatureAccessPolicy`**: Interfaz de dominio determinista que devuelve `Allowed` o `Denied` con un motivo. Una preferencia de intención, por sí sola, siempre debe evaluarse con los derechos efectivos de Kipu Free.
 
 El request de `/plans/selection` contiene `contract_version`, `operation_id`, `selection_revision`, `selection` y `selected_at`. La identidad del usuario se obtiene de la sesión y no de un identificador confiado del cuerpo. Toda respuesta exitosa contiene el resultado `APPLIED`, `DUPLICATE`, `STALE` o `CONFLICT`, la revisión aceptada, la preferencia vigente y una instantánea obligatoria de los cupos Free.
@@ -285,7 +286,8 @@ El servicio conserva durante la vida de la cuenta un recibo único por `(user_id
 
 Los errores se clasifican sin devolver preferencias ni cupos a una identidad no autorizada:
 
-- `UNAUTHENTICATED` o `FORBIDDEN`: rechazo terminal sin cambio remoto ni exposición de datos; la operación espera una nueva sesión válida antes de reintentarse.
+- `UNAUTHENTICATED`: rechazo sin cambio remoto ni exposición de datos; la operación pasa a esperar una nueva sesión válida del mismo usuario antes de reintentarse con payload idéntico.
+- `FORBIDDEN`: rechazo terminal de la operación sin cambio remoto, reintento automático ni exposición de datos.
 - `UNSUPPORTED_VERSION` o `INVALID_REQUEST`: rechazo terminal de esa operación; se conserva la preferencia local y se expone un estado de sincronización no sensible para corrección, sin bucle automático infinito.
 - `UNAVAILABLE`: fallo reintentable; la operación permanece pendiente con la misma identidad y revisión hasta una oportunidad permitida.
 
@@ -333,7 +335,7 @@ La aprobación de esta especificación autoriza los invariantes funcionales y t�
 - **SC-003**: Se producen 0 cobros, 0 suscripciones, 0 Trials activos y 0 concesiones Premium en todos los recorridos de Sprint 1, incluidos intención Premium, abandono, uso offline y reintentos.
 - **SC-004**: El 100% de las personas identificadas como no elegibles, o cuya elegibilidad sea desconocida, deja de recibir una promesa de Trial de 7 días.
 - **SC-005**: En al menos el 95% de las 40 confirmaciones de la matriz mínima, la confirmación local y el avance al siguiente paso se completan en 2 segundos o menos, incluso sin conectividad.
-- **SC-006**: El 100% de las selecciones confirmadas offline permanece disponible después de reiniciar y, bajo las condiciones de medición de la matriz, se sincroniza una sola vez en un máximo de 15 minutos tras recuperar conectividad estable.
+- **SC-006**: El 100% de las selecciones confirmadas offline permanece disponible después de reiniciar. Bajo las condiciones de medición de la matriz, al menos el 95% se reconcilia remotamente en un máximo de 15 minutos tras recuperar conectividad estable; el resto permanece íntegro y se procesa en la primera oportunidad permitida.
 - **SC-007**: El 100% de los intentos de acceso cruzado entre cuentas es rechazado sin revelar ni modificar preferencias ajenas.
 - **SC-008**: Al menos 18 de los 20 participantes de la prueba de comprensión identifican correctamente, en el primer intento, que Free es permanente, que el Trial es voluntario y que confirmar Premium en Sprint 1 no activa una compra.
 - **SC-009**: El 100% de los ocho recorridos críticos definidos en la matriz puede completarse con lector de pantalla y texto ampliado al 200%, conservando perceptible la opción seleccionada y sus condiciones comerciales.
