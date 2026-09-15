@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Kipu</string>
+    <string name="plans_title">Elige cómo empezar</string>
+    <string name="plans_subtitle">Kipu Free siempre estará disponible. Las opciones Premium son informativas.</string>
+    <string name="plans_confirm">Confirmar Plan</string>
+    <string name="plans_play_disabled">Google Play no está habilitado; confirmar solo registra interés.</string>
 </resources>

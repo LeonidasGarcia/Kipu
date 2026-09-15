@@ -26,3 +26,13 @@ secrets.properties
 
 # Operating system files
 Thumbs.db
+
+# Generated build and local tool output
+build/
+out/
+.ksp/
+*.class
+*.log
+__pycache__/
+*.pyc
+supabase/.temp/
