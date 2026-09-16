@@ -9,6 +9,8 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (cleanup sin cambios funcionales: eliminadas las referencias residuales al sistema de diseño previo; ninguna tarea afectada, T042/T056 ya apuntan a `docs/stitch-design-system.md`).
 
+**Propagated**: 2026-09-16 — Updated from spec.md refinement (fidelidad de Pantalla 1B Stitch; tareas correctivas T057-T060 para pruebas, copy/documentación, implementación y revalidación).
+
 **Input**: Design documents from `specs/012-ep-pla-planes-monetizacion/`
 
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `.specify/memory/constitution.md`
@@ -54,9 +56,9 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 
 ## Phase 3: User Story 1 - Elegir Free o conocer Premium sin riesgo (Priority: P1)
 
-**Goal**: Let a newly authenticated person inspect and confirm Free, Monthly, Annual, or Lifetime information, continue onboarding after an atomic local commit even offline, and synchronize an entitlement-neutral preference without payment, data loss, or cross-account access.
+**Goal**: Let a newly authenticated person inspect the Stitch-faithful Free/Trial presentation, confirm the preselected or chosen Premium option, or continue through the dedicated Free CTA; then continue onboarding after an atomic local commit even offline and synchronize an entitlement-neutral preference without payment, data loss, or cross-account access.
 
-**Independent Test**: With an authenticated test account and a host callback standing in for Pantalla 1C, independently exercise Free online/offline, eligible Monthly/Annual, ineligible/unknown Premium, Lifetime, abandonment, restart/recovery, duplicate/stale/conflict/error responses, accessibility, and cross-account RLS. The story passes only when local confirmation advances without network and no path invokes Billing or grants Premium.
+**Independent Test**: With an authenticated test account and a host callback standing in for Pantalla 1C, verify Free as a non-selectable information card with its dedicated CTA, static Trial copy, Annual preselection, Monthly/Lifetime selection, eligible/ineligible/unknown intent mapping, abandonment, restart/recovery, duplicate/stale/conflict/error responses, accessibility, and cross-account RLS. The story passes only when either CTA advances after local confirmation, without network, Billing, charges or Premium grants.
 
 ### Tests for User Story 1
 
@@ -111,6 +113,16 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 - [X] T056 [P] [US1] Adoptar los tokens del design system Stitch (paleta tonal `#0F766E`/`#005C55`/`#006A63`/`#F7F9FB`/`#FFFFFF`/`#191C1E`/`#A8ECE5`/`#216963`, radios 16dp/12dp) e Inter empaquetada en `res/font` en el tema global, re-estilar la Pantalla 1B según el layout Stitch conservando el copy aprobado y los invariantes (5 límites Free, CTA único, sin barras/slogans/filler, orden `MONTHLY`->`ANNUAL`->`LIFETIME`, `tnum`, 48dp), eliminar `docs/DESIGN.md`, crear `docs/stitch-design-system.md`, actualizar `research.md` y verificar compile/tests/lint/grep `DESIGN.md`=0 en `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionScreen.kt` y `docs/` (depends on T042, T045)
 - [X] T046 [US1] Implement lifecycle-aware ViewModel collection and consume each confirmation event once through a host-owned `onConfirmed` callback in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionRoute.kt`
 - [X] T047 [US1] Add a reusable plan-selection navigation destination that accepts an explicit host continuation and never owns a `NavController` in the ViewModel/screen in `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt`
+
+**Refinement note (2026-09-16)**: T012, T017, T041, T043-T045 and T056 remain completed historical baselines, but their Free preselection, eligibility-conditioned copy, five-row Free content, single CTA, promotional-copy prohibition and Monthly-first assumptions are superseded by FR-002..009, FR-020, FR-023, FR-026/027 and SC-002/004/008. T057-T060 provide the current acceptance evidence and implementation.
+
+### Pantalla 1B Stitch Fidelity Refinement
+
+- [X] T057 [P] [US1] Rewrite ViewModel, Compose screen, and route tests for Annual preselection, three selectable Premium options in `ANNUAL`->`MONTHLY`->`LIFETIME` order, non-selectable Free card, static Trial copy for all eligibility states, six `check_circle` Free rows, approved badges/icons/price suffixes/info/footer, two 48dp CTAs, Free/Premium commit callbacks, `tnum`, no bars, and 200% scroll in `app/src/test/java/com/kipu/app/feature/plans/presentation/PlanSelectionViewModelTest.kt`, `app/src/androidTest/java/com/kipu/app/feature/plans/presentation/PlanSelectionScreenTest.kt`, and `app/src/androidTest/java/com/kipu/app/feature/plans/presentation/PlanSelectionRouteTest.kt`
+- [X] T058 [P] [US1] Replace the superseded eligibility/prohibition copy with the exact approved Pantalla 1B strings and document its component/icon mapping and product-decision rationale in `app/src/main/res/values/strings.xml`, `docs/stitch-design-system.md`, `specs/012-ep-pla-planes-monetizacion/research.md`, and `specs/012-ep-pla-planes-monetizacion/quickstart.md`
+- [X] T059 [US1] Implement the refined screen contract: default `ANNUAL`, keep eligibility only for intent mapping, render Free as informational, render static Trial and Premium cards in Stitch order, add badges/icons/suffixes/literal info/footer, confirm Premium through the primary CTA, and commit `FREE` through the secondary CTA before emitting the shared navigation event in `app/src/main/java/com/kipu/app/feature/plans/domain/model/CommercialOption.kt`, `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionUiState.kt`, `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionViewModel.kt`, `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionScreen.kt`, and `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionRoute.kt` (depends on T057, T058)
+- [X] T060 [US1] Run JVM tests, Compose instrumentation, lint, debug/release builds, `git diff --check`, and visual/accessibility assertions for SC-002/SC-004/SC-008; reconcile stale validation evidence and verify no Billing/entitlement behavior changed in `specs/012-ep-pla-planes-monetizacion/validation/automated-validation.md`, `specs/012-ep-pla-planes-monetizacion/validation/accessibility-and-comprehension.md`, and `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` (depends on T059)
+
 - [ ] T048 [US1] After HU-01 and Pantalla 1C provide real destinations, wire the real post-registration callback to the plan destination and its local-commit callback to Biometria, remove plan selection from the back stack, and reschedule pending work on restored sessions without creating placeholder auth/biometric screens in `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt` and `app/src/main/java/com/kipu/app/MainActivity.kt`
 
 **Checkpoint**: US1 is independently functional with a host callback; integrated onboarding additionally requires the external HU-01/Pantalla 1C dependency identified in T048.
@@ -142,16 +154,17 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 - **Phase 3 - Remote/backend**: T033 depends on T023-T024; T034 depends on T007 and T033. T035 depends on the approved T004 ADR, while T036 depends on T003 and the OpenAPI contract; T035-T036 can otherwise proceed in parallel with Android domain/local work.
 - **Phase 3 - Sync/repository**: T037 depends on T005 and the local models; T038 depends on T030, T034, and T037; T039 depends on T027, T030, T034, and T037; T040 depends on T026, T032, and T034-T039.
 - **Phase 3 - Presentation**: T041-T043 can proceed in parallel after domain models exist; T044 depends on T027, T039, and T043; T045 depends on T041-T043; T046 depends on T044-T045; T047 depends on T046; T056 depends on T042 and T045 (re-estilado según design system Stitch tras tokens y pantalla).
-- **Integrated onboarding gate**: T048 additionally depends on external HU-01 and Pantalla 1C production code. Do not satisfy it with fake destinations; all other US1 behavior remains independently testable through the T046 callback.
-- **Phase 4 - Polish**: T049-T050 and T052-T053 depend on their relevant implementations and may run in parallel; T051 depends on completed T049-T050; T054 depends on the release artifact and evidence from T051; T055 runs after T048-T054 and is the final release gate.
+- **Phase 3 - Stitch fidelity refinement**: T057 and T058 can run in parallel; T059 depends on both; T060 depends on T059. This wave supersedes the affected presentation assumptions of T012, T017, T041, T043-T045 and T056 without invalidating their historical completion evidence.
+- **Integrated onboarding gate**: T048 additionally depends on T060 plus external HU-01 and Pantalla 1C production code. Do not satisfy it with fake destinations; all other US1 behavior remains independently testable through the shared host callback.
+- **Phase 4 - Polish**: T049-T050 remain complete; T052 and T053 must run after T060 against the refined UI; T051/T054 evidence is refreshed by T060 where affected; T055 runs after T048-T054 and T060 and remains the final release gate.
 
 ### User Story Dependency Graph
 
 ```text
-Setup -> Foundational -> US1 tests -> US1 implementation -> Polish
-                                      |
-                                      +-> Independent host-callback demo
-                                      +-> T048 integrated demo (requires HU-01 + Pantalla 1C)
+Setup -> Foundational -> US1 baseline -> T057/T058 -> T059 -> T060 -> Polish
+                                          |                         |
+                                          +-> test/docs in parallel +-> Independent host-callback demo
+                                                                    +-> T048 integrated demo (requires HU-01 + Pantalla 1C)
 ```
 
 - **US1 (P1)** is the only story and has no dependency on another EP-PLA story.
@@ -165,6 +178,7 @@ Setup -> Foundational -> US1 tests -> US1 implementation -> Polish
 - Commit Room state before scheduling work or emitting navigation.
 - Deploy/test the SQL migration before relying on the Edge Function, then validate Android retries against the complete backend.
 - Never use preference, local clock, installation state, or outbox state as Premium authority.
+- For the 2026-09-16 refinement, author T057 before T059; T057 and T058 may proceed in parallel, then T059 and T060 execute sequentially.
 
 ## Parallel Execution Examples
 
@@ -199,6 +213,15 @@ Task T042: Kipu theme tokens (design system Stitch)
 Task T043: UI state and events
 ```
 
+### Stitch Fidelity Refinement
+
+```text
+Task T057: Refined ViewModel/Compose/route tests
+Task T058: Approved copy and design/research/quickstart documentation
+Task T059: Refined UI state, screen and two-CTA implementation
+Task T060: Automated, accessibility and security revalidation
+```
+
 ## Implementation Strategy
 
 ### MVP First
@@ -215,7 +238,8 @@ Task T043: UI state and events
 2. Add atomic Room confirmation and prove offline navigation durability.
 3. Add SQL/RLS/RPC plus Edge Function and prove idempotent cross-account-safe synchronization.
 4. Add the accessible Stitch-aligned Compose experience.
-5. Integrate with real HU-01/Pantalla 1C when available, then complete Phase 4 evidence.
+5. Apply T057-T060 to align that experience with the refined Pantalla 1B contract.
+6. Integrate with real HU-01/Pantalla 1C when available, then complete Phase 4 evidence.
 
 ### Parallel Team Strategy
 

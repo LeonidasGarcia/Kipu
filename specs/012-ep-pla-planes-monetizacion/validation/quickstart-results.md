@@ -1,12 +1,14 @@
+> **Revalidated**: 2026-09-16 after the Pantalla 1B corrective implementation.
+
 # Quickstart Results
 
-**Date**: 2026-09-15
+**Date**: 2026-09-16
 **Readiness**: Not ready for Sprint Review.
 
 ## Completed
 
 - Static, KSP, dependency, debug, lint, JVM, release, OpenAPI, and Edge Function checks pass.
-- Room, Worker, route, and Compose instrumented suites pass: 30 tests on Pixel 8 API 36.
+- Room, Worker, route, and Compose instrumented suites pass: 31 tests on Pixel 8 API 36, including Annual default, static Trial, non-selectable Free, two CTA and 200% scroll.
 - Room schema v1 is generated under `app/schemas/`.
 - Architecture checks confirm the plans feature has no Billing or entitlement-conversion path.
 - A clean release build and APK inspection confirm Google Play Billing is not packaged.

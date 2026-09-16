@@ -1,3 +1,5 @@
+> **Reconciled**: 2026-09-16 against the refined Pantalla 1B specification.
+
 # Quickstart Validation: EP-PLA / HU-52
 
 **Purpose**: Validate the implemented feature end-to-end without duplicating implementation code.  
@@ -43,7 +45,7 @@ Expected:
 - The fifth-limit boundary for each object type returns `Denied(FREE_LIMIT_REACHED)` only for a new over-limit action.
 - Premium-only capabilities return `Denied(PREMIUM_ENTITLEMENT_REQUIRED)`.
 - `TRIAL_INTENT` and `PREMIUM_INTENT` never become an entitlement.
-- ViewModel starts on Free, changes chips deterministically, coalesces double confirmation and emits navigation only after repository success.
+- ViewModel starts on Annual, changes the three Premium options deterministically, confirms Free through its dedicated action, coalesces double confirmation and emits navigation only after repository success.
 
 ## 3. Room, Worker and Compose Instrumented Tests
 
@@ -59,7 +61,7 @@ Expected:
 - Reusing an operation ID with another payload is rejected.
 - Process/lease recovery returns unfinished work to `PENDING`.
 - Worker maps APPLIED, DUPLICATE, STALE, CONFLICT and documented errors to the correct outbox state.
-- Compose tests verify vertical scroll, four options, five Free limits, single confirmation CTA, no Top/Bottom Bar, no promotional/filler text and no payment action.
+- Compose tests verify vertical order Free→Trial→Annual→Monthly→Lifetime, six Free rows, static Trial copy, three selectable Premium options, approved badges/prices/savings, two CTA, fiscal footer, and no Top/Bottom Bar or payment action.
 - Prices expose tabular figures; interactive nodes expose at least 48dp targets and useful selected-state semantics.
 - Navigation callback occurs immediately after local commit, including offline.
 
@@ -104,15 +106,15 @@ supabase stop
 ### Free
 
 1. Register/login with the development user.
-2. Open Pantalla 1B and keep Kipu Free selected.
-3. Confirm while online and repeat while offline.
+2. Open Pantalla 1B and verify Annual is selected while the Free card has no selection action.
+3. Press “Continuar con Plan Free” while online and repeat while offline.
 
 Expected: no payment method, banking data or Play UI; preference is `FREE`; Pantalla 1C opens after local commit.
 
 ### Trial Information
 
 1. Seed a verified, unexpired `ELIGIBLE` server projection for the controlled test account and fetch it through `/plans/eligibility`.
-2. Select Mensual and then Anual.
+2. Verify the static Trial card, select Monthly and then Annual.
 3. Inspect duration, later price, renewal cadence and cancellation information before confirming.
 
 Expected: confirmation writes only `TRIAL_INTENT`; effective access remains Free and Google Play never opens.
@@ -122,7 +124,7 @@ Expected: confirmation writes only `TRIAL_INTENT`; effective access remains Free
 1. Repeat with `INELIGIBLE` and `UNKNOWN` snapshots.
 2. Inspect Mensual, Anual and Lifetime.
 
-Expected: no Trial promise; Lifetime is one-time and has no Trial; confirmation writes `PREMIUM_INTENT`; access remains Free.
+Expected: Trial presentation is unchanged; confirmation writes `PREMIUM_INTENT`; Lifetime remains one-time; effective access remains Free.
 
 ### Abandonment
 
@@ -141,16 +143,16 @@ Design system: assets/a21e2e45f51e490fa03b92fb8cb83c55
 Screen: projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797
 ```
 
-Compare structure, not prohibited copy. Expected Compose tokens:
+Compare the approved structure and copy. Expected Compose tokens:
 
 - CTA base `#0F766E`, pressed `#005C55`, selection ring `#006A63`, onSurface `#191C1E`.
 - Card surface `#FFFFFF`, background `#F7F9FB`, outline `#6E7977`/`#BDC9C6`.
 - Inter 400/500/600 empaquetada en `res/font` y aplicada globalmente.
 - 16dp cards, 12dp controls, 8dp grid, 48dp touch targets.
 - `fontFeatureSettings = "tnum"` on S/ 4.99, S/ 29.99 and S/ 49.99.
-- No “Gratis”, “Recomendado”, savings slogans, fiscal filler, “Confirmar y Pagar”, `KipuTopAppBar` or `KipuBottomBar`.
+- Includes “Gratis”, “Recomendado”, savings, fiscal footer and the dedicated Free CTA; excludes “Confirmar y Pagar”, `KipuTopAppBar` and `KipuBottomBar`.
 
-Validate with font scale 200% and TalkBack: all options, prices, conditions, selected states and CTA must remain readable and operable.
+Validate with font scale 200% and TalkBack: all cards, six Free rows, prices, conditions, selected states, icons and both CTA must remain readable and operable.
 
 ## 7. Real Device Offline and Scheduler Validation
 

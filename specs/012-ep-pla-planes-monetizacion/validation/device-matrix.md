@@ -1,11 +1,13 @@
+> **Revalidated**: 2026-09-16 for emulator automation; physical-device matrices remain pending.
+
 # Device Matrix
 
-**Date**: 2026-09-15
+**Date**: 2026-09-16
 **Status**: BLOCKED; no physical Android device is attached and the integrated HU-01/Pantalla 1C host is unavailable.
 
 ## Automated Evidence
 
-- The plans instrumented suite passed 30/30 tests on the Pixel 8 API 36 AVD.
+- The plans instrumented suite passed 31/31 tests on the Pixel 8 API 36 AVD.
 - Room tests cover atomic confirmation, rollback, monotonic revisions, operation identity, leases, and account isolation.
 - Worker tests cover APPLIED, DUPLICATE, STALE, CONFLICT, authentication waiting, retry, timeout, and lease recovery.
 - PostgreSQL tests cover 3-2-1 delivery and immutable operation replay.
@@ -30,7 +32,7 @@ The matrix must include stable connectivity, network recovery, 3-2-1 delivery, a
 
 ## Blockers
 
-- `adb devices -l` reports no attached device.
+- `adb devices` reports only the Pixel 8 API 36 emulator; no physical device is attached.
 - A `Pixel_8` AVD exists, but the plan and constitution require representative real-device validation for Android scheduler behavior.
 - T048 remains blocked because production `LoginScreen` and `BiometricConfigScreen` destinations do not exist; therefore the required integrated navigation timing cannot be measured without creating prohibited placeholders.
 

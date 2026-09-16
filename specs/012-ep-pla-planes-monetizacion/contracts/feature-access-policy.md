@@ -1,3 +1,5 @@
+> **Reviewed**: 2026-09-16. Pantalla 1B remains entitlement-neutral; this access contract is unchanged.
+
 # Contract: FeatureAccessPolicy
 
 **Version**: 1  

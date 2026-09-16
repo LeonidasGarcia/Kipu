@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -37,7 +38,7 @@ class PlanSelectionRouteTest {
         val repository = RecordingRepository()
         val viewModel = PlanSelectionViewModel(repository, SavedStateHandle())
         compose.setContent { PlanSelectionRoute(viewModel = viewModel, onConfirmed = {}) }
-        compose.onNodeWithTag("plan-option-FREE").assertIsSelected()
+        compose.onNodeWithTag("plan-option-ANNUAL").assertIsSelected()
 
         compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         viewModel.selectOption(CommercialOption.LIFETIME)
@@ -85,7 +86,7 @@ class PlanSelectionRouteTest {
         val callbacks = AtomicInteger()
         compose.setContent { PlanSelectionRoute(viewModel = viewModel, onConfirmed = { callbacks.incrementAndGet() }) }
 
-        compose.onNodeWithText("Confirmar Plan").performClick()
+        compose.onNodeWithText("Confirmar Plan").performScrollTo().performClick()
         compose.waitUntil { callbacks.get() == 1 }
         compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
@@ -98,14 +99,30 @@ class PlanSelectionRouteTest {
     }
 
     @Test
+    fun continueFreeCommitsFreeAndProducesOneHostCallback() {
+        val repository = RecordingRepository()
+        val viewModel = PlanSelectionViewModel(repository, SavedStateHandle())
+        val callbacks = AtomicInteger()
+        compose.setContent { PlanSelectionRoute(viewModel = viewModel, onConfirmed = { callbacks.incrementAndGet() }) }
+
+        compose.onNodeWithText("Continuar con Plan Free").performScrollTo().performClick()
+        compose.waitUntil { callbacks.get() == 1 }
+
+        assertEquals(PlanSelection.FREE, repository.lastSelection)
+        assertEquals(1, repository.confirmCalls)
+        assertEquals(1, repository.outboxWrites)
+        assertEquals(1, callbacks.get())
+    }
+
+    @Test
     fun offlineConfirmationNavigatesImmediatelyAfterLocalCommitWithoutWaitingForSync() {
         val repository = RecordingRepository(networkAvailable = false)
         val viewModel = PlanSelectionViewModel(repository, SavedStateHandle())
         val confirmed = AtomicBoolean()
         compose.setContent { PlanSelectionRoute(viewModel = viewModel, onConfirmed = { confirmed.set(true) }) }
 
-        compose.onNodeWithText("Lifetime", substring = true).performClick()
-        compose.onNodeWithText("Confirmar Plan").performClick()
+        compose.onNodeWithText("Lifetime", substring = true).performScrollTo().performClick()
+        compose.onNodeWithText("Confirmar Plan").performScrollTo().performClick()
         compose.waitUntil(timeoutMillis = 2_000) { confirmed.get() }
 
         assertTrue(repository.localCommitCompleted)

@@ -4,6 +4,8 @@
 
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (cleanup sin cambios funcionales: eliminadas las referencias residuales al sistema de diseño previo; el plan ya apunta a `docs/stitch-design-system.md`).
 
+**Propagated**: 2026-09-16 — Updated from spec.md refinement (fidelidad de layout, componentes y copy con Pantalla 1B Stitch; Free informativo, Trial estático, Anual preseleccionado, dos CTAs y criterios SC-002/SC-004/SC-008 actualizados).
+
 **Branch**: `001-planes-monetizacion-freemium` | **Date**: 2026-09-15 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/012-ep-pla-planes-monetizacion/spec.md`
@@ -39,9 +41,9 @@ Implementar HU-52 como una vertical local-first dentro del módulo Android exist
 
 **Performance Goals**: Confirmación local y navegación en <= 2 segundos para al menos 95% de la matriz; al menos 95% de reconciliaciones en <= 15 minutos bajo las condiciones permitidas por el sistema operativo definidas en SC-006; UI vertical fluida y sin bloqueo por red
 
-**Constraints**: Local-first; commit Room antes de navegar; reintentos idempotentes; RLS y autorización por objeto; precios en unidades menores enteras y moneda `PEN`; cero cobros, Trials activos o Premium en Sprint 1; no `BillingClient`; no migraciones destructivas; sin Top/Bottom Bar, publicidad, slogans ni filler text
+**Constraints**: Local-first; commit Room antes de navegar; reintentos idempotentes; RLS y autorización por objeto; precios en unidades menores enteras y moneda `PEN`; cero cobros, Trials activos o Premium en Sprint 1; no `BillingClient`; no migraciones destructivas; sin Top/Bottom Bar; copy comercial limitado a la composición aprobada de Pantalla 1B Stitch
 
-**Scale/Scope**: Una pantalla de onboarding, cuatro opciones visuales, tres valores persistidos de intención, cinco límites Free, cuatro códigos terminales de sincronización y un worker por usuario; no incluye billing, verificación de compra, downgrade ni gestión de excedentes
+**Scale/Scope**: Una pantalla de onboarding con dos tarjetas informativas, tres alternativas Premium seleccionables y dos CTAs; tres valores persistidos de intención, cinco límites Free más una fila informativa de núcleo manual, cuatro códigos terminales de sincronización y un worker por usuario; no incluye billing, verificación de compra, downgrade ni gestión de excedentes
 
 ## Constitution Check
 
@@ -56,7 +58,7 @@ Implementar HU-52 como una vertical local-first dentro del módulo Android exist
 | III. Security and Privacy | PASS | El backend deriva `auth.uid()`, RLS aísla filas y no se almacenan credenciales bancarias, tokens de compra ni secretos de servidor en Android. |
 | V. Freemium Cannot Alter Financial Truth | PASS | Intención, compra, suscripción y entitlement permanecen separados; el acceso S1 es Free y ningún exceso se elimina. |
 | VII. Native Android and Boundaries | PASS | Compose/ViewModel, dominio, persistencia, sync y proveedor remoto tienen responsabilidades separadas; la política de acceso no depende de Android o Supabase. |
-| VIII. Specification-Driven | PASS | Componentes, contratos y pruebas conservan trazabilidad a HU-52, RN-001..004 y FR-001..032. Stitch se usa como referencia, no como prueba de implementación. |
+| VIII. Specification-Driven | PASS | Componentes, contratos y pruebas conservan trazabilidad a HU-52, RN-001..004 y FR-001..032. Pantalla 1B Stitch es referencia normativa de fidelidad para layout/componentes, pero continúa sin constituir evidencia de implementación. |
 | IX. Quality Is Correctness | PASS | El plan incluye dominio, persistencia, migraciones, sync, RLS, errores, accesibilidad, Compose y dispositivo real. |
 | X. Product Boundary | PASS | No se mueve dinero ni se inicia una compra; Play Billing, HU-53/HU-54 y HU-57 quedan fuera. |
 
@@ -87,16 +89,17 @@ La pantalla fue localizada mediante el MCP de Stitch AI, sin regenerarla:
 | Canvas | Mobile, `780x2412`, adecuado para scroll vertical continuo |
 | Autoridad local | `docs/stitch-design-system.md` y `spec.md` |
 
-La composición de Stitch se usa para jerarquía, orden y densidad, pero no se copia literalmente. El artefacto contiene divergencias que deben eliminarse:
+La composición de Stitch se adopta como referencia normativa de fidelidad para jerarquía, orden, densidad, componentes y copy aprobado:
 
-| Divergencia de Stitch | Tratamiento Compose |
-|-----------------------|---------------------|
-| “Gratis”, “acceso completo” y cobro al terminar | Mostrar Trial solo con elegibilidad verificada y aclarar que S1 registra intención sin activar compra. |
-| “Recomendado” y “Ahorro equivalente a 50%” | Eliminar por ser slogans/promoción no aprobada. |
-| “Confirmar y Pagar S/ 49.99” | Mantener siempre “Confirmar Plan”; Lifetime registra `PREMIUM_INTENT`. |
-| Segundo CTA “Continuar con Plan Free” | Unificar la interacción en selección única y `ConfirmPlanButton`. |
-| Microcopy fiscal/regulatorio de relleno | Eliminar. |
-| Colores dinámicos `#005c55`/`#f7f9fb` | Adoptar tal cual como tokens normativos (paleta tonal Stitch); referencia de tokens en `docs/stitch-design-system.md`. |
+| Componente Stitch | Tratamiento Compose |
+|-------------------|---------------------|
+| Encabezado | Mostrar «Selecciona tu Plan» y «Configuración inicial de cuenta y suscripción». |
+| Kipu Free | Tarjeta informativa no seleccionable con badge «Permanente», texto «No requiere método de pago» y seis filas `check_circle` (núcleo manual más cinco límites). |
+| Trial | Tarjeta estática «Prueba Premium Gratis por 7 días», tag «Completo» y descripción aprobada; la elegibilidad no altera su copy. |
+| Premium Anual | Primera opción seleccionable y preseleccionada, con «Recomendado», «Ahorro equivalente a 50%» y «S/ 29.99 / año». |
+| Premium Mensual / Lifetime | Mostrar «S/ 4.99 / mes» y «S/ 49.99 pago único» con sus descripciones Stitch. |
+| Nota y acciones | Nota `info` literal, CTA primario «Confirmar Plan», CTA secundario «Continuar con Plan Free» y footer fiscal aprobado. |
+| Colores `#005c55`/`#f7f9fb` | Mantener como tokens normativos; referencia completa en `docs/stitch-design-system.md`. |
 
 `PlanSelectionScreen` usa `Column.verticalScroll`, margen horizontal de 16dp, separación basada en 8dp, tarjetas de 16dp, controles de 12dp y targets mínimos de 48dp. Todos los precios usan `fontFeatureSettings = "tnum"`. La pantalla no aloja `KipuTopAppBar` ni `KipuBottomBar`; el host tampoco debe inyectarlos para esta ruta.
 
@@ -104,9 +107,11 @@ La composición de Stitch se usa para jerarquía, orden y densidad, pero no se c
 
 - `PlanSelectionRoute` obtiene `PlanSelectionViewModel` con `hiltViewModel()`, recolecta `PlanSelectionUiState` con ciclo de vida y traduce el evento terminal de confirmación a `onConfirmed()`.
 - `PlanSelectionScreen` es stateless: recibe estado y callbacks, no conoce Room, Supabase, WorkManager, `NavController` ni Billing.
-- `FreePlanCard`, `PremiumTrialCard` y `ConfirmPlanButton` son componentes privados/reutilizables dentro de la feature y exponen semántica accesible de rol, selección, precio y condiciones.
+- `FreePlanCard`, `PremiumTrialCard`, `PremiumOptionCard`, `CommercialInfoNote`, `ConfirmPlanButton` y `ContinueFreeButton` son componentes privados dentro de la feature y exponen semántica accesible de contenido, rol, selección, precio y condiciones.
 - `PlanSelectionViewModel` usa `@HiltViewModel`, recibe `@Inject PlanPreferencesRepository`, expone `StateFlow<PlanSelectionUiState>` y emite navegación como evento one-shot separado para evitar repetición tras recomposición.
-- La opción inicial es `FREE`, pero no se persiste hasta “Confirmar Plan”. Esta elección conservadora evita una intención Premium accidental.
+- La opción Premium inicial es `ANNUAL`, según la referencia Stitch. Kipu Free no participa en el grupo de selección y se confirma exclusivamente mediante «Continuar con Plan Free».
+- Ambos CTAs convergen en el mismo commit local-first: el primario confirma la alternativa Premium seleccionada y el secundario confirma explícitamente `FREE`; solo después del commit se emite el evento one-shot de navegación.
+- El copy Trial se renderiza siempre. `TrialEligibilitySnapshot` se conserva en estado únicamente para decidir `TRIAL_INTENT` frente a `PREMIUM_INTENT`, no para variar la presentación.
 - Mensual/Anual elegibles producen `TRIAL_INTENT`; Lifetime y opciones sin elegibilidad verificada producen `PREMIUM_INTENT`. La modalidad exacta no se persiste en Sprint 1.
 - `LoginScreen` navega a la ruta de selección después de registro exitoso. Tras el commit local, el host navega a `BiometricConfigScreen` y elimina la selección de plan del back stack para no repetir la confirmación por Back.
 - El ViewModel no recibe `NavController`; navegación y destino pertenecen al host, conservando la ruta alternativa futura de FR-022 sin acoplarla al dominio.
@@ -179,10 +184,10 @@ La función/RPC no tiene privilegios, triggers ni llamadas hacia billing, suscri
 | Capa | Herramientas | Cobertura mínima |
 |------|--------------|------------------|
 | Dominio | JUnit, Kotlin Test | Mapeo de intención, límites y todos los resultados del contrato mínimo `FeatureAccessPolicy`; prueba explícita de que intención no equivale a entitlement, sin integrar aún todas las features de HU-58. |
-| ViewModel | JUnit, coroutines-test, repositorio fake | Selección inicial Free, chips, loading/error, una sola confirmación, evento one-shot y navegación únicamente tras commit local. |
+| ViewModel | JUnit, coroutines-test, repositorio fake | Anual preseleccionado, cambio entre tres Premium, confirmación Premium/Free por CTAs separados, loading/error, doble-submit, evento one-shot y navegación únicamente tras commit local. |
 | Room | Room in-memory en `androidTest` | Transacción preferencia+revisión+outbox, rollback total, UUID estable, monotonicidad, recuperación tras reinicio y migraciones. |
 | Worker | WorkManager Test y Ktor mock | Constraint de red, identidad de payload, backoff, auth por usuario y matriz APPLIED/DUPLICATE/STALE/CONFLICT/errores. |
-| Compose | `androidx.compose.ui.test` | Contenido, selección única, `tnum`, ausencia de barras/promoción/filler, targets 48dp, scroll, semántica, fuente 200% y callback de navegación. |
+| Compose | `androidx.compose.ui.test` | Orden Free→Trial→Anual→Mensual→Lifetime, Free no seleccionable, Anual preseleccionado, seis filas Free, Trial estático, badges/copy/iconos/sufijos/footer aprobados, dos CTAs, `tnum`, ausencia de barras, targets 48dp, scroll y fuente 200%. |
 | Supabase | Supabase CLI, pgTAP/integration tests | RLS efectiva bajo rol ejecutor en las cuatro tablas user-owned, grants, auth, frontera del escritor de elegibilidad, concurrencia, recibos, vector de hash canónico, entrega 3-2-1, timeout post-commit y cero escrituras de entitlement. |
 | Plataforma | Dispositivo Android real | Offline/reconexión, proceso muerto, Doze, restricción de batería, force-stop/reapertura y límites del SLA. |
 
@@ -284,7 +289,7 @@ supabase/
 - El worker y el backend demuestran APPLIED, DUPLICATE, STALE, CONFLICT y errores seguros.
 - RLS y autorización por objeto rechazan acceso cruzado y bypass de escritura.
 - Ningún camino desde intención escribe `entitlements` o `feature_access_cache`, invoca Billing o borra datos excedentes.
-- La Pantalla 1B coincide con los tokens normativos del design system Stitch (`docs/stitch-design-system.md`), es accesible, carece de barras/promoción/filler y navega después del commit local.
+- La Pantalla 1B coincide con los tokens, disposición, componentes y copy aprobados de Stitch (`docs/stitch-design-system.md`), es accesible, carece de Top/Bottom Bar y navega únicamente después del commit local del CTA Premium o Free.
 - Migraciones Room/Supabase son versionadas, revisables, no destructivas y probadas con datos representativos.
 - WorkManager se valida en dispositivo real bajo red, Doze, batería, force-stop y reapertura.
 - Otro integrante aprueba la revisión cruzada y el flujo se demuestra en la Review de Sprint 1.

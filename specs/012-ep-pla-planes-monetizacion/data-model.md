@@ -1,3 +1,5 @@
+> **Reviewed**: 2026-09-16. The Pantalla 1B refinement changes presentation/default visual state only; persisted selections, eligibility and entitlement boundaries remain unchanged.
+
 # Data Model: EP-PLA - Planes, Límites y Monetización Freemium
 
 **Date**: 2026-09-15  

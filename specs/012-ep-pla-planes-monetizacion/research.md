@@ -1,3 +1,5 @@
+> **Reconciled**: 2026-09-16 against the refined Pantalla 1B specification and Stitch reference.
+
 # Research: EP-PLA - Planes, Límites y Monetización Freemium
 
 **Date**: 2026-09-15  
@@ -14,11 +16,11 @@
 
 ## R-002 - Fuente de Diseño Stitch
 
-**Decision**: Usar como referencia estructural la pantalla Stitch `projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797`, dentro de `Kipu V4 Finale`, y aplicar como autoridad normativa `docs/stitch-design-system.md` más `spec.md`.
+**Decision**: Usar como referencia visual y estructural autoritativa la pantalla Stitch `projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797`, dentro de `Kipu V4 Finale`, conciliada con los invariantes funcionales de `docs/stitch-design-system.md` y `spec.md`.
 
-**Rationale**: El MCP confirmó la pantalla “Pantalla 1B: Selección de Plan”, canvas móvil 780x2412 y design system `Kipu Andean Modernist`. El layout ya resuelve jerarquía y scroll, pero contiene acciones de pago y copy promocional prohibidos.
+**Rationale**: El MCP confirmó la pantalla “Pantalla 1B: Selección de Plan”, canvas móvil 780x2412 y design system `Kipu Andean Modernist`. La composición aprobada incluye Free informativo, Trial estático, tres opciones Premium, precios, badges, dos CTA y footer fiscal. El comportamiento continúa limitado a persistir una preferencia sin cobro ni entitlement.
 
-**Alternatives considered**: Copiar el HTML literalmente se descarta porque incluye “Confirmar y Pagar”, “Gratis”, “Recomendado”, ahorro promocional y filler fiscal. Regenerar la pantalla se descarta porque el artefacto correcto ya existe y una nueva variante perdería trazabilidad.
+**Alternatives considered**: Regenerar la pantalla se descarta porque el artefacto correcto ya existe y una nueva variante perdería trazabilidad. Copiar comportamiento de pago real desde el HTML se descarta porque Sprint 1 no integra billing.
 
 ## R-003 - Estado UI y Navegación
 
@@ -30,11 +32,11 @@
 
 ## R-004 - Selección Inicial Segura
 
-**Decision**: Inicializar la opción visual en Kipu Free y persistirla únicamente al pulsar “Confirmar Plan”. Mensual/Anual/Lifetime nunca se preseleccionan por motivos comerciales.
+**Decision**: Inicializar la selección Premium visual en Anual, como en Stitch. Kipu Free es una tarjeta informativa no seleccionable y se persiste exclusivamente mediante “Continuar con Plan Free”.
 
-**Rationale**: Free es permanente y no requiere pago; una selección Premium predeterminada podría percibirse como consentimiento o intención accidental. El default SQL `'FREE'` sigue siendo una defensa de persistencia, no evidencia de confirmación.
+**Rationale**: La preselección es solo estado visual y no se persiste al abrir la pantalla. Ambos CTA requieren una acción explícita y convergen en el mismo commit local-first. El default SQL `'FREE'` sigue siendo una defensa de persistencia, no evidencia de confirmación.
 
-**Alternatives considered**: Preseleccionar Anual como hace Stitch se descarta por transparencia. No seleccionar nada es válido, pero agrega fricción sin mejorar la seguridad frente a Free preseleccionado.
+**Alternatives considered**: Mantener Free dentro del grupo radio se descarta porque contradice la composición aprobada y mezcla la acción secundaria con las alternativas Premium. No seleccionar nada se descarta porque pierde fidelidad sin mejorar la seguridad persistente.
 
 ## R-005 - Política de Acceso Independiente
 
@@ -118,9 +120,9 @@
 
 ## R-015 - Elegibilidad de Trial
 
-**Decision**: Modelar `TrialEligibilitySnapshot(status, source, verifiedAt, validUntil)` y leerlo mediante `GET /plans/eligibility` desde una proyección privada que el cliente no puede escribir. Solo historial remoto verificado y vigente produce `ELIGIBLE`; un consumo confirmado puede mantener `INELIGIBLE` sin expiración. Sin evidencia vigente, usar `UNKNOWN` y copy no promisorio.
+**Decision**: Modelar `TrialEligibilitySnapshot(status, source, verifiedAt, validUntil)` y leerlo mediante `GET /plans/eligibility` desde una proyección privada que el cliente no puede escribir. Solo historial remoto verificado y vigente produce `ELIGIBLE`; un consumo confirmado puede mantener `INELIGIBLE` sin expiración. La tarjeta y el copy Trial permanecen estáticos; la elegibilidad solo decide `TRIAL_INTENT` frente a `PREMIUM_INTENT` al confirmar Mensual o Anual.
 
-**Rationale**: Sprint 1 no integra Play Billing. El fallback conservador permite informar que existe una oferta sujeta a verificación, sin presentar siete días como aplicables ni inventar elegibilidad.
+**Rationale**: Sprint 1 no integra Play Billing. La separación entre presentación e intención permite reproducir literalmente la información comercial aprobada sin iniciar pruebas, efectuar cobros ni inventar elegibilidad efectiva.
 
 **Alternatives considered**: Considerar elegible a toda cuenta nueva, reiniciar elegibilidad al reinstalar o confiar en un booleano local se descarta por riesgo de Trial repetido/ficticio.
 

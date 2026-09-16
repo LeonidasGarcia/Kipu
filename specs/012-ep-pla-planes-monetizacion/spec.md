@@ -10,6 +10,8 @@
 
 **Refined**: 2026-09-15 — Eliminación de las referencias residuales al sistema de diseño previo a Stitch; todas las referencias de diseño apuntan a `docs/stitch-design-system.md` (cleanup post-adopción del design system Stitch; sin cambios funcionales).
 
+**Refined**: 2026-09-16 — Fidelidad total a Pantalla 1B Stitch (Kipu V4 Finale): copy, componentes y layout 1B autorizados; Free informativo no seleccionable, Trial estático, Anual preseleccionado, CTA secundario, badges, sufijos de precio, nota info literal y footer fiscal; los invariantes de dominio permanecen intactos.
+
 **Input**: Especificar la HU-52 para que una persona recién registrada pueda continuar con Kipu Free o conocer voluntariamente la oferta Premium, sin cobros accidentales ni concesión de derechos Premium no verificados.
 
 ## Control de la Épica
@@ -63,7 +65,7 @@ Establecer la infraestructura inicial de monetización Freemium en Kipu para que
 
 - La persona completó la creación de una cuenta Kipu mediante HU-01.
 - La Pantalla 1B está disponible como siguiente paso del onboarding.
-- La contratación mediante Google Play todavía se muestra como no habilitada en Sprint 1.
+- La contratación mediante Google Play no se ejecuta en Sprint 1.
 - Ninguna interacción de esta pantalla puede activar una prueba o suscripción ficticia.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -79,21 +81,21 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 **Acceptance Scenarios**:
 
 1. **Escenario 1 - Free (oficial HU-52)**: **Dado que** el usuario no desea suscripción de pago, **Cuando** elige continuar con Kipu Free en la Pantalla 1B, **Entonces** ingresa a la aplicación sin solicitar método de pago ni datos bancarios.
-2. **Escenario 2 - Información del Trial (oficial HU-52)**: **Dado que** consulta la oferta en la Pantalla 1B, **Cuando** selecciona la modalidad mensual o anual, **Entonces** observa la duración de la prueba, el precio posterior y las condiciones de renovación antes de aceptar.
-3. **Escenario 3 - No elegible (oficial HU-52)**: **Dado que** ya consumió previamente su periodo de prueba de 7 días, **Cuando** consulta la oferta elegible, **Entonces** no se le promete otro Trial.
+2. **Escenario 2 - Información del Trial (oficial HU-52)**: **Dado que** consulta la oferta en la Pantalla 1B, **Cuando** revisa la tarjeta Trial estática y las modalidades Premium, **Entonces** observa antes de confirmar la duración de 7 días, el precio posterior, la frecuencia de renovación y las condiciones de cancelación, sin que el copy visual dependa de la elegibilidad.
+3. **Escenario 3 - No elegible (oficial HU-52)**: **Dado que** ya consumió previamente su periodo de prueba de 7 días, **Cuando** consulta la tarjeta Trial estática y confirma una modalidad Premium, **Entonces** conserva el copy informativo de la pantalla, se registra `PREMIUM_INTENT` y no se activa Trial, cobro ni derecho Premium.
 4. **Escenario 4 - Abandonar Onboarding (oficial HU-52)**: **Dado que** no ha confirmado ninguna compra en Play Store, **Cuando** sale de la pantalla de selección de plan, **Entonces** no se activa ni cobra ninguna suscripción.
 
 **Acceptance Scenarios complementarios de la especificación**:
 
 5. **Escenario 5 - Confirmar intención de Trial**: **Dado que** la elegibilidad está confirmada y la persona seleccionó Mensual o Anual, **Cuando** presiona "Confirmar Plan", **Entonces** se registra `TRIAL_INTENT`, se encola una única operación de sincronización, continúa el onboarding y el acceso efectivo conserva los límites Kipu Free sin abrir Google Play.
-6. **Escenario 6 - Confirmar intención Premium sin Trial**: **Dado que** la persona seleccionó Lifetime o una alternativa Premium sin Trial aplicable, **Cuando** presiona "Confirmar Plan", **Entonces** se registra `PREMIUM_INTENT`, no se promete una prueba, no se programa una renovación y el acceso efectivo permanece en Kipu Free.
+6. **Escenario 6 - Confirmar intención Premium sin Trial**: **Dado que** la persona seleccionó Lifetime o una alternativa Premium sin Trial aplicable, **Cuando** presiona "Confirmar Plan", **Entonces** se registra `PREMIUM_INTENT`, no se activa una prueba, no se programa una renovación y el acceso efectivo permanece en Kipu Free.
 7. **Escenario 7 - Confirmar offline y recuperar**: **Dado que** no existe conectividad, **Cuando** la persona confirma cualquier opción y después reinicia la aplicación, **Entonces** la preferencia y su operación pendiente permanecen guardadas, el avance a Pantalla 1C no fue bloqueado y, al recuperar conectividad estable, la selección se sincroniza una sola vez.
 8. **Escenario 8 - Reintento, revisión obsoleta o conflicto**: **Dado que** el servicio recibe una operación ya aplicada, una revisión anterior o la misma identidad/revisión con contenido diferente, **Cuando** procesa la solicitud, **Entonces** devuelve respectivamente `DUPLICATE`, `STALE` o `CONFLICT`, conserva la preferencia vigente, no produce efectos adicionales y permite reconciliar el cliente con la revisión aceptada.
 9. **Escenario 9 - Aislamiento entre cuentas**: **Dado que** existen dos cuentas autenticadas distintas, **Cuando** una intenta leer o modificar la preferencia de la otra, **Entonces** la operación se rechaza sin revelar ni alterar datos ajenos.
 10. **Escenario 10 - Accesibilidad de la elección**: **Dado que** una persona utiliza una ayuda de accesibilidad admitida, **Cuando** consulta, selecciona y confirma un plan, **Entonces** puede identificar la opción seleccionada, su precio, sus condiciones y el botón de confirmación sin perder información esencial.
 11. **Escenario 11 - Cupos no destructivos**: **Dado que** una respuesta informa límites Free y existen datos por encima de un cupo, **Cuando** se sincroniza la preferencia, **Entonces** ningún dato se elimina, reescribe o excluye de los cálculos y la gestión del excedente queda diferida a HU-57.
 12. **Escenario 12 - Destino suministrado por el flujo anfitrión**: **Dado que** la Pantalla 1B fue abierta por un flujo existente que definió explícitamente Pantalla 1C o Pantalla 15 como siguiente destino, **Cuando** la confirmación local termina, **Entonces** se navega a ese destino sin esperar la red; la entrada de Sprint 1 posterior al registro siempre define Pantalla 1C.
-13. **Escenario 13 - Contenido y estructura de Pantalla 1B**: **Dado que** la persona abre Pantalla 1B, **Cuando** consulta Kipu Free, **Entonces** observa S/ 0 de por vida y los cinco límites aprobados, sin publicidad, slogans comerciales, Top Bar ni barra de navegación inferior.
+13. **Escenario 13 - Contenido y estructura de Pantalla 1B**: **Dado que** la persona abre Pantalla 1B, **Cuando** consulta la oferta, **Entonces** observa la composición de la Pantalla 1B Stitch: título «Selecciona tu Plan», subtítulo «Configuración inicial de cuenta y suscripción», tarjeta Kipu Free informativa con badge «Permanente», «No requiere método de pago» y seis filas `check_circle` (núcleo manual y cinco límites), tarjeta estática «Prueba Premium Gratis por 7 días» con tag «Completo», Premium Anual preseleccionado con «Recomendado», «Ahorro equivalente a 50%» y «S/ 29.99 / año», Premium Mensual con «S/ 4.99 / mes», Compra Única Lifetime con «S/ 49.99 pago único», nota `info`, CTA «Confirmar Plan», CTA «Continuar con Plan Free» y footer fiscal; la pantalla no incluye Top Bar ni barra de navegación inferior.
 14. **Escenario 14 - Error de sincronización seguro**: **Dado que** una solicitud carece de autenticación, usa una versión no soportada, contiene datos inválidos o encuentra el servicio indisponible, **Cuando** se intenta sincronizar, **Entonces** no cambia la preferencia remota ni el acceso efectivo, no se exponen datos ajenos y una operación reintentable permanece pendiente hasta una oportunidad permitida.
 15. **Escenario 15 - Motivo de acceso verificable**: **Dado que** se evalúa una capacidad durante Sprint 1, **Cuando** la capacidad pertenece al núcleo Free, supera un cupo Free o exige Premium, **Entonces** la política devuelve respectivamente `Allowed(FREE_CAPABILITY)`, `Denied(FREE_LIMIT_REACHED)` o `Denied(PREMIUM_ENTITLEMENT_REQUIRED)` sin interpretar una intención como entitlement.
 
@@ -101,8 +103,9 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 
 ### Edge Cases
 
-- Si la elegibilidad para Trial no puede comprobarse, la oferta no promete una prueba y cualquier selección Premium se registra únicamente como `PREMIUM_INTENT`.
-- Si una persona ya consumió el Trial, puede consultar las alternativas Premium, pero no vuelve a ver la promesa de 7 días gratuitos.
+- ~~Si la elegibilidad para Trial no puede comprobarse, la oferta no promete una prueba y cualquier selección Premium se registra únicamente como `PREMIUM_INTENT`.~~ *(Sustituido: la tarjeta Trial es informativa y estática; `UNKNOWN` conserva el mapping a `PREMIUM_INTENT`.)*
+- ~~Si una persona ya consumió el Trial, puede consultar las alternativas Premium, pero no vuelve a ver la promesa de 7 días gratuitos.~~ *(Sustituido: el copy Trial permanece visible; no se activa Trial y la confirmación genera `PREMIUM_INTENT`.)*
+- La tarjeta Trial se muestra siempre; `ELIGIBLE`, `INELIGIBLE` y `UNKNOWN` solo determinan la intención persistida al confirmar Mensual o Anual.
 - Si se elige Lifetime, se informa que es un pago único de S/ 49.99, sin renovación y sin asociarlo al Trial de 7 días.
 - Si no hay conectividad al confirmar, la preferencia queda guardada localmente y el onboarding continúa sin esperar la sincronización.
 - Si la sincronización se reintenta, una misma operación no crea selecciones duplicadas ni altera los derechos de acceso.
@@ -127,22 +130,22 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 
 ### Reglas de Negocio
 
-- **RN-001 - Kipu Free Permanente**: Kipu Free DEBE permanecer disponible de por vida por S/ 0, sin tarjeta de crédito y sin anuncios publicitarios.
-- **RN-002 - Trial Voluntario**: El Trial de 7 días DEBE ser voluntario, estar sujeto a elegibilidad y vincularse exclusivamente con las modalidades mensual o anual de Google Play Store.
-- **RN-003 - Transparencia Comercial**: Antes de confirmar una intención mensual o anual, la persona DEBE conocer la duración del Trial, el precio posterior, la frecuencia de renovación y las condiciones de cancelación.
+- **RN-001 - Kipu Free Permanente**: Kipu Free DEBE permanecer disponible de por vida, sin solicitar método de pago y con el núcleo manual de registro más los límites aprobados.
+- **RN-002 - Trial Voluntario**: La tarjeta informativa «Prueba Premium Gratis por 7 días» DEBE mostrarse estáticamente en Pantalla 1B; la elegibilidad verificada DEBE gobernar exclusivamente si Mensual o Anual se registra como `TRIAL_INTENT` o `PREMIUM_INTENT` y nunca activa una prueba real en Sprint 1.
+- **RN-003 - Transparencia Comercial**: Antes de confirmar una intención Premium, la persona DEBE poder consultar en la pantalla la duración informativa del Trial, el precio posterior, la frecuencia de renovación y las condiciones de cancelación.
 - **RN-004 - Intención sin Concesión Prematura**: Una elección expresada en la Pantalla 1B DEBE registrar solo una preferencia. La activación real de derechos Premium exige una compra verificada en servidor mediante HU-54.
 
 ### Functional Requirements
 
 - **FR-001**: El sistema DEBE presentar la Pantalla 1B secuencialmente después del registro exitoso de una cuenta Kipu.
-- **FR-002**: La Pantalla 1B DEBE permitir seleccionar Kipu Free o una única alternativa Premium informativa antes de confirmar el plan.
-- **FR-003**: La tarjeta Kipu Free DEBE mostrar S/ 0 de por vida, ausencia de tarjeta y publicidad, uso manual local y los límites de 4 instrumentos, 5 categorías personalizadas, 2 deudas, 2 metas y 2 presupuestos.
-- **FR-004**: La tarjeta Premium DEBE presentar el Trial de 7 días como aplicable únicamente cuando la persona sea elegible. Con elegibilidad desconocida PUEDE informar que existe una oferta sujeta a verificación, sin prometer duración ni aplicación. La tarjeta DEBE permitir consultar Mensual por S/ 4.99, Anual por S/ 29.99 y Pago Único Lifetime por S/ 49.99.
-- **FR-005**: Al seleccionar Mensual o Anual con elegibilidad confirmada, la pantalla DEBE mostrar antes de la confirmación los 7 días de prueba, el precio exacto posterior, la frecuencia de renovación y las condiciones de cancelación.
-- **FR-006**: Al seleccionar Lifetime, la pantalla DEBE informar que corresponde a un pago único, sin renovación, y NO DEBE prometer un Trial de 7 días.
-- **FR-007**: Si la persona ya consumió el Trial o su elegibilidad no está confirmada, la pantalla NO DEBE prometer otro periodo gratuito.
-- **FR-008**: El botón principal DEBE rotularse "Confirmar Plan" y DEBE confirmar solamente la opción que se encuentre seleccionada.
-- **FR-009**: Confirmar Kipu Free DEBE registrar `FREE` y permitir continuar sin solicitar método de pago ni datos bancarios.
+- **FR-002**: ~~La Pantalla 1B DEBE permitir seleccionar Kipu Free o una única alternativa Premium informativa antes de confirmar el plan.~~ *(Sustituido: Kipu Free es una tarjeta informativa no seleccionable y la persona selecciona una alternativa Premium o continúa mediante su CTA dedicado.)* La Pantalla 1B DEBE mostrar Kipu Free como referencia informativa no seleccionable y permitir una única selección Premium, con Anual preseleccionado por defecto.
+- **FR-003**: ~~La tarjeta Kipu Free DEBE mostrar S/ 0 de por vida, ausencia de tarjeta y publicidad, uso manual local y los límites de 4 instrumentos, 5 categorías personalizadas, 2 deudas, 2 metas y 2 presupuestos.~~ *(Sustituido para adoptar la composición Stitch 1B.)* La tarjeta Kipu Free DEBE mostrar el badge «Permanente», «No requiere método de pago» y seis filas con icono `check_circle`: núcleo manual de registro, 4 instrumentos, 5 categorías personalizadas, 2 deudas, 2 metas y 2 presupuestos.
+- **FR-004**: ~~La tarjeta Premium DEBE presentar el Trial de 7 días como aplicable únicamente cuando la persona sea elegible. Con elegibilidad desconocida PUEDE informar que existe una oferta sujeta a verificación, sin prometer duración ni aplicación.~~ *(Sustituido: la elegibilidad ya no condiciona el copy visual.)* La Pantalla 1B DEBE mostrar siempre la tarjeta «Prueba Premium Gratis por 7 días», tag «Completo» y «Periodo de prueba voluntario sin cobro inmediato», junto con Premium Anual, Premium Mensual y Compra Única Lifetime.
+- **FR-005**: ~~Al seleccionar Mensual o Anual con elegibilidad confirmada, la pantalla DEBE mostrar antes de la confirmación los 7 días de prueba, el precio exacto posterior, la frecuencia de renovación y las condiciones de cancelación.~~ *(Sustituido: la información es estática y previa a cualquier selección.)* La pantalla DEBE mostrar siempre, antes de confirmar, la duración informativa de 7 días, el precio posterior exacto, la frecuencia de renovación y las condiciones de cancelación.
+- **FR-006**: Al seleccionar «Compra Única Lifetime», la pantalla DEBE informar «Sin periodo de prueba», «S/ 49.99 pago único» y ausencia de renovación; no se activa Trial en Sprint 1.
+- **FR-007**: ~~Si la persona ya consumió el Trial o su elegibilidad no está confirmada, la pantalla NO DEBE prometer otro periodo gratuito.~~ *(Sustituido: la tarjeta Trial se muestra estáticamente para fidelidad con Stitch 1B.)* Sprint 1 NO DEBE activar un periodo gratuito real; la elegibilidad solo determina la intención registrada para Mensual o Anual.
+- **FR-008**: El botón primario DEBE rotularse "Confirmar Plan" y DEBE confirmar la alternativa Premium seleccionada, con Anual preseleccionado por defecto.
+- **FR-009**: ~~Confirmar Kipu Free DEBE registrar `FREE` y permitir continuar sin solicitar método de pago ni datos bancarios.~~ *(Sustituido: Kipu Free ya no es una tarjeta seleccionable.)* El botón secundario "Continuar con Plan Free" DEBE registrar `FREE` y permitir continuar sin solicitar método de pago ni datos bancarios.
 - **FR-010**: Confirmar Mensual o Anual para una persona elegible DEBE registrar `TRIAL_INTENT`; confirmar una alternativa Premium sin Trial aplicable, incluida Lifetime, DEBE registrar `PREMIUM_INTENT`.
 - **FR-011**: Registrar `TRIAL_INTENT` o `PREMIUM_INTENT` NO DEBE crear ni modificar un entitlement, iniciar una compra, abrir un cobro, programar una renovación ni habilitar capacidades Premium.
 - **FR-012**: Después de cualquier intención Premium de Sprint 1, el sistema DEBE evaluar el acceso con los límites activos de Kipu Free.
@@ -153,14 +156,14 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 - **FR-017**: Las lecturas y escrituras remotas de preferencias DEBEN derivar el propietario de la sesión autenticada, validar la autorización en el límite de servicio y restringirse además a la fila cuyo `user_id` coincide con dicho propietario.
 - **FR-018**: La evaluación de capacidades DEBE producir de forma determinista `Allowed(FREE_CAPABILITY)`, `Denied(FREE_LIMIT_REACHED)` o `Denied(PREMIUM_ENTITLEMENT_REQUIRED)` para los estados posibles de Sprint 1. Otros motivos requieren ampliar el contrato en una historia posterior.
 - **FR-019**: Salir de la Pantalla 1B sin confirmar NO DEBE registrar una nueva selección, iniciar una compra, activar un Trial, conceder Premium ni producir un cobro.
-- **FR-020**: La Pantalla 1B NO DEBE mostrar publicidad, slogans comerciales, barra superior ni barra de navegación inferior.
+- **FR-020**: ~~La Pantalla 1B NO DEBE mostrar publicidad ni slogans comerciales.~~ *(Sustituido: se autorizan los badges, mensajes comerciales y footer fiscal de la Pantalla 1B Stitch.)* La Pantalla 1B NO DEBE mostrar barra superior ni barra de navegación inferior.
 - **FR-021**: El estado seleccionado, las condiciones comerciales y la acción de confirmación DEBEN ser perceptibles y operables mediante las ayudas de accesibilidad admitidas por la aplicación.
 - **FR-022**: La Pantalla 1B DEBE navegar al destino explícitamente suministrado por su flujo anfitrión después de la confirmación local: la entrada de Sprint 1 posterior al registro DEBE suministrar Pantalla 1C (Biometría); Pantalla 15 solo PUEDE ser suministrada por un flujo preexistente fuera del alcance de HU-52.
-- **FR-023**: La interfaz DEBE indicar claramente que la contratación mediante Google Play no está habilitada en Sprint 1 y que confirmar una alternativa Premium solo registra interés.
+- **FR-023**: ~~La interfaz DEBE indicar claramente que la contratación mediante Google Play no está habilitada en Sprint 1 y que confirmar una alternativa Premium solo registra interés.~~ *(Sustituido: la nota visible adopta el copy literal de Stitch; la ausencia de compra se conserva como invariante operativo.)* La interfaz DEBE mostrar la nota con icono `info`: «7 días de acceso completo sin costo. El cobro de S/ 29.99 se realizará al término del periodo de prueba. Cancelación directa desde la configuración de cuenta en cualquier momento sin penalización.»
 - **FR-024**: La modalidad Mensual, Anual o Lifetime seleccionada DEBE utilizarse para presentar las condiciones y decidir el tipo de intención, pero NO DEBE persistirse como modalidad de compra en Sprint 1; una compra futura exigirá una nueva selección y confirmación en HU-53.
 - **FR-025**: Mostrar o abandonar la Pantalla 1B NO DEBE crear una fila de preferencia. El default `'FREE'` solo aplica cuando se realiza una inserción explícita sin otro valor y no constituye evidencia de confirmación, Trial o compra.
-- **FR-026**: Todo precio que se almacene o transporte de forma autoritativa DEBE representarse en unidades monetarias menores enteras junto con la moneda `PEN`; la interfaz DEBE mostrar los importes equivalentes en soles.
-- **FR-027**: El límite de monetización EP-PLA DEBE entregar a Pantalla 1B un `TrialEligibilitySnapshot` con estado `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`, procedencia, momento de verificación y vigencia cuando corresponda. Solo el historial de cuenta verificado y vigente PUEDE producir los dos primeros estados; ausencia, expiración, error o evidencia no confiable DEBE producir `UNKNOWN` sin promesa de Trial.
+- **FR-026**: Todo precio que se almacene o transporte de forma autoritativa DEBE representarse en unidades monetarias menores enteras junto con la moneda `PEN`; la interfaz DEBE mostrar los importes equivalentes en soles como «S/ 29.99 / año», «S/ 4.99 / mes» y «S/ 49.99 pago único».
+- **FR-027**: El límite de monetización EP-PLA DEBE entregar a Pantalla 1B un `TrialEligibilitySnapshot` con estado `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`, procedencia, momento de verificación y vigencia cuando corresponda. Solo el historial de cuenta verificado y vigente PUEDE producir los dos primeros estados; ausencia, expiración, error o evidencia no confiable DEBE producir `UNKNOWN`. La elegibilidad no condiciona el copy estático de Trial y solo determina la intención registrada al confirmar Mensual o Anual.
 - **FR-028**: Todo cambio de esquema local o remoto requerido por esta historia DEBE usar una migración versionada, revisable y no destructiva, validada con datos existentes representativos.
 - **FR-029**: Una solicitud sin autenticación, con versión no soportada o payload inválido DEBE rechazarse sin modificar estado ni exponer datos; una indisponibilidad transitoria DEBE conservar la operación local como pendiente y reintentable, siempre sin alterar el acceso Kipu Free.
 - **FR-030**: Cada confirmación DEBE establecer `selected_at` al momento de la nueva selección y `updated_at` al mismo momento local; cada aplicación remota exitosa DEBE reemplazar `updated_at` por el momento asignado por servidor.
@@ -172,8 +175,8 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 | Requisitos | Escenarios o evidencia de aceptación |
 |------------|--------------------------------------|
 | FR-001, FR-014, FR-022 | Escenarios 1, 5, 7 y 12; SC-001 y SC-005. |
-| FR-002 a FR-008, FR-021, FR-023, FR-024 | Escenarios 2, 3, 6 y 10; SC-002, SC-004, SC-008 y SC-009. |
-| FR-003, FR-020 | Escenario 13; SC-001. |
+| FR-002 a FR-009, FR-021, FR-023, FR-024 | Escenarios 1, 2, 3, 6, 10 y 13; SC-001, SC-002, SC-004, SC-008 y SC-009. |
+| FR-003, FR-020 | Escenario 13; SC-001 y SC-008. |
 | FR-009 a FR-012, FR-025, FR-027 | Escenarios 1, 3, 4, 5 y 6; SC-001, SC-003 y SC-004. |
 | FR-013, FR-015 | Escenarios 7 y 8; SC-005, SC-006 y SC-010. |
 | FR-016 | Escenario 11; SC-011. |
@@ -191,16 +194,18 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 
 | Componente | Contenido y comportamiento requerido |
 |------------|--------------------------------------|
-| Tarjeta Kipu Free | S/ 0 de por vida, uso manual local, sin tarjeta, sin publicidad y resumen de límites: 4 instrumentos, 5 categorías personalizadas, 2 deudas, 2 metas y 2 presupuestos. |
-| Tarjeta Trial Premium | Información de 7 días para personas elegibles y chips interactivos para Mensual S/ 4.99, Anual S/ 29.99 y Pago Único Lifetime S/ 49.99. Lifetime se diferencia como compra futura sin Trial ni renovación. |
-| Botón principal | "Confirmar Plan"; persiste la selección y continúa el flujo sin iniciar pagos en Sprint 1. |
+| Encabezado | «Selecciona tu Plan» y «Configuración inicial de cuenta y suscripción». |
+| Tarjeta Kipu Free | Tarjeta informativa no seleccionable con badge «Permanente», «No requiere método de pago» y seis filas `check_circle`: núcleo manual de registro, 4 instrumentos, 5 categorías personalizadas, 2 deudas, 2 metas y 2 presupuestos. |
+| Tarjeta Trial Premium | Tarjeta estática «Prueba Premium Gratis por 7 días», tag «Completo» y «Periodo de prueba voluntario sin cobro inmediato». |
+| Tarjetas Premium | Orden Stitch: Premium Anual preseleccionado con «Recomendado», «Ahorro equivalente a 50%» y «S/ 29.99 / año»; Premium Mensual con «Facturación mensual renovable» y «S/ 4.99 / mes»; Compra Única Lifetime con «Sin periodo de prueba» y «S/ 49.99 pago único». |
+| Nota y acciones | Nota `info` literal sobre los 7 días, cobro y cancelación; botón primario "Confirmar Plan" para Premium y botón secundario "Continuar con Plan Free" para registrar `FREE`. Footer: «Validez fiscal y operativa conforme al marco regulatorio en Perú.» |
 
 **Restricciones visuales**:
 
 - La pantalla no contiene Top Bar ni `KipuBottomBar`.
-- La pantalla no contiene publicidad ni slogans comerciales.
+- ~~La pantalla no contiene publicidad ni slogans comerciales.~~ *(Retirado: se autorizan exclusivamente los badges, mensajes comerciales y footer fiscal presentes en la Pantalla 1B Stitch.)*
 - ~~La maquetación tomaba como referencia los tokens del documento de diseño previo: Primary `#0F766E`, Ink `#0F172A` y radios de `16dp`/`12dp`.~~ *(Reemplazado por tokens del design system Stitch; la única fuente de verdad visual es `docs/stitch-design-system.md`.)*
-- La maquetación adopta el design system Stitch `Kipu Andean Modernist` (Pantalla 1B `b8b4bfdcf384409887e54a975c549797`, proyecto `projects/5775615138851387862`) como única fuente de verdad visual. Tokens registrados en `docs/stitch-design-system.md`: background `#F7F9FB`; surface de tarjetas `#FFFFFF`; onSurface `#191C1E`; onSurfaceVariant `#3E4947`; outline `#6E7977`; outlineVariant `#BDC9C6`; primary (CTA) `#0F766E` con pressed `#005C55`; ring de selección (surface_tint) `#006A63`; secondary `#216963`; secondaryContainer `#A8ECE5`; onSecondaryContainer `#266D68`; error `#BA1A1A`; dark background `#0B1220`. Radios de `16dp` (tarjetas) y `12dp` (controles/CTA). Tipografía Inter obligatoria en toda la pantalla; montos con números tabulares (`tnum`). Grilla base 8dp, márgenes de página 16dp, separación de secciones 24dp, targets mínimos 48dp.
+- La maquetación adopta el design system Stitch `Kipu Andean Modernist` (Pantalla 1B `b8b4bfdcf384409887e54a975c549797`, proyecto `projects/5775615138851387862`) como única fuente de verdad visual y usa su disposición y componentes como referencia de fidelidad. Tokens registrados en `docs/stitch-design-system.md`: background `#F7F9FB`; surface de tarjetas `#FFFFFF`; onSurface `#191C1E`; onSurfaceVariant `#3E4947`; outline `#6E7977`; outlineVariant `#BDC9C6`; primary (CTA) `#0F766E` con pressed `#005C55`; ring de selección (surface_tint) `#006A63`; secondary `#216963`; secondaryContainer `#A8ECE5`; onSecondaryContainer `#266D68`; error `#BA1A1A`; dark background `#0B1220`. Radios de `16dp` (tarjetas) y `12dp` (controles/CTA). Tipografía Inter obligatoria en toda la pantalla; montos con números tabulares (`tnum`). Grilla base 8dp, márgenes de página 16dp, separación de secciones 24dp, targets mínimos 48dp.
 - La referencia de tooling es el MCP de Stitch AI y las pautas del Prompt 1 de `Stich Prompts.md`.
 
 **Flujo de navegación**:
@@ -247,9 +252,9 @@ Mostrar la Pantalla 1B no crea esta fila. El default `'FREE'` es una defensa del
 
 | Opción | Importe autoritativo | Presentación | Trial aplicable en Sprint 1 |
 |--------|----------------------|--------------|-----------------------------|
-| Kipu Free | `amount_minor = 0`, `currency = PEN` | S/ 0 de por vida | No aplica. |
-| Mensual | `amount_minor = 499`, `currency = PEN` | S/ 4.99 por mes | 7 días si la elegibilidad está verificada. |
-| Anual | `amount_minor = 2999`, `currency = PEN` | S/ 29.99 por año | 7 días si la elegibilidad está verificada. |
+| Kipu Free | `amount_minor = 0`, `currency = PEN` | Badge «Permanente» y «No requiere método de pago» | No aplica. |
+| Mensual | `amount_minor = 499`, `currency = PEN` | S/ 4.99 / mes | La tarjeta Trial es informativa y estática; la elegibilidad define la intención registrada. |
+| Anual | `amount_minor = 2999`, `currency = PEN` | S/ 29.99 / año | La tarjeta Trial es informativa y estática; la elegibilidad define la intención registrada. |
 | Lifetime | `amount_minor = 4999`, `currency = PEN` | S/ 49.99, pago único | No aplica y no renueva. |
 
 Estos importes son configuración comercial informativa de Sprint 1. Google Play será la fuente comercial aplicable al iniciar una compra real en HU-53; cualquier diferencia futura exige actualizar y aprobar los artefactos correspondientes antes de mostrar o cobrar nuevos valores.
@@ -264,7 +269,7 @@ Estos importes son configuración comercial informativa de Sprint 1. Google Play
 
 El límite de monetización EP-PLA es propietario del contrato de lectura `TrialEligibilitySnapshot`, compuesto por `status`, `source`, `verified_at` y `valid_until`. `status` admite `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN`; los dos primeros requieren `source = VERIFIED_ACCOUNT_HISTORY`, `verified_at` y una vigencia verificable. Una elegibilidad positiva expirada se degrada a `UNKNOWN`; una inelegibilidad por consumo confirmado puede ser permanente y usar `valid_until = null`. Sin esa evidencia, el productor devuelve `UNKNOWN`.
 
-En Sprint 1, `UNKNOWN` es un resultado válido y no bloqueante: la persona puede conocer la oferta marcada como sujeta a elegibilidad y registrar interés, pero no recibe una promesa ni derechos. La integración que alimente este contrato desde Google Play pertenece a HU-53/HU-54. Un cache local puede conservar una denegación verificada, pero nunca transformar `UNKNOWN` en `ELIGIBLE`.
+En Sprint 1, `UNKNOWN` es un resultado válido y no bloqueante: la persona ve la tarjeta Trial informativa estática y puede registrar interés, pero no recibe un Trial real, derechos ni cobros. La integración que alimente este contrato desde Google Play pertenece a HU-53/HU-54. Un cache local puede conservar una denegación verificada, pero nunca transformar `UNKNOWN` en `ELIGIBLE`.
 
 #### Seguridad RLS
 
@@ -302,7 +307,7 @@ La revisión pertenece a la operación de sincronización y no agrega una modali
 
 #### Flujo Local-First
 
-1. La persona selecciona una opción y presiona "Confirmar Plan" en la Pantalla 1B.
+1. La persona confirma la alternativa Premium preseleccionada o elegida mediante "Confirmar Plan", o presiona "Continuar con Plan Free" para registrar `FREE` en la Pantalla 1B.
 2. La aplicación incrementa la revisión del usuario y guarda síncronamente en una transacción Room la selección y la operación correspondiente de `sync_outbox`.
 3. La navegación continúa al destino suministrado por el flujo anfitrión aunque no exista red. El onboarding posterior al registro suministra Pantalla 1C; Pantalla 15 solo puede proceder de un flujo preexistente fuera del alcance de HU-52.
 4. WorkManager sincroniza la fila con Supabase mediante `/plans/selection` al detectar conectividad.
@@ -313,8 +318,8 @@ La revisión pertenece a la operación de sincronización y no agrega una modali
 ### Key Entities *(include if feature involves data)*
 
 - **Preferencia de Plan (`plan_preferences`)**: Selección comercial confirmada por una persona. Contiene propietario, valor de intención y momentos de selección y actualización; no representa derechos de acceso.
-- **Opción Comercial**: Alternativa efímera visible en Pantalla 1B: Free, Mensual, Anual o Lifetime, con importe en unidades menores, moneda, presentación, periodicidad, condiciones y relación aplicable con el Trial. No constituye una compra.
-- **Elegibilidad de Trial**: Resultado verificado `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN` que determina si se puede prometer la oferta de 7 días. Solo `ELIGIBLE` permite mostrarla como aplicable.
+- **Opción Comercial**: Alternativa efímera visible en Pantalla 1B: Free, Mensual, Anual o Lifetime, con importe en unidades menores, moneda, presentación, periodicidad, condiciones y relación aplicable con el Trial. Free se presenta como tarjeta informativa y se registra desde el CTA secundario; no constituye una compra.
+- **Elegibilidad de Trial**: Resultado verificado `ELIGIBLE`, `INELIGIBLE` o `UNKNOWN` que determina la intención registrada al confirmar Mensual o Anual. La tarjeta visual de 7 días se muestra de forma estática para todas las personas.
 - **Entitlement Efectivo**: Fuente separada y verificada de derechos Premium. Su creación o modificación queda fuera de HU-52 y no puede derivarse de una preferencia.
 - **Política de Acceso**: Evaluación determinista de una capacidad que devuelve permiso o denegación con un motivo y mantiene límites Free en Sprint 1.
 - **Operación de Sincronización (`sync_outbox`)**: Cambio local con identificador estable, revisión monotónica y versión de contrato que permite sincronizar la preferencia de manera idempotente sin bloquear la experiencia offline.
@@ -336,13 +341,13 @@ La aprobación de esta especificación autoriza los invariantes funcionales y t�
 ### Measurable Outcomes
 
 - **SC-001**: El 100% de los recorridos Free permite continuar sin solicitar tarjeta, datos bancarios ni acceso a una pasarela de pago.
-- **SC-002**: El 100% de las ofertas Mensual y Anual elegibles muestra, antes de confirmar, los 7 días de prueba, el precio posterior exacto, la frecuencia de renovación y las condiciones de cancelación.
+- **SC-002**: ~~El 100% de las ofertas Mensual y Anual elegibles muestra, antes de confirmar, los 7 días de prueba, el precio posterior exacto, la frecuencia de renovación y las condiciones de cancelación.~~ *(Sustituido: la tarjeta Trial es estática y no depende de la elegibilidad.)* El 100% de los recorridos presenta antes de confirmar la tarjeta Trial estática con duración, precio posterior, frecuencia de renovación y condiciones de cancelación.
 - **SC-003**: Se producen 0 cobros, 0 suscripciones, 0 Trials activos y 0 concesiones Premium en todos los recorridos de Sprint 1, incluidos intención Premium, abandono, uso offline y reintentos.
-- **SC-004**: El 100% de las personas identificadas como no elegibles, o cuya elegibilidad sea desconocida, deja de recibir una promesa de Trial de 7 días.
+- **SC-004**: ~~El 100% de las personas identificadas como no elegibles, o cuya elegibilidad sea desconocida, deja de recibir una promesa de Trial de 7 días.~~ *(Sustituido: la tarjeta Trial permanece visible como copy informativo.)* El 100% de las personas no elegibles o con elegibilidad desconocida que confirma una opción Premium se registra como `PREMIUM_INTENT` y no recibe Trial, derechos ni cobros.
 - **SC-005**: En al menos el 95% de las 40 confirmaciones de la matriz mínima, la confirmación local y el avance al siguiente paso se completan en 2 segundos o menos, incluso sin conectividad.
 - **SC-006**: El 100% de las selecciones confirmadas offline permanece disponible después de reiniciar. Bajo las condiciones de medición de la matriz, al menos el 95% se reconcilia remotamente en un máximo de 15 minutos tras recuperar conectividad estable; el resto permanece íntegro y se procesa en la primera oportunidad permitida.
 - **SC-007**: El 100% de los intentos de acceso cruzado entre cuentas es rechazado sin revelar ni modificar preferencias ajenas.
-- **SC-008**: Al menos 18 de los 20 participantes de la prueba de comprensión identifican correctamente, en el primer intento, que Free es permanente, que el Trial es voluntario y que confirmar Premium en Sprint 1 no activa una compra.
+- **SC-008**: ~~Al menos 18 de los 20 participantes de la prueba de comprensión identifican correctamente, en el primer intento, que Free es permanente, que el Trial es voluntario y que confirmar Premium en Sprint 1 no activa una compra.~~ *(Sustituido para validar el copy literal Stitch.)* Al menos 18 de los 20 participantes de la prueba de comprensión identifican correctamente, en el primer intento, que Free es permanente, que la nota `info` describe el modelo comercial futuro y que confirmar Premium en Sprint 1 no activa una compra ni produce un cobro.
 - **SC-009**: El 100% de los ocho recorridos críticos definidos en la matriz puede completarse con lector de pantalla y texto ampliado al 200%, conservando perceptible la opción seleccionada y sus condiciones comerciales.
 - **SC-010**: En el 100% de las 30 operaciones de sincronización de la matriz, un duplicado no repite efectos, una revisión obsoleta no reemplaza la vigente y un conflicto conserva la última preferencia aceptada.
 - **SC-011**: En el 100% de los casos con datos por encima de un cupo Free, sincronizar una preferencia conserva todos los registros y sus efectos financieros sin borrado ni reescritura.
@@ -353,9 +358,10 @@ La aprobación de esta especificación autoriza los invariantes funcionales y t�
 
 - HU-01 entrega una cuenta autenticada y un identificador estable antes de entrar a Pantalla 1B.
 - Los precios S/ 4.99 mensual, S/ 29.99 anual y S/ 49.99 Lifetime son la configuración comercial aprobada para mostrar en Sprint 1; su cobro y validación pertenecen a historias futuras.
-- El Trial de 7 días solo aplica a Mensual y Anual. Lifetime se registra como `PREMIUM_INTENT`, no ofrece Trial y no renueva.
+- Anual es la alternativa Premium preseleccionada al abrir Pantalla 1B; Kipu Free se confirma exclusivamente mediante el CTA secundario.
+- La tarjeta Trial de 7 días se presenta estáticamente junto a las alternativas Premium. La elegibilidad decide si Mensual o Anual se registra como `TRIAL_INTENT` o `PREMIUM_INTENT`; Lifetime se registra como `PREMIUM_INTENT`, no activa Trial y no renueva.
 - Una persona elegible que confirma Mensual o Anual genera `TRIAL_INTENT`; una persona no elegible o con elegibilidad desconocida genera `PREMIUM_INTENT` si conserva su interés.
-- El historial remoto verificado de la cuenta es la fuente autoritativa de elegibilidad. Cuando no pueda consultarse o no sea confiable, la experiencia falla de forma segura: no promete Trial ni concede Premium.
+- El historial remoto verificado de la cuenta es la fuente autoritativa de elegibilidad. Cuando no pueda consultarse o no sea confiable, la experiencia conserva el copy Trial estático, registra `PREMIUM_INTENT` para Mensual o Anual y no concede Trial ni Premium.
 - Pantalla 1C es el destino obligatorio del onboarding iniciado tras registro. Pantalla 15 solo puede ser un destino entregado explícitamente por un flujo anfitrión ya existente; crear o modificar ese flujo no forma parte de HU-52.
 - La fila `plan_preferences` se crea o actualiza al confirmar. Su default `'FREE'` es una defensa de persistencia y no implica una elección cuando la persona solo abrió o abandonó la pantalla.
 - Mensual, Anual y Lifetime son opciones efímeras de presentación en Sprint 1. Solo se persiste la categoría de intención y una futura compra exige volver a elegir modalidad.

@@ -1,17 +1,19 @@
 package com.kipu.app.feature.plans.presentation
 
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,7 +22,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.plans.domain.model.CommercialOption
 import com.kipu.app.feature.plans.domain.model.TrialEligibilitySnapshot
-import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -31,122 +32,126 @@ class PlanSelectionScreenTest {
     val compose = createComposeRule()
 
     @Test
-    fun showsFourOptionsFiveFreeLimitsAndExactlyOneConfirmationAction() {
+    fun showsStitchCardsSixFreeRowsAndTwoActions() {
         setScreen()
 
-        CommercialOption.entries.forEach {
-            compose.onNodeWithTag("plan-option-${it.name}").performScrollTo().assertIsDisplayed()
-        }
-        listOf("4 instrumentos", "5 categorías personalizadas", "2 deudas", "2 metas", "2 presupuestos").forEach {
-            compose.onNodeWithText(it, substring = true).assertExists()
-        }
+        compose.onNodeWithText("Selecciona tu Plan").assertIsDisplayed()
+        compose.onNodeWithText("Configuración inicial de cuenta y suscripción").assertIsDisplayed()
+        compose.onNodeWithTag("plan-free-card").assertHasNoClickAction()
+        compose.onNodeWithTag("plan-trial-card").assertExists()
         compose.onAllNodes(hasText("Confirmar Plan") and hasClickAction()).assertCountEquals(1)
+        compose.onAllNodes(hasText("Continuar con Plan Free") and hasClickAction()).assertCountEquals(1)
+        listOf(
+            "Núcleo manual de registro",
+            "Hasta 4 instrumentos financieros",
+            "Hasta 5 categorías personalizadas",
+            "Hasta 2 deudas activas",
+            "Hasta 2 metas de ahorro",
+            "Hasta 2 presupuestos mensuales",
+        ).forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onNodeWithText("No requiere método de pago").assertExists()
+        compose.onAllNodes(hasContentDescription("Incluido")).assertCountEquals(6)
     }
 
     @Test
-    fun exactPricesRenewalAndCancellationAreShownBeforeEligibleMonthlyOrAnnualConfirmation() {
-        val renderedState = setDynamicScreen(state(CommercialOption.MONTHLY, eligible()))
-        compose.onAllNodes(hasText("7 días", substring = true)).assertCountEquals(2)
-        compose.onNodeWithText("S/ 4.99", substring = true).assertExists()
-        compose.onNodeWithText("mensual", substring = true, ignoreCase = true).assertExists()
-        compose.onAllNodes(hasText("cancel", substring = true, ignoreCase = true)).assertCountEquals(2)
-
-        compose.runOnIdle { renderedState.value = state(CommercialOption.ANNUAL, eligible()) }
-        compose.onAllNodes(hasText("7 días", substring = true)).assertCountEquals(2)
-        compose.onNodeWithText("S/ 29.99", substring = true).assertExists()
-        compose.onNodeWithText("anual", substring = true, ignoreCase = true).assertExists()
-        compose.onAllNodes(hasText("cancel", substring = true, ignoreCase = true)).assertCountEquals(2)
-    }
-
-    @Test
-    fun unknownAndIneligibleNeverPromiseTrialAndLifetimeNeverRenews() {
-        val renderedState = setDynamicScreen(state(CommercialOption.MONTHLY, TrialEligibilitySnapshot.unknown()))
-        compose.onAllNodes(hasText("sujeta a verificación", substring = true, ignoreCase = true)).assertCountEquals(2)
-
-        compose.runOnIdle { renderedState.value = state(CommercialOption.ANNUAL, ineligible()) }
-        compose.onNodeWithText("7 días", substring = true).assertDoesNotExist()
-
-        compose.runOnIdle { renderedState.value = state(CommercialOption.LIFETIME, eligible()) }
-        compose.onNodeWithText("S/ 49.99", substring = true).assertExists()
-        compose.onNodeWithText("pago único", substring = true, ignoreCase = true).assertExists()
-        compose.onNodeWithText("sin renovación", substring = true, ignoreCase = true).assertExists()
-    }
-
-    @Test
-    fun optionSemanticsExposeSingleSelectionAndEachControlIsAtLeast48Dp() {
-        var selected = CommercialOption.FREE
+    fun annualIsPreselectedAndPremiumCardsFollowStitchOrder() {
+        var selected = CommercialOption.ANNUAL
         setScreen(selected = selected, onSelect = { selected = it })
 
-        compose.onNodeWithTag("plan-option-FREE").assertIsSelected()
-        compose.onNodeWithTag("plan-option-MONTHLY").assertIsNotSelected().performClick()
-        compose.runOnIdle { assertEquals(CommercialOption.MONTHLY, selected) }
+        val annual = compose.onNodeWithTag("plan-option-ANNUAL").assertIsSelected().fetchSemanticsNode().positionInRoot.y
+        val monthly = compose.onNodeWithTag("plan-option-MONTHLY").assertIsNotSelected().fetchSemanticsNode().positionInRoot.y
+        val lifetime = compose.onNodeWithTag("plan-option-LIFETIME").assertIsNotSelected().fetchSemanticsNode().positionInRoot.y
+        assertTrue(annual < monthly)
+        assertTrue(monthly < lifetime)
 
-        listOf("FREE", "MONTHLY", "ANNUAL", "LIFETIME").forEach { option ->
-            val bounds = compose.onNodeWithTag("plan-option-$option").performScrollTo().assertHasClickAction()
-                .fetchSemanticsNode().boundsInRoot
-            assertMinimumTouchTarget(bounds)
-        }
-        assertMinimumTouchTarget(compose.onNodeWithText("Confirmar Plan").performScrollTo().fetchSemanticsNode().boundsInRoot)
+        compose.onNodeWithTag("plan-option-MONTHLY").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(CommercialOption.MONTHLY, selected) }
     }
 
     @Test
-    fun allFinancialFiguresUseTabularGlyphAdvances() {
+    fun staticTrialAndApprovedCommercialCopyIgnoreEligibility() {
+        val rendered = mutableStateOf(state(eligibility = TrialEligibilitySnapshot.UNKNOWN))
+        compose.setContent { PlanSelectionScreen(rendered.value, {}, {}, {}) }
+
+        assertStaticTrialCopy()
+        compose.runOnIdle { rendered.value = state(eligibility = ineligible()) }
+        assertStaticTrialCopy()
+
+        compose.onNodeWithText("Recomendado").assertExists()
+        compose.onNodeWithText("Ahorro equivalente a 50%").assertExists()
+        compose.onNodeWithText("Validez fiscal y operativa", substring = true).performScrollTo().assertExists()
+    }
+
+    @Test
+    fun pricesIncludeFrequencyAndTabularTags() {
         setScreen()
-        listOf("S/ 4.99", "S/ 29.99", "S/ 49.99").forEach { price ->
-            val option = when (price) {
-                "S/ 4.99" -> "MONTHLY"
-                "S/ 29.99" -> "ANNUAL"
-                else -> "LIFETIME"
-            }
+
+        listOf(
+            "ANNUAL" to "S/ 29.99 / año",
+            "MONTHLY" to "S/ 4.99 / mes",
+            "LIFETIME" to "S/ 49.99 pago único",
+        ).forEach { (option, price) ->
+            compose.onNodeWithText(price).performScrollTo().assertExists()
             compose.onNodeWithTag("plan-price-$option", useUnmergedTree = true).assertExists()
         }
     }
 
     @Test
-    fun twoHundredPercentFontScaleRemainsScrollableThroughAllContentAndCta() {
+    fun controlsAndIconsAreAccessibleAndAtLeast48Dp() {
+        setScreen()
+
+        listOf("ANNUAL", "MONTHLY", "LIFETIME").forEach { option ->
+            val bounds = compose.onNodeWithTag("plan-option-$option").performScrollTo().assertHasClickAction()
+                .fetchSemanticsNode().boundsInRoot
+            assertMinimumTouchTarget(bounds)
+        }
+        compose.onNodeWithContentDescription("Información del periodo de prueba").performScrollTo().assertExists()
+        assertMinimumTouchTarget(compose.onNodeWithText("Confirmar Plan").performScrollTo().fetchSemanticsNode().boundsInRoot)
+        assertMinimumTouchTarget(compose.onNodeWithText("Continuar con Plan Free").performScrollTo().fetchSemanticsNode().boundsInRoot)
+    }
+
+    @Test
+    fun twoHundredPercentFontScaleScrollsThroughFooterAndBothActions() {
         compose.setContent {
             val density = LocalDensity.current
             androidx.compose.runtime.CompositionLocalProvider(
                 LocalDensity provides Density(density.density, fontScale = 2f),
             ) {
-                PlanSelectionScreen(state(), {}, {})
+                PlanSelectionScreen(state(), {}, {}, {})
             }
         }
 
-        compose.onNodeWithTag("plan-option-LIFETIME").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Confirmar Plan").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Continuar con Plan Free").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Validez fiscal y operativa", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun containsNoBarsPaymentActionsOrPromotionalLanguage() {
+    fun topAndBottomBarsRemainAbsent() {
         setScreen()
-        listOf(
-            "KipuTopAppBar", "KipuBottomBar", "Confirmar y Pagar", "Método de pago",
-            "Tarjeta de crédito", "Recomendado", "Ahorra", "50%", "Gratis",
-        ).forEach { forbidden ->
-            compose.onNodeWithText(forbidden, substring = true, ignoreCase = true).assertDoesNotExist()
-        }
-        compose.onNodeWithText("Google Play no está habilitado", substring = true, ignoreCase = true).assertExists()
-        compose.onNodeWithText("solo registra interés", substring = true, ignoreCase = true).assertExists()
+        compose.onNodeWithText("KipuTopAppBar", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("KipuBottomBar", substring = true).assertDoesNotExist()
+    }
+
+    private fun assertStaticTrialCopy() {
+        compose.onNodeWithText("Prueba Premium Gratis por 7 días").assertExists()
+        compose.onNodeWithText("Completo").assertExists()
+        compose.onNodeWithText("Periodo de prueba voluntario sin cobro inmediato").assertExists()
+        compose.onNodeWithText("El cobro de S/ 29.99 se realizará", substring = true).performScrollTo().assertExists()
+        compose.onNodeWithText("sujeta a verificación", substring = true, ignoreCase = true).assertDoesNotExist()
     }
 
     private fun setScreen(
-        selected: CommercialOption = CommercialOption.FREE,
-        eligibility: TrialEligibilitySnapshot = eligible(),
+        selected: CommercialOption = CommercialOption.ANNUAL,
+        eligibility: TrialEligibilitySnapshot = TrialEligibilitySnapshot.UNKNOWN,
         onSelect: (CommercialOption) -> Unit = {},
     ) {
-        compose.setContent { PlanSelectionScreen(state(selected, eligibility), onSelect, {}) }
-    }
-
-    private fun setDynamicScreen(initial: PlanSelectionUiState): MutableState<PlanSelectionUiState> {
-        val renderedState = mutableStateOf(initial)
-        compose.setContent { PlanSelectionScreen(renderedState.value, {}, {}) }
-        return renderedState
+        compose.setContent { PlanSelectionScreen(state(selected, eligibility), onSelect, {}, {}) }
     }
 
     private fun state(
-        selected: CommercialOption = CommercialOption.FREE,
-        eligibility: TrialEligibilitySnapshot = eligible(),
+        selected: CommercialOption = CommercialOption.ANNUAL,
+        eligibility: TrialEligibilitySnapshot = TrialEligibilitySnapshot.UNKNOWN,
     ) = PlanSelectionUiState(
         selectedOption = selected,
         eligibility = eligibility,
@@ -155,13 +160,8 @@ class PlanSelectionScreenTest {
         errorMessage = null,
     )
 
-    private fun eligible() = TrialEligibilitySnapshot.eligible(
-        verifiedAt = Instant.parse("2026-09-14T10:00:00Z"),
-        validUntil = Instant.parse("2026-09-21T10:00:00Z"),
-    )
-
     private fun ineligible() = TrialEligibilitySnapshot.ineligible(
-        verifiedAt = Instant.parse("2026-09-14T10:00:00Z"),
+        verifiedAt = java.time.Instant.parse("2026-09-14T10:00:00Z"),
     )
 
     private fun assertMinimumTouchTarget(bounds: Rect) {

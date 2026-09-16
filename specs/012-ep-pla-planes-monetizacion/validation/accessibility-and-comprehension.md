@@ -1,13 +1,16 @@
+> **Revalidated**: 2026-09-16 for automated coverage; physical-device TalkBack and participant evidence remain pending.
+
 # Accessibility And Commercial Comprehension
 
-**Date**: 2026-09-15
+**Date**: 2026-09-16
 **Status**: BLOCKED; TalkBack device execution and human-participant review have not occurred.
 
 ## Automated Accessibility Evidence
 
 - Compose tests validate vertical scrolling at 200% font scale.
 - Interactive controls expose selected-state semantics and minimum 48dp targets.
-- Tests verify four options, exact prices and conditions, one confirmation CTA, five Free limits, and the absence of payment/promotional copy.
+- Tests verify Free→Trial→Annual→Monthly→Lifetime order, a non-selectable Free card with six included rows, static Trial copy, exact prices/conditions, approved badges and two CTA.
+- `CheckCircle` and `Info` expose useful content descriptions; Premium options and both CTA expose at least 48dp targets.
 
 Automated semantics checks do not substitute for TalkBack traversal or participant comprehension evidence.
 
@@ -36,7 +39,7 @@ The approved protocol must verify that participants understand Free permanence, 
 
 ## Blockers
 
-- No Android device is attached for TalkBack validation.
+- No physical Android device is attached for TalkBack validation; the Pixel 8 API 36 AVD is automated evidence only.
 - No participant responses or reviewer sign-off were provided.
 - The integrated onboarding destinations required for the official flows are absent under T048.
 

@@ -1,6 +1,8 @@
+> **Revalidated**: 2026-09-16 after the Pantalla 1B corrective implementation.
+
 # Security And Release Audit
 
-**Date**: 2026-09-15
+**Date**: 2026-09-16
 **Status**: Local source, database, Edge, and release-artifact audit passed; external deployment and human cross-review remain release gates.
 
 ## Verified
@@ -13,7 +15,8 @@
 - PostgreSQL source enables and forces RLS for all four user-owned tables, revokes direct authenticated/anonymous DML, and uses NOLOGIN executor roles.
 - All 39 RLS/grant assertions pass, including cross-account denial and revoked anonymous access to private SECURITY DEFINER helpers.
 - Edge Function type checking, lint, and nine contract tests pass.
-- Debug and release Android builds, lint, JVM tests, and all 30 plans instrumented tests pass on a Pixel 8 API 36 AVD.
+- Debug and release Android builds, lint, JVM tests, and all 31 plans instrumented tests pass on a Pixel 8 API 36 AVD.
+- Both visual actions still call the same entitlement-neutral `ConfirmPlanSelection`; the Free action supplies `FREE`, while Annual/Monthly eligibility mapping and Lifetime `PREMIUM_INTENT` remain unchanged.
 - The unused Google Play Billing dependency was removed after APK inspection found it in the initial release artifact.
 - A clean rebuilt release APK has no Billing permission, Billing component, Billing DEX class, fake entitlement, or test purchaser match.
 - Production Android and Edge sources contain no service-role key or application logging call; Edge reads only the publishable/anon key and caller authorization header.

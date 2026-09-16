@@ -1,6 +1,8 @@
+> **Revalidated**: 2026-09-16 after the Pantalla 1B corrective implementation.
+
 # Automated Validation
 
-**Date**: 2026-09-15
+**Date**: 2026-09-16
 **Branch**: `001-planes-monetizacion-freemium`
 
 ## Passed
@@ -25,6 +27,9 @@
 | `plans_hash_test.sql` | PASS; 9/9, including the canonical SHA-256 golden vector |
 | `apkanalyzer` release manifest and DEX inspection | PASS; no Billing permission, component, package/class, test purchaser, or fake entitlement artifact |
 | `git diff --check` | PASS; only Git LF-to-CRLF notices |
+| `.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` | PASS after T057-T059; complete JVM suite, lint and debug artifact |
+| `.\gradlew.bat :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.package=com.kipu.app.feature.plans"` | PASS on Pixel 8 API 36 AVD; 31 passed, 0 failed, including refined 1B order/copy/two-CTA/200% checks |
+| `.\gradlew.bat :app:assembleRelease` | PASS after T059; release compile and lint-vital completed |
 
 ## Environment Limitation
 

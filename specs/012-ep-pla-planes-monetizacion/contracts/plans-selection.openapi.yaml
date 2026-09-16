@@ -1,3 +1,4 @@
+# Reviewed 2026-09-16: Pantalla 1B refinement does not change this transport contract.
 openapi: 3.1.0
 info:
   title: Kipu Plan Selection API

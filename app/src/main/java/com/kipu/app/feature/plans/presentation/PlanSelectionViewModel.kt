@@ -23,12 +23,14 @@ class PlanSelectionViewModel @Inject constructor(private val repository: PlanPre
     fun onOptionSelected(option: CommercialOption) = mutableState.update { it.copy(selectedOption = option, error = null, errorMessage = null) }
     fun selectOption(option: CommercialOption) = onOptionSelected(option)
     fun onAbandoned() = Unit
-    fun confirmSelection() {
+    fun confirmSelection() = confirm(mutableState.value.selectedOption)
+    fun continueWithFree() = confirm(CommercialOption.FREE)
+    private fun confirm(option: CommercialOption) {
         if (mutableState.value.isConfirming) return
         val confirmation = mutableState.value
         mutableState.update { it.copy(isConfirming = true, error = null, errorMessage = null) }
         viewModelScope.launch {
-            runCatching { confirmPlanSelection(confirmation.selectedOption, confirmation.eligibility) }
+            runCatching { confirmPlanSelection(option, confirmation.eligibility) }
                 .onSuccess { eventChannel.send(PlanSelectionEvent.Confirmed) }
                 .onFailure { mutableState.update { state -> state.copy(error = PlanSelectionError.CONFIRMATION_FAILED, errorMessage = "No se pudo confirmar el plan") } }
             mutableState.update { it.copy(isConfirming = false) }

@@ -8,7 +8,7 @@ Este documento registra el design system **`Kipu Andean Modernist`** como la **�
 > - **Pantalla de referencia EP-PLA**: Pantalla 1B «Selección de Plan» — `projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797`.
 > - **Extracción**: MCP de Stitch AI, 2026-09-16 (updateTime `2026-09-16T04:50:40Z`).
 > - **Autoridad declarada**: `spec.md` (**Refined** 2026-09-15, §Interfaz → Restricciones visuales), `plan.md` §1 y tareas T042/T056; investigación `research.md` R-002.
-> - **Regla de uso**: no regenerar pantallas desde Stitch; usar este archivo como referencia de tokens. La pantalla Stitch es referencia estructural, no prueba de implementación.
+> - **Regla de uso**: no regenerar pantallas desde Stitch. Para la Pantalla 1B, usar la pantalla Stitch como referencia visual y estructural autoritativa, conciliada con los invariantes funcionales de `spec.md`.
 
 ---
 
@@ -289,7 +289,12 @@ Subconjunto marcado como **[1B]** = utilizado por la Pantalla 1B; el resto queda
 - Caja visual 20×20dp dentro de un target interactivo 48×48dp.
 - Marcado: sólido `#0F766E` con glifo blanco. No marcado: borde 1.5dp de `#0F172A` al 40% de opacidad.
 
-### 6.6. Bottom Sheets
+### 6.6. Iconos de la Pantalla 1B
+- Filas incluidas del Plan Free: Material `CheckCircle`, color `#0F766E`, descripción semántica «Incluido».
+- Nota informativa de prueba: Material `Info`, color `on_surface_variant`, descripción semántica «Información del periodo de prueba».
+- Los iconos informativos conservan un target semántico mínimo de 48×48dp aunque su glifo visual sea menor.
+
+### 6.7. Bottom Sheets
 - Curvatura 24dp en esquinas superiores izquierda/derecha.
 - Pill de arrastre 32×4dp centrado en tinta `#0F172A` al 20%.
 
@@ -331,4 +336,4 @@ Puente entre el designMd y la implementación (`Color.kt`, `Type.kt`, `Theme.kt`
 - **IDs estables para re-extracción**: proyecto `projects/5775615138851387862`; design system `assets/a21e2e45f51e490fa03b92fb8cb83c55`; pantalla `b8b4bfdcf384409887e54a975c549797`.
 - **Método**: consulta mediante el MCP de Stitch AI (`get_project` / `get_screen`). Los valores de este documento se tomaron del `designTheme` y el `designMd` del proyecto.
 - **Actualización**: si el design system cambia, re-extraer y revisar tokens (paleta, tipografía, radios). Los cambios funcionales requieren re-evaluación de la spec. No se regeneran pantallas.
-- **Nota de scope EP-PLA**: la Pantalla 1B se implementa según este archivo + `spec.md` (copy aprobado e invariantes: 5 límites Free, CTA único, sin barras/promoción/filler).
+- **Nota de scope EP-PLA**: la Pantalla 1B adopta la composición completa de Stitch: tarjeta Free informativa con 6 filas, Trial estático, opciones Anual/Mensual/Lifetime, badges, precios, dos CTA y footer fiscal. `spec.md` conserva autoridad sobre persistencia local, elegibilidad, ausencia de cobros reales y navegación.

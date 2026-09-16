@@ -46,11 +46,11 @@ class PlanSelectionViewModelTest {
     }
 
     @Test
-    fun `initial selection is Free and opening the screen does not persist it`() = runTest(dispatcher) {
+    fun `initial premium selection is Annual and opening the screen does not persist it`() = runTest(dispatcher) {
         val repository = FakePlanPreferencesRepository()
         val viewModel = viewModel(repository)
 
-        assertEquals(CommercialOption.FREE, viewModel.uiState.value.selectedOption)
+        assertEquals(CommercialOption.ANNUAL, viewModel.uiState.value.selectedOption)
         assertEquals(0, repository.confirmCalls)
     }
 
@@ -59,25 +59,47 @@ class PlanSelectionViewModelTest {
         val repository = FakePlanPreferencesRepository()
         val viewModel = viewModel(repository)
 
-        viewModel.onOptionSelected(CommercialOption.ANNUAL)
+        viewModel.onOptionSelected(CommercialOption.MONTHLY)
 
-        assertEquals(CommercialOption.ANNUAL, viewModel.uiState.value.selectedOption)
+        assertEquals(CommercialOption.MONTHLY, viewModel.uiState.value.selectedOption)
         assertEquals(0, repository.confirmCalls)
     }
 
     @Test
-    fun `eligibility is reduced to approved commercial copy states`() = runTest(dispatcher) {
-        val cases = listOf(
-            eligible to TrialOfferState.TRIAL_AVAILABLE,
-            ineligible to TrialOfferState.TRIAL_UNAVAILABLE,
-            TrialEligibilitySnapshot.UNKNOWN to TrialOfferState.SUBJECT_TO_VERIFICATION,
-        )
-
-        cases.forEach { (snapshot, expected) ->
+    fun `eligibility loads without changing the Annual visual selection`() = runTest(dispatcher) {
+        listOf(eligible, ineligible, TrialEligibilitySnapshot.UNKNOWN).forEach { snapshot ->
             val viewModel = viewModel(FakePlanPreferencesRepository(eligibilityValue = snapshot))
             advanceUntilIdle()
-            assertEquals(expected, viewModel.uiState.value.trialOfferState)
+            assertEquals(snapshot, viewModel.uiState.value.eligibility)
+            assertEquals(CommercialOption.ANNUAL, viewModel.uiState.value.selectedOption)
         }
+    }
+
+    @Test
+    fun `continue Free commits Free without changing the premium selection`() = runTest(dispatcher) {
+        val repository = FakePlanPreferencesRepository()
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.continueWithFree()
+        advanceUntilIdle()
+
+        assertEquals(PlanSelection.FREE, repository.lastSelection)
+        assertEquals(CommercialOption.ANNUAL, viewModel.uiState.value.selectedOption)
+        assertEquals(1, repository.confirmCalls)
+    }
+
+    @Test
+    fun `confirming default Annual maps verified eligibility to Trial intent`() = runTest(dispatcher) {
+        val repository = FakePlanPreferencesRepository(eligibilityValue = eligible)
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.confirmSelection()
+        advanceUntilIdle()
+
+        assertEquals(PlanSelection.TRIAL_INTENT, repository.lastSelection)
+        assertEquals(1, repository.confirmCalls)
     }
 
     @Test
@@ -161,11 +183,14 @@ class PlanSelectionViewModelTest {
     ) : PlanPreferencesRepository {
         var confirmCalls: Int = 0
             private set
+        var lastSelection: PlanSelection? = null
+            private set
 
         override suspend fun getTrialEligibility(): TrialEligibilitySnapshot = eligibilityValue
 
         override suspend fun confirmSelection(selection: PlanSelection, operationId: UUID) {
             confirmCalls += 1
+            lastSelection = selection
             confirmGate?.await()
             confirmFailure?.let { throw it }
         }
