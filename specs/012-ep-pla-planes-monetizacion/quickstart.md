@@ -143,8 +143,9 @@ Screen: projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797
 
 Compare structure, not prohibited copy. Expected Compose tokens:
 
-- Primary `#0F766E`, Primary Dark `#115E59`, Ink `#0F172A`.
-- Surface `#FFFFFF`, Background `#F8FAFC`.
+- CTA base `#0F766E`, pressed `#005C55`, selection ring `#006A63`, onSurface `#191C1E`.
+- Card surface `#FFFFFF`, background `#F7F9FB`, outline `#6E7977`/`#BDC9C6`.
+- Inter 400/500/600 empaquetada en `res/font` y aplicada globalmente.
 - 16dp cards, 12dp controls, 8dp grid, 48dp touch targets.
 - `fontFeatureSettings = "tnum"` on S/ 4.99, S/ 29.99 and S/ 49.99.
 - No “Gratis”, “Recomendado”, savings slogans, fiscal filler, “Confirmar y Pagar”, `KipuTopAppBar` or `KipuBottomBar`.
