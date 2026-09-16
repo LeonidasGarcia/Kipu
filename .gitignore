@@ -32,7 +32,16 @@ build/
 out/
 .ksp/
 *.class
+*.jar
 *.log
+*.tmp
+*.swp
+.vscode/
+node_modules/
+dist/
 __pycache__/
 *.pyc
+.venv/
+venv/
+*.egg-info/
 supabase/.temp/

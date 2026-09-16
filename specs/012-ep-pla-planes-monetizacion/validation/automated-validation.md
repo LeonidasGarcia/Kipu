@@ -13,15 +13,24 @@
 | `.\gradlew.bat :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.package=com.kipu.app.feature.plans"` | PASS on Pixel 8 API 36 AVD; 30 passed, 0 failed |
 | `.\gradlew.bat :app:dependencies --configuration debugRuntimeClasspath` | PASS; dependency graph resolved |
 | `npx --yes deno lint supabase/functions/plans/index.ts supabase/functions/plans/index_test.ts` | PASS |
+| `npx --yes deno check supabase/functions/plans/index.ts supabase/functions/plans/index_test.ts` | PASS |
 | `npx --yes deno test supabase/functions/plans/index_test.ts` | PASS; 9 passed, 0 failed |
 | `npx --yes @redocly/cli lint specs/012-ep-pla-planes-monetizacion/contracts/plans-selection.openapi.yaml` | PASS with one non-blocking `info.license` warning |
+| `.\gradlew.bat :app:clean :app:check :app:assembleRelease` | PASS from a clean app build; 95 tasks executed |
+| `.\gradlew.bat :app:dependencies --configuration releaseRuntimeClasspath` | PASS; release graph resolves without Google Play Billing |
+| Clean migration via `psql --set ON_ERROR_STOP=1` in `public.ecr.aws/supabase/postgres:15.8.1.085` | PASS without migration warnings; project target remains PostgreSQL 17 |
+| `plans_migration_test.sql` | PASS; 24/24, including representative-row preservation and safe drift failure |
+| `plans_selection_test.sql` | PASS; 30/30, including APPLIED/DUPLICATE/STALE/CONFLICT and 3-2-1 delivery |
+| `plans_rls_test.sql` | PASS; 39/39, including forced RLS, cross-account denial, private helper ACLs, and writer isolation |
+| `plans_hash_test.sql` | PASS; 9/9, including the canonical SHA-256 golden vector |
+| `apkanalyzer` release manifest and DEX inspection | PASS; no Billing permission, component, package/class, test purchaser, or fake entitlement artifact |
 | `git diff --check` | PASS; only Git LF-to-CRLF notices |
 
-## Not Executed
+## Environment Limitation
 
 | Validation | Blocker |
 |------------|---------|
-| `supabase start`, `supabase db reset`, `supabase test db` | Docker is not installed/running; local PostgreSQL port 54322 refuses connections |
-| Representative-row migration and drift execution | Requires the Docker-backed local Supabase database |
+| Full `supabase start` / PostgreSQL 17 local stack | The Supabase PostgreSQL 17 image fails on this host with `exec /bin/sh: exec format error`; PostgreSQL 15 was used only as a compatibility execution environment. The project target in `supabase/config.toml` remains 17. |
+| `supabase functions serve plans` against the full local stack | The CLI exhausted available Docker memory while downloading optional services. Deno type checking, lint, and nine router/RPC-adapter tests passed independently. |
 
-The pgTAP suites are present under `supabase/tests/database/`, but this report does not claim they passed without a PostgreSQL execution environment.
+The disposable PostgreSQL container was recreated from scratch before the final migration run. All four pgTAP files completed with 102 passing assertions and no `not ok` result.

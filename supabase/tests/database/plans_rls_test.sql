@@ -1,6 +1,6 @@
 begin;
 
-select plan(35);
+select plan(39);
 
 insert into auth.users (id, email)
 values
@@ -29,12 +29,16 @@ select ok(not has_table_privilege('authenticated', 'private.plan_selection_heads
 select ok(not has_table_privilege('authenticated', 'private.plan_selection_receipts', 'SELECT,INSERT,UPDATE,DELETE'), 'authenticated has no direct receipt DML');
 select ok(not has_table_privilege('authenticated', 'private.trial_eligibility_snapshots', 'SELECT,INSERT,UPDATE,DELETE'), 'authenticated has no direct eligibility DML');
 
-select function_privs_are('public', 'apply_plan_selection', array['smallint','uuid','bigint','text','timestamp with time zone'], 'authenticated', array['EXECUTE'], 'authenticated can execute only the selection boundary');
+select function_privs_are('public', 'apply_plan_selection', array['integer','uuid','bigint','text','timestamp with time zone'], 'authenticated', array['EXECUTE'], 'authenticated can execute only the selection boundary');
 select function_privs_are('public', 'get_trial_eligibility', array[]::text[], 'authenticated', array['EXECUTE'], 'authenticated can execute eligibility read boundary');
-select function_privs_are('public', 'apply_plan_selection', array['smallint','uuid','bigint','text','timestamp with time zone'], 'anon', array[]::text[], 'anonymous cannot execute selection RPC');
+select function_privs_are('public', 'apply_plan_selection', array['integer','uuid','bigint','text','timestamp with time zone'], 'anon', array[]::text[], 'anonymous cannot execute selection RPC');
 select function_privs_are('public', 'get_trial_eligibility', array[]::text[], 'anon', array[]::text[], 'anonymous cannot execute eligibility RPC');
-select function_privs_are('public', 'apply_plan_selection', array['smallint','uuid','bigint','text','timestamp with time zone'], 'PUBLIC', array[]::text[], 'PUBLIC execute is revoked from selection RPC');
-select function_privs_are('public', 'get_trial_eligibility', array[]::text[], 'PUBLIC', array[]::text[], 'PUBLIC execute is revoked from eligibility RPC');
+select ok(not exists(select 1 from aclexplode(coalesce(proacl,acldefault('f',proowner))) where grantee=0 and privilege_type='EXECUTE'), 'PUBLIC execute is revoked from selection RPC') from pg_proc where oid='public.apply_plan_selection(integer,uuid,bigint,text,timestamptz)'::regprocedure;
+select ok(not exists(select 1 from aclexplode(coalesce(proacl,acldefault('f',proowner))) where grantee=0 and privilege_type='EXECUTE'), 'PUBLIC execute is revoked from eligibility RPC') from pg_proc where oid='public.get_trial_eligibility()'::regprocedure;
+select function_privs_are('private', 'request_user_id', array[]::text[], 'plan_selection_executor', array['EXECUTE'], 'executor can resolve the verified request user');
+select function_privs_are('private', 'request_user_id', array[]::text[], 'anon', array[]::text[], 'anonymous cannot execute the request-user helper');
+select function_privs_are('private', 'plan_selection_payload_hash', array['integer','uuid','bigint','text','timestamp with time zone'], 'plan_selection_executor', array['EXECUTE'], 'executor can hash an accepted selection payload');
+select function_privs_are('private', 'plan_selection_payload_hash', array['integer','uuid','bigint','text','timestamp with time zone'], 'anon', array[]::text[], 'anonymous cannot execute the hash helper');
 
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', '40000000-0000-4000-8000-000000000004', true);
@@ -43,6 +47,7 @@ select lives_ok(
   'owner can apply through the RPC'
 );
 
+grant plan_selection_executor to postgres;
 set local role plan_selection_executor;
 select set_config('request.jwt.claim.sub', '50000000-0000-4000-8000-000000000005', true);
 select is((select count(*) from public.plan_preferences where user_id = '40000000-0000-4000-8000-000000000004'), 0::bigint, 'executor cannot read another user preference');
@@ -52,13 +57,13 @@ select throws_ok(
   $$insert into public.plan_preferences(user_id, selection) values ('40000000-0000-4000-8000-000000000004', 'FREE')$$,
   '42501', null, 'executor cannot insert another user preference'
 );
-select is((with changed as (update public.plan_preferences set selection = 'PREMIUM_INTENT' where user_id = '40000000-0000-4000-8000-000000000004' returning 1) select count(*) from changed), 0::bigint, 'executor cannot update another user preference');
+select results_eq($$update public.plan_preferences set selection = 'PREMIUM_INTENT' where user_id = '40000000-0000-4000-8000-000000000004' returning selection$$, array[]::text[], 'executor cannot update another user preference');
 select throws_ok(
   $$insert into private.plan_selection_heads(user_id, accepted_revision, updated_at) values ('40000000-0000-4000-8000-000000000004', 9, now())$$,
   '42501', null, 'executor cannot insert another user head'
 );
 select throws_ok(
-  $$insert into private.plan_selection_receipts(user_id, operation_id, contract_version, selection_revision, payload_hash, first_result, accepted_revision_at_first_seen, first_seen_at) values ('40000000-0000-4000-8000-000000000004', gen_random_uuid(), 1, 9, digest('x','sha256'), 'STALE', 9, now())$$,
+  $$insert into private.plan_selection_receipts(user_id, operation_id, contract_version, selection_revision, payload_hash, first_result, accepted_revision_at_first_seen, first_seen_at) values ('40000000-0000-4000-8000-000000000004', gen_random_uuid(), 1, 9, decode(repeat('00', 32), 'hex'), 'STALE', 9, now())$$,
   '42501', null, 'executor cannot insert another user receipt'
 );
 select ok(not has_table_privilege('plan_selection_executor', 'private.trial_eligibility_snapshots', 'INSERT,UPDATE,DELETE'), 'selection executor has no eligibility write privilege');
@@ -73,6 +78,8 @@ select throws_ok(
   $$set local role anon; select * from public.get_trial_eligibility()$$,
   '42501', null, 'anonymous eligibility access is denied'
 );
+grant plan_eligibility_writer to postgres;
+set local role plan_eligibility_writer;
 select throws_ok(
   $$select private.write_trial_eligibility('40000000-0000-4000-8000-000000000004', 'ELIGIBLE', now(), now() + interval '7 days', false)$$,
   '22023', null, 'eligibility writer rejects a target without verified evidence'

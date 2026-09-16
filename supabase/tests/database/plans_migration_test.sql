@@ -16,7 +16,7 @@ select columns_are(
 select col_type_is('public', 'plan_preferences', 'user_id', 'uuid', 'preference owner is UUID');
 select col_is_pk('public', 'plan_preferences', 'user_id', 'preference owner is the primary key');
 select col_not_null('public', 'plan_preferences', 'selection', 'selection is required');
-select col_default_is('public', 'plan_preferences', 'selection', '''FREE''::text', 'explicit inserts default defensively to FREE');
+select col_default_is('public', 'plan_preferences', 'selection', 'FREE', 'explicit inserts default defensively to FREE');
 select col_type_is('private', 'plan_selection_heads', 'accepted_revision', 'bigint', 'accepted revision is BIGINT');
 select col_type_is('private', 'plan_selection_receipts', 'payload_hash', 'bytea', 'canonical hash is BYTEA');
 select col_is_pk('private', 'plan_selection_receipts', array['user_id', 'operation_id'], 'receipt identity is scoped to user');

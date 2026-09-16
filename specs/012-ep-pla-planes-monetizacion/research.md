@@ -14,7 +14,7 @@
 
 ## R-002 - Fuente de Diseño Stitch
 
-**Decision**: Usar como referencia estructural la pantalla Stitch `projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797`, dentro de `Kipu V4 Finale`, y aplicar como autoridad normativa `docs/DESIGN.md` más `spec.md`.
+**Decision**: Usar como referencia estructural la pantalla Stitch `projects/5775615138851387862/screens/b8b4bfdcf384409887e54a975c549797`, dentro de `Kipu V4 Finale`, y aplicar como autoridad normativa `docs/stitch-design-system.md` más `spec.md`.
 
 **Rationale**: El MCP confirmó la pantalla “Pantalla 1B: Selección de Plan”, canvas móvil 780x2412 y design system `Kipu Andean Modernist`. El layout ya resuelve jerarquía y scroll, pero contiene acciones de pago y copy promocional prohibidos.
 
@@ -146,7 +146,7 @@
 
 **Rationale**: Compose, Navigation, Hilt base, Room, Supabase Auth y Ktor Android ya existen. Solo deben añadirse capacidades realmente usadas y declararse directamente.
 
-**Alternatives considered**: Agregar Retrofit, RxJava, un segundo contenedor DI o un módulo Billing nuevo se descarta. Billing ya está declarado pero no se usa en HU-52.
+**Alternatives considered**: Agregar Retrofit, RxJava, un segundo contenedor DI o Billing se descarta. La dependencia Billing preexistente se elimina porque no se usa en HU-52 y no debe aparecer en el artefacto release.
 
 ## Resolved Unknowns
 
@@ -157,4 +157,4 @@
 - Recuperación post-commit: rescan de outbox + trabajo único + safety net periódico.
 - Elegibilidad sin Play: proyección server-only con vigencia explícita; `UNKNOWN` conservador cuando falta evidencia.
 - Conflicto entre `PREMIUM_REQUIRED` y spec: prevalece `PREMIUM_ENTITLEMENT_REQUIRED` de FR-018.
-- `Stich Prompts.md`: no existe localmente; el artefacto Stitch extraído y `docs/DESIGN.md` son la evidencia disponible, sin afirmaciones adicionales.
+- `Stich Prompts.md`: no existe localmente; el artefacto Stitch extraído y `docs/stitch-design-system.md` son la evidencia disponible, sin afirmaciones adicionales.

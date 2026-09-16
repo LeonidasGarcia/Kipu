@@ -116,7 +116,6 @@ dependencies {
 
     // Platform Services
     implementation(libs.androidx.biometric)
-    implementation(libs.billing.ktx)
 
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))

@@ -5,6 +5,10 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 
 # Tasks: EP-PLA - Planes, Limites y Monetizacion Freemium
 
+**Propagated**: 2026-09-15 — Updated from spec.md refinement (tokens del design system Stitch adoptados como normativos; T042 actualizada y T056 añadida).
+
+**Propagated**: 2026-09-15 — Updated from spec.md refinement (cleanup sin cambios funcionales: eliminadas las referencias residuales al sistema de diseño previo; ninguna tarea afectada, T042/T056 ya apuntan a `docs/stitch-design-system.md`).
+
 **Input**: Design documents from `specs/012-ep-pla-planes-monetizacion/`
 
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `.specify/memory/constitution.md`
@@ -100,10 +104,11 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 ### Presentation and Navigation for User Story 1
 
 - [X] T041 [P] [US1] Add approved Free, Trial, renewal, cancellation, Lifetime, eligibility, confirmation, and accessibility strings without promotional/filler/payment language in `app/src/main/res/values/strings.xml`
-- [X] T042 [P] [US1] Replace template purple/dynamic styling with fixed Kipu primary/surface/ink colors, typography, and shapes from `docs/DESIGN.md` in `app/src/main/java/com/kipu/app/ui/theme/Color.kt`, `app/src/main/java/com/kipu/app/ui/theme/Theme.kt`, and `app/src/main/java/com/kipu/app/ui/theme/Type.kt`
+- [X] T042 [P] [US1] Replace template purple/dynamic styling with the Stitch design system tokens registered in `docs/stitch-design-system.md` (paleta tonal: primary `#0F766E`, pressed `#005C55`, background `#F7F9FB`, surface `#FFFFFF`, onSurface `#191C1E`, radios 16dp/12dp, Inter) in `app/src/main/java/com/kipu/app/ui/theme/Color.kt`, `app/src/main/java/com/kipu/app/ui/theme/Theme.kt`, and `app/src/main/java/com/kipu/app/ui/theme/Type.kt`
 - [X] T043 [P] [US1] Implement immutable UI state, option chips, eligibility-aware commercial disclosure, loading/error state, and one-shot confirmation event types in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionUiState.kt`
 - [X] T044 [US1] Implement `@HiltViewModel` state reduction, eligibility loading, selection mapping, double-submit protection, and event emission only after local commit in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionViewModel.kt`
 - [X] T045 [US1] Implement stateless scrollable `FreePlanCard`, `PremiumTrialCard`, option chips, and `ConfirmPlanButton` with exact prices, five limits, conditional copy, tabular figures, 48dp semantics, and no top/bottom bars in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionScreen.kt`
+- [ ] T056 [P] [US1] Adoptar los tokens del design system Stitch (paleta tonal `#0F766E`/`#005C55`/`#006A63`/`#F7F9FB`/`#FFFFFF`/`#191C1E`/`#A8ECE5`/`#216963`, radios 16dp/12dp) e Inter empaquetada en `res/font` en el tema global, re-estilar la Pantalla 1B según el layout Stitch conservando el copy aprobado y los invariantes (5 límites Free, CTA único, sin barras/slogans/filler, orden `MONTHLY`->`ANNUAL`->`LIFETIME`, `tnum`, 48dp), eliminar `docs/DESIGN.md`, crear `docs/stitch-design-system.md`, actualizar `research.md` y verificar compile/tests/lint/grep `DESIGN.md`=0 en `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionScreen.kt` y `docs/` (depends on T042, T045)
 - [X] T046 [US1] Implement lifecycle-aware ViewModel collection and consume each confirmation event once through a host-owned `onConfirmed` callback in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanSelectionRoute.kt`
 - [X] T047 [US1] Add a reusable plan-selection navigation destination that accepts an explicit host continuation and never owns a `NavController` in the ViewModel/screen in `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt`
 - [ ] T048 [US1] After HU-01 and Pantalla 1C provide real destinations, wire the real post-registration callback to the plan destination and its local-commit callback to Biometria, remove plan selection from the back stack, and reschedule pending work on restored sessions without creating placeholder auth/biometric screens in `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt` and `app/src/main/java/com/kipu/app/MainActivity.kt`
@@ -116,12 +121,12 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 
 **Purpose**: Generate durable evidence for migration safety, architecture boundaries, performance, accessibility, security, and release readiness.
 
-- [ ] T049 Generate and review the Room v1 schema produced by KSP, then commit the verified artifact in `app/schemas/com.kipu.app.core.database.KipuDatabase/1.json`
+- [X] T049 Generate and review the Room v1 schema produced by KSP, then commit the verified artifact in `app/schemas/com.kipu.app.core.database.KipuDatabase/1.json`
 - [X] T050 [P] Run and harden the architecture boundary test authored in T010 against the completed source tree, covering Billing imports, domain dependencies, intent conversion, and plans-layer secrets in `app/src/test/java/com/kipu/app/feature/plans/PlanFeatureBoundaryTest.kt`
-- [ ] T051 Run KSP, debug/release builds, dependency inspection, JVM/instrumented tests, lint, clean and representative-data Supabase migration/drift tests, and all backend tests after T049-T050; record command results and migration evidence in `specs/012-ep-pla-planes-monetizacion/validation/automated-validation.md`
+- [X] T051 Run KSP, debug/release builds, dependency inspection, JVM/instrumented tests, lint, clean and representative-data Supabase migration/drift tests, and all backend tests after T049-T050; record command results and migration evidence in `specs/012-ep-pla-planes-monetizacion/validation/automated-validation.md`
 - [ ] T052 [P] Execute the 40-confirmation performance matrix and 30-operation synchronization matrix, including restart, 3-2-1 delivery, timeout, Doze, battery restriction, force-stop, and reopen; record SC-005/SC-006/SC-010 evidence in `specs/012-ep-pla-planes-monetizacion/validation/device-matrix.md`
 - [ ] T053 [P] Validate all eight critical flows with TalkBack and 200% font scale and run the 20-participant commercial-comprehension protocol; record SC-008/SC-009 results in `specs/012-ep-pla-planes-monetizacion/validation/accessibility-and-comprehension.md`
-- [ ] T054 Audit release artifacts, logs, grants, backup output, Android sources, and Edge Function bundles for fake entitlements, Billing calls, service-role secrets, sensitive data, destructive migrations, and cross-account access; record sign-off in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md`
+- [X] T054 Audit release artifacts, logs, grants, backup output, Android sources, and Edge Function bundles for fake entitlements, Billing calls, service-role secrets, sensitive data, destructive migrations, and cross-account access; record sign-off in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md`
 - [ ] T055 Run every scenario and release command in `specs/012-ep-pla-planes-monetizacion/quickstart.md` and record final cross-review/Sprint Review readiness in `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md`
 
 ---
@@ -136,7 +141,7 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 - **Phase 3 - Domain/local**: T023-T025 can proceed in parallel; T026 depends on T024-T025; T027 depends on T023-T024; T028-T029 depend on T023; T030 depends on T028-T029; T031 depends on T008 and T028-T030; T032 depends on T031.
 - **Phase 3 - Remote/backend**: T033 depends on T023-T024; T034 depends on T007 and T033. T035 depends on the approved T004 ADR, while T036 depends on T003 and the OpenAPI contract; T035-T036 can otherwise proceed in parallel with Android domain/local work.
 - **Phase 3 - Sync/repository**: T037 depends on T005 and the local models; T038 depends on T030, T034, and T037; T039 depends on T027, T030, T034, and T037; T040 depends on T026, T032, and T034-T039.
-- **Phase 3 - Presentation**: T041-T043 can proceed in parallel after domain models exist; T044 depends on T027, T039, and T043; T045 depends on T041-T043; T046 depends on T044-T045; T047 depends on T046.
+- **Phase 3 - Presentation**: T041-T043 can proceed in parallel after domain models exist; T044 depends on T027, T039, and T043; T045 depends on T041-T043; T046 depends on T044-T045; T047 depends on T046; T056 depends on T042 and T045 (re-estilado según design system Stitch tras tokens y pantalla).
 - **Integrated onboarding gate**: T048 additionally depends on external HU-01 and Pantalla 1C production code. Do not satisfy it with fake destinations; all other US1 behavior remains independently testable through the T046 callback.
 - **Phase 4 - Polish**: T049-T050 and T052-T053 depend on their relevant implementations and may run in parallel; T051 depends on completed T049-T050; T054 depends on the release artifact and evidence from T051; T055 runs after T048-T054 and is the final release gate.
 
@@ -190,7 +195,7 @@ Task T036: Edge Function
 
 ```text
 Task T041: Product/accessibility strings
-Task T042: Kipu theme tokens
+Task T042: Kipu theme tokens (design system Stitch)
 Task T043: UI state and events
 ```
 

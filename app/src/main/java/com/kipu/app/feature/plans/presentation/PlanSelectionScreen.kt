@@ -11,9 +11,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.plans.domain.model.*
 import com.kipu.app.R
+import com.kipu.app.ui.theme.KipuTheme
 
 @Composable
 fun PlanSelectionScreen(state: PlanSelectionUiState, onOptionSelected: (CommercialOption) -> Unit, onConfirm: () -> Unit) {
@@ -50,5 +52,17 @@ fun PlanSelectionScreen(state: PlanSelectionUiState, onOptionSelected: (Commerci
                 CommercialOption.FREE -> Text("Sin tarjeta, sin publicidad")
             }
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+private fun PlanSelectionScreenPreview() {
+    KipuTheme {
+        PlanSelectionScreen(
+            state = PlanSelectionUiState(isLoadingEligibility = false),
+            onOptionSelected = {},
+            onConfirm = {},
+        )
     }
 }

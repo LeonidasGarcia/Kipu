@@ -4,7 +4,11 @@
 
 **Created**: 2026-09-14
 
-**Status**: V1.0 - Creación Inicial Sprint 1
+**Status**: Refined
+
+**Refined**: 2026-09-15 — Adopción del design system Stitch "Kipu Andean Modernist" como única fuente de verdad visual de la Pantalla 1B; actualización de tokens de UI y lista de artefactos derivados; sin cambios funcionales (FR/RN/SC y user stories intactos).
+
+**Refined**: 2026-09-15 — Eliminación de las referencias residuales al sistema de diseño previo a Stitch; todas las referencias de diseño apuntan a `docs/stitch-design-system.md` (cleanup post-adopción del design system Stitch; sin cambios funcionales).
 
 **Input**: Especificar la HU-52 para que una persona recién registrada pueda continuar con Kipu Free o conocer voluntariamente la oferta Premium, sin cobros accidentales ni concesión de derechos Premium no verificados.
 
@@ -195,7 +199,8 @@ Como usuario de Kipu, quiero elegir Free o conocer la prueba Premium voluntaria,
 
 - La pantalla no contiene Top Bar ni `KipuBottomBar`.
 - La pantalla no contiene publicidad ni slogans comerciales.
-- La maquetación toma como referencia los tokens de `DESIGN.md`: Primary `#0F766E`, Ink `#0F172A` y radios de `16dp`/`12dp`.
+- ~~La maquetación tomaba como referencia los tokens del documento de diseño previo: Primary `#0F766E`, Ink `#0F172A` y radios de `16dp`/`12dp`.~~ *(Reemplazado por tokens del design system Stitch; la única fuente de verdad visual es `docs/stitch-design-system.md`.)*
+- La maquetación adopta el design system Stitch `Kipu Andean Modernist` (Pantalla 1B `b8b4bfdcf384409887e54a975c549797`, proyecto `projects/5775615138851387862`) como única fuente de verdad visual. Tokens registrados en `docs/stitch-design-system.md`: background `#F7F9FB`; surface de tarjetas `#FFFFFF`; onSurface `#191C1E`; onSurfaceVariant `#3E4947`; outline `#6E7977`; outlineVariant `#BDC9C6`; primary (CTA) `#0F766E` con pressed `#005C55`; ring de selección (surface_tint) `#006A63`; secondary `#216963`; secondaryContainer `#A8ECE5`; onSecondaryContainer `#266D68`; error `#BA1A1A`; dark background `#0B1220`. Radios de `16dp` (tarjetas) y `12dp` (controles/CTA). Tipografía Inter obligatoria en toda la pantalla; montos con números tabulares (`tnum`). Grilla base 8dp, márgenes de página 16dp, separación de secciones 24dp, targets mínimos 48dp.
 - La referencia de tooling es el MCP de Stitch AI y las pautas del Prompt 1 de `Stich Prompts.md`.
 
 **Flujo de navegación**:
@@ -381,5 +386,6 @@ La aprobación de esta especificación autoriza los invariantes funcionales y t�
 - `tasks.md`
 - `data-model.md`
 - `ADR-012-freemium-intent`
-- `DESIGN.md`
+- ~~El documento de diseño de marca previo~~ *(Sustituido por `docs/stitch-design-system.md` — design system Stitch `Kipu Andean Modernist` como autoridad.)*
+- `stitch-design-system.md`
 - `Stich Prompts.md`

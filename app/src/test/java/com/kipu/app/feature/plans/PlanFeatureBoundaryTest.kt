@@ -14,6 +14,13 @@ class PlanFeatureBoundaryTest {
     }
 
     @Test
+    fun productionDependenciesDoNotDeclareBilling() {
+        val dependencyConfiguration = File("build.gradle.kts").readText() +
+            File("../gradle/libs.versions.toml").readText()
+        assertFalse(dependencyConfiguration.contains("billing", ignoreCase = true))
+    }
+
+    @Test
     fun domainDoesNotDependOnAndroidDataOrPresentationLayers() {
         val root = File("src/main/java/com/kipu/app/feature/plans/domain")
         val text = root.walkTopDown().filter { it.extension == "kt" }.joinToString("\n") { it.readText() }
