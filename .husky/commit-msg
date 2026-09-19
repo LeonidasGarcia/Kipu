@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+
+# Source ~/.huskyrc if it exists (for GUI tools like Android Studio)
+if [ -f "$HOME/.huskyrc" ]; then
+  . "$HOME/.huskyrc"
+fi
+
+# Fallback: ensure fnm / nvm paths are available if not loaded yet
+if ! command -v pnpm >/dev/null 2>&1; then
+  if command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env)"
+  elif [ -d "$HOME/.local/share/fnm" ]; then
+    export PATH="$HOME/.local/share/fnm:$PATH"
+    eval "$(fnm env 2>/dev/null)"
+  elif [ -s "$HOME/.nvm/nvm.sh" ]; then
+    export NVM_DIR="$HOME/.nvm"
+    . "$NVM_DIR/nvm.sh"
+  fi
+fi
+
+pnpm exec commitlint --edit "${1}"
