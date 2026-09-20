@@ -1,3 +1,37 @@
 <resources>
     <string name="app_name">Kipu</string>
+    <string name="plan_selection_title">Selecciona tu Plan</string>
+    <string name="plan_selection_subtitle">Configuración inicial de cuenta y suscripción</string>
+    <string name="plan_free_title">Plan Free</string>
+    <string name="plan_free_summary">Gestión financiera esencial para empezar.</string>
+    <string name="plan_free_badge">Permanente</string>
+    <string name="plan_free_no_payment">No requiere método de pago</string>
+    <string name="plan_free_feature_core">Núcleo manual de registro</string>
+    <string name="plan_free_feature_instruments">Hasta 4 instrumentos financieros</string>
+    <string name="plan_free_feature_categories">Hasta 5 categorías personalizadas</string>
+    <string name="plan_free_feature_debts">Hasta 2 deudas activas</string>
+    <string name="plan_free_feature_goals">Hasta 2 metas de ahorro</string>
+    <string name="plan_free_feature_budgets">Hasta 2 presupuestos mensuales</string>
+    <string name="plan_included_content_description">Incluido</string>
+    <string name="plan_trial_title">Prueba Premium Gratis por 7 días</string>
+    <string name="plan_trial_badge">Completo</string>
+    <string name="plan_trial_summary">Periodo de prueba voluntario sin cobro inmediato</string>
+    <string name="plan_trial_info">7 días de acceso completo sin costo. El cobro de S/ 29.99 se realizará al término del periodo de prueba. Cancelación directa desde la configuración de cuenta en cualquier momento sin penalización.</string>
+    <string name="plan_trial_info_content_description">Información del periodo de prueba</string>
+    <string name="plan_annual_title">Premium Anual</string>
+    <string name="plan_annual_price">S/ 29.99 / año</string>
+    <string name="plan_annual_badge">Recomendado</string>
+    <string name="plan_annual_savings" formatted="false">Ahorro equivalente a 50%</string>
+    <string name="plan_annual_summary">Renovación anual después del periodo de prueba.</string>
+    <string name="plan_monthly_title">Premium Mensual</string>
+    <string name="plan_monthly_price">S/ 4.99 / mes</string>
+    <string name="plan_monthly_summary">Renovación mensual después del periodo de prueba.</string>
+    <string name="plan_lifetime_title">Compra Única Lifetime</string>
+    <string name="plan_lifetime_price">S/ 49.99 pago único</string>
+    <string name="plan_lifetime_badge">Permanente</string>
+    <string name="plan_lifetime_summary">Sin periodo de prueba · Sin renovación</string>
+    <string name="plan_confirm">Confirmar Plan</string>
+    <string name="plan_continue_free">Continuar con Plan Free</string>
+    <string name="plan_confirming">Guardando…</string>
+    <string name="plan_scope_note">Validez fiscal y operativa: esta selección registra una preferencia local. En esta versión no se realizan cobros, no se inicia una prueba y no se habilitan beneficios Premium.</string>
 </resources>

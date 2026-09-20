@@ -1,10 +1,26 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.room)
 }
+
+val localProperties = Properties().apply {
+    rootProject.file("local.properties")
+        .takeIf { it.isFile }
+        ?.inputStream()
+        ?.use(::load)
+}
+
+fun configurationValue(name: String): String =
+    localProperties.getProperty(name) ?: providers.environmentVariable(name).orNull.orEmpty()
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
     namespace = "com.kipu.app"
@@ -22,6 +38,17 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
 
+        buildConfigField(
+            "String",
+            "SUPABASE_URL",
+            configurationValue("SUPABASE_URL").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_PUBLISHABLE_KEY",
+            configurationValue("SUPABASE_PUBLISHABLE_KEY").asBuildConfigString(),
+        )
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -38,8 +65,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
@@ -63,6 +95,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Persistence
     implementation(libs.androidx.room.runtime)
@@ -70,17 +104,21 @@ dependencies {
     testImplementation(libs.androidx.room.testing)
     implementation(libs.androidx.datastore.preferences)
 
+    // Background work
+    implementation(libs.androidx.work.runtime.ktx)
+
     // Supabase Auth / Networking
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.auth)
     implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
 
     // Java API Desugaring
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     // Platform Services
     implementation(libs.androidx.biometric)
-    implementation(libs.billing.ktx)
 
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
@@ -91,14 +129,29 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // Unit tests
     testImplementation(libs.junit)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.androidx.navigation.testing)
+    testImplementation(libs.hilt.android.testing)
+    kspTest(libs.hilt.compiler)
 
     // Android tests
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(libs.androidx.work.testing)
+    androidTestImplementation(libs.androidx.navigation.testing)
+    androidTestImplementation(libs.hilt.android.testing)
+    androidTestImplementation(libs.ktor.client.mock)
+    androidTestImplementation(libs.kotlin.test)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    kspAndroidTest(libs.hilt.compiler)
 
     // Debug
     debugImplementation(libs.androidx.compose.ui.tooling)

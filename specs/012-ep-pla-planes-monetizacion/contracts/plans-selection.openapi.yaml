@@ -1,0 +1,322 @@
+# Reviewed 2026-09-16: Pantalla 1B refinement does not change this transport contract.
+openapi: 3.1.0
+info:
+  title: Kipu Plan Selection API
+  version: 1.0.0
+  description: >-
+    Persists an entitlement-neutral plan preference. This contract never creates
+    purchases, subscriptions, trials, billing operations, or Premium entitlements.
+servers:
+  - url: https://{projectRef}.supabase.co/functions/v1
+    variables:
+      projectRef:
+        default: local
+paths:
+  /plans/eligibility:
+    get:
+      operationId: getTrialEligibilityV1
+      summary: Read the caller's verified trial eligibility projection
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current verified snapshot or conservative UNKNOWN
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrialEligibilityResponse'
+        '401':
+          description: Missing, invalid, or expired user session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthenticatedError'
+        '500':
+          description: Unexpected server failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnavailableError'
+        '503':
+          description: Temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnavailableError'
+  /plans/selection:
+    post:
+      operationId: applyPlanSelectionV1
+      summary: Apply or reconcile a plan selection operation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanSelectionRequest'
+      responses:
+        '200':
+          description: Operation classified atomically
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanSelectionResponse'
+        '400':
+          description: Invalid request or unsupported contract version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvalidRequestError'
+        '401':
+          description: Missing, invalid, or expired user session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnauthenticatedError'
+        '403':
+          description: Authenticated principal is not authorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ForbiddenError'
+        '405':
+          description: Method not allowed
+        '415':
+          description: Content type must be application/json
+        '429':
+          description: Rate limited; Retry-After should be honored
+          headers:
+            Retry-After:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnavailableError'
+        '500':
+          description: Unexpected server failure; request may be retried unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnavailableError'
+        '503':
+          description: Temporarily unavailable; request may be retried unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnavailableError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    PlanSelectionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - contract_version
+        - operation_id
+        - selection_revision
+        - selection
+        - selected_at
+      properties:
+        contract_version:
+          type: integer
+          const: 1
+        operation_id:
+          type: string
+          format: uuid
+          description: Immutable idempotency key scoped to the authenticated user.
+        selection_revision:
+          type: string
+          pattern: '^[1-9][0-9]*$'
+          description: Positive decimal string mapped to PostgreSQL BIGINT.
+        selection:
+          $ref: '#/components/schemas/PlanSelection'
+        selected_at:
+          type: string
+          format: date-time
+          description: >-
+            RFC 3339 UTC instant with at most microsecond precision. For hash v1,
+            normalize to UTC with exactly six fractional digits. Hash UTF-8 lines
+            contract_version, lowercase operation_id, decimal selection_revision,
+            uppercase selection, and normalized selected_at, separated by LF with
+            no final LF, using SHA-256.
+    PlanSelectionResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - contract_version
+        - operation_id
+        - result
+        - accepted_revision
+        - current_preference
+        - free_limits
+        - server_time
+      properties:
+        contract_version:
+          type: integer
+          const: 1
+        operation_id:
+          type: string
+          format: uuid
+        result:
+          type: string
+          enum: [APPLIED, DUPLICATE, STALE, CONFLICT]
+        accepted_revision:
+          type: string
+          pattern: '^[0-9]+$'
+        current_preference:
+          $ref: '#/components/schemas/CurrentPreference'
+        free_limits:
+          $ref: '#/components/schemas/FreeLimits'
+        server_time:
+          type: string
+          format: date-time
+    CurrentPreference:
+      type: object
+      additionalProperties: false
+      required: [selection, selected_at, updated_at]
+      properties:
+        selection:
+          $ref: '#/components/schemas/PlanSelection'
+        selected_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    FreeLimits:
+      type: object
+      additionalProperties: false
+      required:
+        - policy_version
+        - instruments
+        - custom_categories
+        - debts
+        - goals
+        - budgets
+      properties:
+        policy_version:
+          type: integer
+          const: 1
+        instruments:
+          type: integer
+          const: 4
+        custom_categories:
+          type: integer
+          const: 5
+        debts:
+          type: integer
+          const: 2
+        goals:
+          type: integer
+          const: 2
+        budgets:
+          type: integer
+          const: 2
+    PlanSelection:
+      type: string
+      enum: [FREE, TRIAL_INTENT, PREMIUM_INTENT]
+    TrialEligibilityResponse:
+      oneOf:
+        - $ref: '#/components/schemas/EligibleTrialSnapshot'
+        - $ref: '#/components/schemas/IneligibleTrialSnapshot'
+        - $ref: '#/components/schemas/UnknownTrialSnapshot'
+    EligibleTrialSnapshot:
+      type: object
+      additionalProperties: false
+      required: [status, source, verified_at, valid_until]
+      properties:
+        status:
+          const: ELIGIBLE
+        source:
+          const: VERIFIED_ACCOUNT_HISTORY
+        verified_at:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+    IneligibleTrialSnapshot:
+      type: object
+      additionalProperties: false
+      required: [status, source, verified_at, valid_until]
+      properties:
+        status:
+          const: INELIGIBLE
+        source:
+          const: VERIFIED_ACCOUNT_HISTORY
+        verified_at:
+          type: string
+          format: date-time
+        valid_until:
+          type: [string, 'null']
+          format: date-time
+    UnknownTrialSnapshot:
+      type: object
+      additionalProperties: false
+      required: [status, source, verified_at, valid_until]
+      properties:
+        status:
+          const: UNKNOWN
+        source:
+          const: UNAVAILABLE
+        verified_at:
+          type: 'null'
+        valid_until:
+          type: 'null'
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, retryable]
+      properties:
+        code:
+          type: string
+        retryable:
+          type: boolean
+        retry_after_seconds:
+          type: integer
+          minimum: 0
+        correlation_id:
+          type: string
+          description: Non-sensitive server diagnostic identifier.
+    InvalidRequestError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorDetail'
+        - type: object
+          properties:
+            code:
+              enum: [INVALID_REQUEST, UNSUPPORTED_VERSION]
+            retryable:
+              const: false
+    UnauthenticatedError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorDetail'
+        - type: object
+          properties:
+            code:
+              const: UNAUTHENTICATED
+            retryable:
+              const: true
+    ForbiddenError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorDetail'
+        - type: object
+          properties:
+            code:
+              const: FORBIDDEN
+            retryable:
+              const: false
+    UnavailableError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorDetail'
+        - type: object
+          properties:
+            code:
+              const: UNAVAILABLE
+            retryable:
+              const: true
