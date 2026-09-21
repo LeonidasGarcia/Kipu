@@ -507,7 +507,11 @@ fun LoginScreen(
                     },
                     enabled = !uiState.isLoading && uiState.cooldownSeconds == 0,
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = KipuPrimaryContainer),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = KipuPrimaryContainer,
+                        disabledContainerColor = Color(0xFF397F79),
+                        disabledContentColor = Color.White,
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),

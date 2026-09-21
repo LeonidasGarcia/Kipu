@@ -12,7 +12,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -85,15 +87,26 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun `login with invalid password sets password error`() {
+    fun `login with empty password asks for password`() {
+        val viewModel = AuthViewModel(fakeRepository)
+        viewModel.onEmailChanged("test@example.com")
+        viewModel.login()
+
+        val state = viewModel.uiState.value
+        assertEquals("Ingresa tu contraseña.", state.passwordError)
+        assertNull(lastCapturedCredentials)
+    }
+
+    @Test
+    fun `login with a short nonempty password does not show registration rules`() = runTest {
         val viewModel = AuthViewModel(fakeRepository)
         viewModel.onEmailChanged("test@example.com")
         viewModel.onPasswordChanged("123")
         viewModel.login()
 
-        val state = viewModel.uiState.value
-        assertNotNull(state.passwordError)
-        assertNull(lastCapturedCredentials)
+        assertNull(viewModel.uiState.value.passwordError)
+        advanceUntilIdle()
+        assertEquals("123", lastCapturedCredentials?.password)
     }
 
     @Test
@@ -152,7 +165,11 @@ class AuthViewModelTest {
         assertEquals(0, viewModel.uiState.value.cooldownSeconds)
 
         fakeCooldownState.value = CooldownState(retryAfterSeconds = 25)
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(25, viewModel.uiState.value.cooldownSeconds)
+
+        advanceTimeBy(25_000)
+        runCurrent()
+        assertEquals(0, viewModel.uiState.value.cooldownSeconds)
     }
 }

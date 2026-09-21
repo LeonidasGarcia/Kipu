@@ -47,7 +47,7 @@ Permitir que una persona cree una cuenta Kipu, acceda exclusivamente a su propio
 - Open Banking, lectura bancaria directa, lectura de SMS o correos y ejecución de pagos.
 - Implementación de captura automática, análisis de contenido u OCR; HU-05 solo configura y explica permisos y fuentes.
 - Activación efectiva de capacidades Premium; la decisión de acceso pertenece a EP-PLA.
-- Funcionalidades de cuentas financieras, movimientos, categorías, notificaciones o monetización pertenecientes a otras épicas.
+- Funcionalidades operativas de cuentas financieras, movimientos, categorías, notificaciones o monetización pertenecientes a otras épicas. La pantalla de Ajustes puede mostrar accesos visuales pendientes, sin simular que esas acciones ya funcionan.
 - Recuperación de cambios locales que nunca fueron sincronizados después de cerrar una sesión, desinstalar o perder el dispositivo.
 
 ### Dependencias y Trazabilidad
@@ -317,6 +317,10 @@ Como usuario de Kipu, quiero habilitar un desbloqueo biométrico opcional, para 
 - **FR-049**: Los intentos fallidos repetidos de inicio de sesión desde un mismo origen DEBEN activar una espera progresiva conforme a la política vigente, conservar mensajes neutros y NO DEBEN bloquear permanentemente la cuenta por sí solos.
 - **FR-050**: Las solicitudes de recuperación repetidas desde un mismo origen DEBEN someterse a la misma política de limitación progresiva sin variar la confirmación pública ni revelar si el correo existe.
 - **FR-051**: Si un correo ya está asociado a una cuenta, el registro DEBE informar esa condición, NO DEBE crear una identidad duplicada y DEBE ofrecer continuar al inicio de sesión; esta revelación NO DEBE extenderse a los mensajes de error de acceso ni a la recuperación.
+- **FR-052**: Ajustes DEBE organizarse en Mi suscripción, Preferencias financieras, Tema de la aplicación, Notificaciones y alertas, y Seguridad y copias de seguridad, conforme a las referencias visuales aprobadas.
+- **FR-053**: La moneda principal DEBE ofrecer PEN y USD como opciones visibles; el inicio del ciclo mensual DEBE poder ajustarse entre los días 1 y 28 mediante controles de incremento y decremento. La máscara de montos DEBE conservar su comportamiento existente.
+- **FR-054**: Ajustes DEBE mantener operativos los accesos existentes a permisos, biometría y cierre de sesión. El acceso a permisos DEBE aparecer en Notificaciones y alertas; el de biometría, en Seguridad y copias de seguridad.
+- **FR-055**: Estado de suscripción, vigencia, facturación, restauración de compras, cupos, categorías, anticipación de vencimientos, exportación, restauración local y eliminación de cuenta PUEDEN mostrarse como interfaz preparada para futuras épicas, pero DEBEN identificarse como pendientes y NO DEBEN presentar datos inventados como reales ni ejecutar acciones no implementadas.
 
 ### Key Entities *(include if feature involves data)*
 

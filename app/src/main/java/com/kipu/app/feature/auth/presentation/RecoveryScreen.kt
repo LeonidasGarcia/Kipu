@@ -17,6 +17,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,6 +79,18 @@ fun RecoveryScreen(
                 supportingText = uiState.emailError?.let { { Text(it) } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 singleLine = true,
+                textStyle = TextStyle(color = Color(0xFF191C1E)),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color(0xFF191C1E),
+                    unfocusedTextColor = Color(0xFF191C1E),
+                    focusedLabelColor = Color(0xFF0F766E),
+                    unfocusedLabelColor = Color(0xFF40484C),
+                    cursorColor = Color(0xFF0F766E),
+                    focusedBorderColor = Color(0xFF0F766E),
+                    unfocusedBorderColor = Color(0xFF40484C),
+                    focusedContainerColor = Color(0xFFF7F9FB),
+                    unfocusedContainerColor = Color(0xFFF7F9FB),
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(68.dp),

@@ -7,6 +7,8 @@ import com.kipu.app.feature.auth.domain.PasswordValidator
 import com.kipu.app.feature.auth.domain.model.AuthCredentials
 import com.kipu.app.feature.auth.domain.model.AuthResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.Duration
+import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +16,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @HiltViewModel
@@ -30,8 +34,17 @@ class AuthViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            authRepository.cooldownState.collect { cooldown ->
-                _uiState.update { it.copy(cooldownSeconds = cooldown.retryAfterSeconds) }
+            authRepository.cooldownState.collectLatest { cooldown ->
+                val seconds = cooldown.blockedUntil?.let {
+                    ((Duration.between(Instant.now(), it).toMillis() + 999) / 1_000)
+                        .coerceAtLeast(0)
+                        .toInt()
+                } ?: cooldown.retryAfterSeconds
+                for (remaining in seconds downTo 1) {
+                    _uiState.update { it.copy(cooldownSeconds = remaining) }
+                    delay(1_000)
+                }
+                _uiState.update { it.copy(cooldownSeconds = 0) }
             }
         }
     }
@@ -63,9 +76,8 @@ class AuthViewModel @Inject constructor(
             _uiState.update { it.copy(emailError = (emailValidation as PasswordValidator.ValidationResult.Invalid).reason) }
             return
         }
-        val passwordValidation = PasswordValidator.validatePassword(currentState.password)
-        if (!passwordValidation.isValid) {
-            _uiState.update { it.copy(passwordError = (passwordValidation as PasswordValidator.ValidationResult.Invalid).reason) }
+        if (currentState.password.isBlank()) {
+            _uiState.update { it.copy(passwordError = "Ingresa tu contraseña.") }
             return
         }
 
@@ -91,7 +103,8 @@ class AuthViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            generalError = throwable.message ?: "Error al iniciar sesión.",
+                            generalError = if (authRepository.cooldownState.value.isBlocked) null
+                                else throwable.message ?: "Error al iniciar sesión.",
                         )
                     }
                 }

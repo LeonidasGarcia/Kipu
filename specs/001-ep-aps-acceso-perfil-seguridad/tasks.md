@@ -324,3 +324,10 @@ With US1 complete:
 4. **Increment 4**: Phase 6 (US4) -> Contextual permission explanations, consent tracking, and dual-authorization gates.
 5. **Increment 5**: Phase 7 (US5) -> Biometric/device-credential local protection with 60s background timer and opaque screen cover.
 6. **Increment 6**: Phase 8 (Polish) -> Room schema commit, boundary tests, pgTAP/Deno validation, TalkBack/200% font audit, security audit, and quickstart sign-off.
+
+## Ajustes visuales de perfil (2026-09-21)
+
+- [X] Reorganizar Ajustes según las cinco secciones de la referencia Stitch y conservar los controles de preferencias existentes.
+- [X] Mover Permisos y automatización a Notificaciones y alertas y mantener Biometría en Seguridad y copias de seguridad.
+- [X] Mostrar las funciones de otras épicas como pendientes, sin datos ficticios ni acciones destructivas.
+- [ ] Verificar visualmente en un dispositivo los temas claro y oscuro, el texto ampliado y los controles de PEN/USD y día 1–28.

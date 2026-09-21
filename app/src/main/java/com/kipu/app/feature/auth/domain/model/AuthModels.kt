@@ -41,5 +41,5 @@ data class CooldownState(
     val blockedUntil: Instant? = null,
 ) {
     val isBlocked: Boolean
-        get() = retryAfterSeconds > 0 || (blockedUntil != null && Instant.now().isBefore(blockedUntil))
+        get() = blockedUntil?.isAfter(Instant.now()) ?: (retryAfterSeconds > 0)
 }
