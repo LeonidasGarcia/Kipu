@@ -1,0 +1,463 @@
+openapi: 3.1.0
+info:
+  title: Kipu EP-APS Profile and Auth Access Boundary
+  version: 1.0.0
+  description: Contract consumed by the Android application. Supabase Auth endpoints remain provider-owned.
+servers:
+  - url: https://{projectRef}.supabase.co
+    variables:
+      projectRef:
+        default: example
+paths:
+  /functions/v1/auth-access/register:
+    post:
+      summary: Register with the FR-051 existing-email disclosure pending formal risk approval
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterAccepted'
+        '409':
+          description: Account already exists; this disclosure is limited to registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Invalid email or password policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Finite progressive rate limit
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Registration result is not confirmed; client must not claim success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /functions/v1/auth-access/login:
+    post:
+      summary: Sign in through the progressive server-side abuse boundary
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Sensitive provider envelope consumed only by the Android Auth adapter
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: private, no-store
+            Pragma:
+              schema:
+                type: string
+                const: no-cache
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionEnvelope'
+        '401':
+          description: Neutral authentication rejection
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Finite progressive rate limit
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Provider or network unavailable; no session established
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /functions/v1/auth-access/recovery:
+    post:
+      summary: Request password recovery with a neutral normalized response
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryRequest'
+      responses:
+        '202':
+          description: Same response for existing and absent identities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryAccepted'
+        '429':
+          description: Finite progressive rate limit without identity disclosure
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Provider or network unavailable; client shows retryable network state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /rest/v1/profiles:
+    get:
+      summary: Read the authenticated user's profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: select
+          in: query
+          required: true
+          schema:
+            type: string
+            const: user_id,display_name,currency_code,time_zone,month_start,hide_balances,theme_mode,revision,updated_at
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+            description: Must be eq.{authenticated user UUID}; RLS remains authoritative.
+      responses:
+        '200':
+          description: Zero or one RLS-filtered row
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1
+                items:
+                  $ref: '#/components/schemas/Profile'
+        '401':
+          description: Missing or invalid session
+  /rest/v1/rpc/update_profile_preferences:
+    post:
+      summary: Update account preferences using optimistic revision
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Committed application outcome, including duplicate/conflict receipts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileUpdateResult'
+        '401':
+          description: Missing or invalid session
+        '422':
+          description: Invalid preference or empty delta; previous value preserved and no receipt created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /rest/v1/rpc/ensure_profile:
+    post:
+      summary: Idempotently create or return the authenticated user's profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Existing or newly repaired profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          description: Missing or invalid session
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, captchaToken]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+          writeOnly: true
+        captchaToken:
+          type: string
+          minLength: 1
+          writeOnly: true
+    RegisterAccepted:
+      type: object
+      additionalProperties: false
+      required: [status, confirmationRequired]
+      properties:
+        status:
+          type: string
+          const: ACCEPTED
+        confirmationRequired:
+          type: boolean
+          const: true
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, captchaToken]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 72
+          writeOnly: true
+        captchaToken:
+          type: string
+          minLength: 1
+          writeOnly: true
+    RecoveryRequest:
+      type: object
+      additionalProperties: false
+      required: [email, captchaToken]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 320
+        captchaToken:
+          type: string
+          minLength: 1
+          writeOnly: true
+    RecoveryAccepted:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ACCEPTED
+    SessionEnvelope:
+      type: object
+      additionalProperties: false
+      required: [userId, accessToken, refreshToken, expiresIn, tokenType]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        accessToken:
+          type: string
+          x-sensitive: true
+        refreshToken:
+          type: string
+          x-sensitive: true
+        expiresIn:
+          type: integer
+          minimum: 1
+        tokenType:
+          type: string
+          const: bearer
+    Profile:
+      type: object
+      additionalProperties: false
+      required: [user_id, currency_code, month_start, hide_balances, theme_mode, revision, updated_at]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        display_name:
+          type: [string, 'null']
+        currency_code:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        time_zone:
+          type: [string, 'null']
+        month_start:
+          type: integer
+          minimum: 1
+          maximum: 28
+        hide_balances:
+          type: boolean
+        theme_mode:
+          type: string
+          enum: [SYSTEM, LIGHT, DARK]
+        revision:
+          type: integer
+          minimum: 1
+        updated_at:
+          type: string
+          format: date-time
+    ProfileUpdate:
+      type: object
+      additionalProperties: false
+      required: [p_operation_id, p_expected_revision]
+      properties:
+        p_operation_id:
+          type: string
+          format: uuid
+        p_expected_revision:
+          type: integer
+          minimum: 1
+        p_currency_code:
+          type: [string, 'null']
+          pattern: '^[A-Z]{3}$'
+        p_time_zone:
+          type: [string, 'null']
+        p_month_start:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 28
+        p_hide_balances:
+          type: [boolean, 'null']
+        p_theme_mode:
+          type: [string, 'null']
+          enum: [SYSTEM, LIGHT, DARK, null]
+    ProfileUpdateResult:
+      oneOf:
+        - $ref: '#/components/schemas/ProfileApplied'
+        - $ref: '#/components/schemas/ProfileDuplicateApplied'
+        - $ref: '#/components/schemas/ProfileRevisionConflict'
+        - $ref: '#/components/schemas/ProfileDuplicateConflict'
+        - $ref: '#/components/schemas/ProfileOperationCollision'
+    ProfileApplied:
+      type: object
+      additionalProperties: false
+      required: [status, operationId, resultRevision, profile]
+      properties:
+        status:
+          type: string
+          const: APPLIED
+        operationId:
+          type: string
+          format: uuid
+        resultRevision:
+          type: integer
+          minimum: 1
+        profile:
+          $ref: '#/components/schemas/Profile'
+    ProfileDuplicateApplied:
+      type: object
+      additionalProperties: false
+      required: [status, replayedStatus, operationId, resultRevision, profile]
+      properties:
+        status:
+          type: string
+          const: DUPLICATE
+        replayedStatus:
+          type: string
+          const: APPLIED
+        operationId:
+          type: string
+          format: uuid
+        resultRevision:
+          type: integer
+          minimum: 1
+        profile:
+          $ref: '#/components/schemas/Profile'
+    ProfileRevisionConflict:
+      type: object
+      additionalProperties: false
+      required: [status, operationId, resultRevision, profile]
+      properties:
+        status:
+          type: string
+          const: REVISION_CONFLICT
+        operationId:
+          type: string
+          format: uuid
+        resultRevision:
+          type: integer
+          minimum: 1
+        profile:
+          $ref: '#/components/schemas/Profile'
+    ProfileDuplicateConflict:
+      type: object
+      additionalProperties: false
+      required: [status, replayedStatus, operationId, resultRevision, profile]
+      properties:
+        status:
+          type: string
+          const: DUPLICATE
+        replayedStatus:
+          type: string
+          const: REVISION_CONFLICT
+        operationId:
+          type: string
+          format: uuid
+        resultRevision:
+          type: integer
+          minimum: 1
+        profile:
+          $ref: '#/components/schemas/Profile'
+    ProfileOperationCollision:
+      type: object
+      additionalProperties: false
+      required: [status, operationId, resultRevision]
+      properties:
+        status:
+          type: string
+          const: OPERATION_ID_COLLISION
+        operationId:
+          type: string
+          format: uuid
+        resultRevision:
+          type: integer
+          minimum: 1
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [ACCOUNT_EXISTS, AUTH_REJECTED, INVALID_INPUT, RATE_LIMITED, NETWORK_REQUIRED, UNAVAILABLE]
+        message:
+          type: string
+        retryAfterSeconds:
+          type: [integer, 'null']
+          minimum: 1
