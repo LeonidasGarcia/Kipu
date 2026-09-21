@@ -165,7 +165,7 @@ private fun FreePlanCard() {
     Card(
         modifier = Modifier.fillMaxWidth().testTag("plan-free-card"),
         shape = CardShape,
-        colors = CardDefaults.cardColors(containerColor = KipuSurfaceContainerLowest),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -174,7 +174,7 @@ private fun FreePlanCard() {
                 PlanBadge(R.string.plan_free_badge)
             }
             Text(stringResource(R.string.plan_free_summary), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(stringResource(R.string.plan_free_no_payment), color = KipuSelectionRing, style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.plan_free_no_payment), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
             features.forEach { feature -> FreeFeatureRow(feature) }
         }
     }
@@ -188,7 +188,7 @@ private fun FreeFeatureRow(@StringRes feature: Int) {
             modifier = Modifier.size(48.dp).semantics { contentDescription = included },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = KipuSelectionRing)
+            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
         Text(stringResource(feature), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
     }
@@ -231,8 +231,8 @@ private fun PremiumOptionCard(
             .minimumInteractiveComponentSize()
             .testTag("plan-option-${option.name}"),
         shape = CardShape,
-        colors = CardDefaults.cardColors(containerColor = KipuSurfaceContainerLowest),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) KipuSelectionRing else MaterialTheme.colorScheme.outlineVariant),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
             RadioButton(selected = selected, onClick = null)
@@ -249,7 +249,7 @@ private fun PremiumOptionCard(
                 )
                 Text(stringResource(summary), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 supporting?.let {
-                    Text(stringResource(it), color = KipuSelectionRing, style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(it), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
