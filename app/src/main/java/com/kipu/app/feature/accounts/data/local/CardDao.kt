@@ -1,0 +1,51 @@
+package com.kipu.app.feature.accounts.data.local
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface CardDao {
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insert(card: CardEntity)
+
+    @Update
+    suspend fun update(card: CardEntity)
+
+    @Query("SELECT * FROM cards WHERE user_id = :userId AND id = :id")
+    suspend fun getById(userId: String, id: String): CardEntity?
+
+    @Query("SELECT * FROM cards WHERE user_id = :userId AND id = :id")
+    fun observeById(userId: String, id: String): Flow<CardEntity?>
+
+    @Query("SELECT * FROM cards WHERE user_id = :userId ORDER BY is_archived ASC, created_at DESC")
+    fun observeAll(userId: String): Flow<List<CardEntity>>
+
+    @Query("SELECT * FROM cards WHERE user_id = :userId AND is_archived = 0 ORDER BY created_at DESC")
+    fun observeActive(userId: String): Flow<List<CardEntity>>
+
+    @Query("SELECT * FROM cards WHERE user_id = :userId AND account_id = :accountId AND is_archived = 0")
+    fun observeActiveDebitCardsForAccount(userId: String, accountId: String): Flow<List<CardEntity>>
+
+    @Query("SELECT COUNT(*) FROM cards WHERE user_id = :userId AND is_archived = 0")
+    suspend fun countActiveCards(userId: String): Int
+
+    @Query("SELECT * FROM cards WHERE user_id = :userId AND issuer = :issuer AND network = :network AND last_four_digits = :lastFourDigits")
+    suspend fun findDuplicates(userId: String, issuer: String, network: String, lastFourDigits: String): List<CardEntity>
+
+    @Query("SELECT COUNT(*) FROM cards WHERE user_id = :userId AND creation_operation_id = :creationOperationId")
+    suspend fun countByCreationOperationId(userId: String, creationOperationId: String): Int
+
+    @Query("UPDATE cards SET alias = :alias, preset_id = :presetId, color = :color, icon = :icon, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
+    suspend fun updateAppearance(userId: String, id: String, alias: String?, presetId: String?, color: String?, icon: String?, nowMicros: Long)
+
+    @Query("UPDATE cards SET is_archived = :isArchived, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
+    suspend fun setArchived(userId: String, id: String, isArchived: Boolean, nowMicros: Long)
+
+    @Query("DELETE FROM cards WHERE user_id = :userId AND id = :id")
+    suspend fun delete(userId: String, id: String)
+}
