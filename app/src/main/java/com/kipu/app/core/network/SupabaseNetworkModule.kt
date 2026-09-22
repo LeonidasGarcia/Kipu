@@ -9,6 +9,7 @@ import dagger.hilt.components.SingletonComponent
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -40,6 +41,7 @@ abstract class SupabaseNetworkModule {
             supabaseKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
         ) {
             install(Auth)
+            install(Postgrest)
         }
 
         @Provides
