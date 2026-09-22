@@ -191,3 +191,111 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_aggregate_type_aggregate_id` ON `instrument_sync_outbox` (`user_id`, `aggregate_type`, `aggregate_id`)")
     }
 }
+
+/**
+ * Migration 3 -> 4: Adds EP-CCO tables for categories, category_presentations,
+ * merchant_catalog_cache, category_conflicts, category_sync_outbox, and extends
+ * financial_movements with category and merchant classification columns.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // 1. categories
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `categories` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT,
+                `parent_id` TEXT,
+                `origin` TEXT NOT NULL,
+                `is_active` INTEGER NOT NULL,
+                `remote_revision` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_user_id` ON `categories` (`user_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_parent_id` ON `categories` (`parent_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_user_id_is_active` ON `categories` (`user_id`, `is_active`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_categories_origin` ON `categories` (`origin`)")
+
+        // 2. category_presentations
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `category_presentations` (
+                `category_id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `icon` TEXT NOT NULL,
+                `color` TEXT NOT NULL,
+                `remote_revision` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `category_id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_presentations_category_id` ON `category_presentations` (`category_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_presentations_user_id` ON `category_presentations` (`user_id`)")
+
+        // 3. merchant_catalog_cache
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `merchant_catalog_cache` (
+                `id` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `normalized_name` TEXT NOT NULL,
+                `is_active` INTEGER NOT NULL,
+                `version` INTEGER NOT NULL,
+                `last_synced_at` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_merchant_catalog_cache_normalized_name` ON `merchant_catalog_cache` (`normalized_name`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_merchant_catalog_cache_is_active` ON `merchant_catalog_cache` (`is_active`)")
+
+        // 4. category_conflicts
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `category_conflicts` (
+                `id` TEXT NOT NULL,
+                `category_id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `conflict_type` TEXT NOT NULL,
+                `local_version` TEXT NOT NULL,
+                `remote_version` TEXT NOT NULL,
+                `status` TEXT NOT NULL,
+                `resolution_operation_id` TEXT,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_conflicts_user_id_status` ON `category_conflicts` (`user_id`, `status`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_conflicts_category_id` ON `category_conflicts` (`category_id`)")
+
+        // 5. category_sync_outbox
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `category_sync_outbox` (
+                `operation_id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `command_type` TEXT NOT NULL,
+                `aggregate_type` TEXT NOT NULL,
+                `aggregate_id` TEXT NOT NULL,
+                `expected_revision` INTEGER,
+                `payload_json` TEXT NOT NULL,
+                `payload_hash` TEXT NOT NULL,
+                `state` TEXT NOT NULL,
+                `attempt_count` INTEGER NOT NULL,
+                `next_attempt_at` INTEGER,
+                `error_code` TEXT,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `operation_id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_sync_outbox_user_id_state_next_attempt_at` ON `category_sync_outbox` (`user_id`, `state`, `next_attempt_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_category_sync_outbox_user_id_aggregate_type_aggregate_id` ON `category_sync_outbox` (`user_id`, `aggregate_type`, `aggregate_id`)")
+
+        // 6. Alter financial_movements with classification columns
+        db.execSQL("ALTER TABLE `financial_movements` ADD COLUMN `category_id` TEXT")
+        db.execSQL("ALTER TABLE `financial_movements` ADD COLUMN `merchant_id` TEXT")
+        db.execSQL("ALTER TABLE `financial_movements` ADD COLUMN `merchant_provisional_text` TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_movements_user_id_category_id` ON `financial_movements` (`user_id`, `category_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_movements_merchant_id` ON `financial_movements` (`merchant_id`)")
+    }
+}
+

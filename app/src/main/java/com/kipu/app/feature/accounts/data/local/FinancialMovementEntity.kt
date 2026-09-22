@@ -21,6 +21,8 @@ import androidx.room.Index
         Index(value = ["user_id", "opening_account_id"], unique = true),
         Index(value = ["user_id", "account_id", "status", "effective_at"]),
         Index(value = ["user_id", "card_id", "status", "effective_at"]),
+        Index(value = ["user_id", "category_id"]),
+        Index(value = ["merchant_id"]),
     ],
 )
 data class FinancialMovementEntity(
@@ -52,6 +54,12 @@ data class FinancialMovementEntity(
     val reversesMovementId: String? = null,
     @ColumnInfo(name = "adjusts_movement_id")
     val adjustsMovementId: String? = null,
+    @ColumnInfo(name = "category_id")
+    val categoryId: String? = null,
+    @ColumnInfo(name = "merchant_id")
+    val merchantId: String? = null,
+    @ColumnInfo(name = "merchant_provisional_text")
+    val merchantProvisionalText: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
 )
