@@ -31,4 +31,7 @@ abstract class AuthModule {
     abstract fun bindPendingChangesRepository(
         impl: com.kipu.app.core.session.PendingChangesRepositoryImpl,
     ): com.kipu.app.core.session.PendingChangesRepository
+
+    @dagger.multibindings.Multibinds
+    abstract fun bindPendingChangesSources(): Set<com.kipu.app.core.session.PendingChangesSource>
 }

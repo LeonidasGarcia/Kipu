@@ -74,3 +74,120 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         """.trimIndent())
     }
 }
+
+/**
+ * Migration 2 -> 3: Adds EP-CTA tables for accounts, cards, financial_movements,
+ * and instrument_sync_outbox, preserving all existing EP-PLA and EP-APS tables.
+ */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // 1. accounts
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `accounts` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `creation_operation_id` TEXT NOT NULL,
+                `alias` TEXT NOT NULL,
+                `type` TEXT NOT NULL,
+                `currency` TEXT NOT NULL,
+                `preset_id` TEXT,
+                `color` TEXT,
+                `icon` TEXT,
+                `initial_balance_minor_units` INTEGER NOT NULL,
+                `opened_at` INTEGER NOT NULL,
+                `is_archived` INTEGER NOT NULL,
+                `remote_revision` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_accounts_user_id_creation_operation_id` ON `accounts` (`user_id`, `creation_operation_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_accounts_user_id_is_archived` ON `accounts` (`user_id`, `is_archived`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_accounts_user_id_type` ON `accounts` (`user_id`, `type`)")
+
+        // 2. cards
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `cards` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `creation_operation_id` TEXT NOT NULL,
+                `account_id` TEXT,
+                `alias` TEXT,
+                `type` TEXT NOT NULL,
+                `currency` TEXT NOT NULL,
+                `network` TEXT NOT NULL,
+                `issuer` TEXT NOT NULL,
+                `last_four_digits` TEXT NOT NULL,
+                `credit_limit_minor_units` INTEGER,
+                `billing_day` INTEGER,
+                `due_day` INTEGER,
+                `preset_id` TEXT,
+                `color` TEXT,
+                `icon` TEXT,
+                `is_archived` INTEGER NOT NULL,
+                `remote_revision` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`),
+                FOREIGN KEY(`user_id`, `account_id`) REFERENCES `accounts`(`user_id`, `id`) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_cards_user_id_creation_operation_id` ON `cards` (`user_id`, `creation_operation_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_cards_user_id_is_archived_type` ON `cards` (`user_id`, `is_archived`, `type`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_cards_user_id_issuer_network_last_four_digits` ON `cards` (`user_id`, `issuer`, `network`, `last_four_digits`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_cards_user_id_account_id` ON `cards` (`user_id`, `account_id`)")
+
+        // 3. financial_movements
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `financial_movements` (
+                `id` TEXT NOT NULL,
+                `operation_id` TEXT NOT NULL,
+                `operation_sequence` INTEGER NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `kind` TEXT NOT NULL,
+                `amount_minor_units` INTEGER NOT NULL,
+                `currency` TEXT NOT NULL,
+                `account_id` TEXT,
+                `card_id` TEXT,
+                `opening_account_id` TEXT,
+                `effective_at` INTEGER NOT NULL,
+                `status` TEXT NOT NULL,
+                `reverses_movement_id` TEXT,
+                `adjusts_movement_id` TEXT,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`),
+                FOREIGN KEY(`user_id`, `account_id`) REFERENCES `accounts`(`user_id`, `id`) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_financial_movements_user_id_operation_id_operation_sequence` ON `financial_movements` (`user_id`, `operation_id`, `operation_sequence`)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_financial_movements_user_id_opening_account_id` ON `financial_movements` (`user_id`, `opening_account_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_movements_user_id_account_id_status_effective_at` ON `financial_movements` (`user_id`, `account_id`, `status`, `effective_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_financial_movements_user_id_card_id_status_effective_at` ON `financial_movements` (`user_id`, `card_id`, `status`, `effective_at`)")
+
+        // 4. instrument_sync_outbox
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `instrument_sync_outbox` (
+                `operation_id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `command_type` TEXT NOT NULL,
+                `aggregate_type` TEXT NOT NULL,
+                `aggregate_id` TEXT NOT NULL,
+                `predecessor_operation_id` TEXT,
+                `expected_revision` INTEGER,
+                `contract_version` INTEGER NOT NULL,
+                `payload_json` TEXT NOT NULL,
+                `payload_hash` TEXT NOT NULL,
+                `state` TEXT NOT NULL,
+                `attempt_count` INTEGER NOT NULL,
+                `next_attempt_at` INTEGER,
+                `error_code` TEXT,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `operation_id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_state_next_attempt_at` ON `instrument_sync_outbox` (`user_id`, `state`, `next_attempt_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_aggregate_type_aggregate_id` ON `instrument_sync_outbox` (`user_id`, `aggregate_type`, `aggregate_id`)")
+    }
+}

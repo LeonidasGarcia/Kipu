@@ -38,6 +38,7 @@ import com.kipu.app.navigation.BIOMETRIC_ROUTE
 import com.kipu.app.navigation.DeepLinkResult
 import com.kipu.app.navigation.PLAN_SELECTION_ROUTE
 import com.kipu.app.navigation.PROFILE_SETTINGS_ROUTE
+import com.kipu.app.navigation.accountsDestinations
 import com.kipu.app.navigation.authDestinations
 import com.kipu.app.navigation.planSelectionDestination
 import com.kipu.app.navigation.settingsDestinations
@@ -160,6 +161,9 @@ class MainActivity : FragmentActivity() {
                                             popUpTo(0) { inclusive = true }
                                         }
                                     },
+                                )
+                                accountsDestinations(
+                                    navController = navController,
                                 )
                             }
 

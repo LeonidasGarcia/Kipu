@@ -1,0 +1,485 @@
+# Data Model: EP-CTA - Cuentas y Tarjetas
+
+**Date**: 2026-09-21  
+**Spec**: [spec.md](spec.md)  
+**Plan**: [plan.md](plan.md)
+
+## Design Invariants
+
+1. Todo importe autoritativo usa `Long`/`BIGINT` en unidades menores y una moneda explicita.
+2. El saldo de una cuenta se deriva de movimientos; ningun campo mutable de cuenta o tarjeta es saldo.
+3. Cada cuenta confirmada nace con exactamente un movimiento `OPENING`, incluso si el importe es cero.
+4. `initialBalanceMinorUnits` es una copia de auditoria inmutable y debe coincidir con `OPENING`; no se suma por separado.
+5. Una tarjeta de debito referencia una cuenta liquida; no posee saldo ni movimiento de apertura.
+6. Linea total y credito disponible son capacidad de endeudamiento, nunca activo.
+7. PAN, CVV/CVC/CID y credenciales bancarias no existen en entidades, DTOs, comandos, receipts o logs.
+8. Toda fila local/remota es owner-scoped por `userId`; IDs externos no autorizan acceso.
+9. Los hechos financieros son append-only. Correccion/cancelacion crea ajuste o reverso relacionado.
+10. Una operacion UUID identifica un unico payload canonico. Igual UUID+hash es duplicado; igual UUID+hash distinto es colision.
+11. Archivo conserva historia y libera cupo; reactivacion consume cupo. Restricciones comerciales nunca borran historia.
+12. PEN y USD se agregan por separado; no existe conversion en EP-CTA.
+13. Archivar cambia disponibilidad operativa y visibilidad, no la existencia economica: el saldo de una cuenta archivada sigue formando parte del dinero actual hasta una operacion financiera que lo traslade o ajuste.
+14. Todo dispositivo puede reconstruir saldos desde sync: los cambios remotos transportan movimientos ademas de proyecciones de cuenta/tarjeta.
+
+## Type Conventions
+
+| Concept | Kotlin domain | Room | PostgreSQL / JSON |
+|---------|---------------|------|-------------------|
+| IDs | Typed wrapper over `UUID` | canonical UUID string | `UUID` / lowercase UUID string |
+| Timestamp | `Instant` | epoch microseconds `INTEGER` | `TIMESTAMPTZ` / RFC 3339 UTC |
+| Money | `Money(Long, Currency)` | `INTEGER` + currency text | `BIGINT` + currency code |
+| Revision | positive `Long` | `INTEGER` | `BIGINT` / decimal integer |
+| Day preference | `PreferredDay(1..31)` | `INTEGER` | `SMALLINT` |
+| TEA | integer basis points | `INTEGER` | `INTEGER` |
+| Enum | enum/sealed hierarchy | stable uppercase string | text + CHECK |
+| Lifecycle | `ACTIVE`, `ARCHIVED` | stable string | text + CHECK |
+
+Monetary validation:
+
+- `MAX_MONEY_MINOR = 99_999_999_999_999`.
+- Initial liquid balance: `0..MAX_MONEY_MINOR`.
+- Credit line: `0..MAX_MONEY_MINOR`.
+- Signed effects: `-MAX_MONEY_MINOR..MAX_MONEY_MINOR`.
+- Addition/subtraction must fail on overflow rather than wrap.
+
+## Domain Models
+
+### Money
+
+```text
+Money
+├── minorUnits: Long
+└── currency: PEN | USD
+```
+
+Operations require matching currency. Formatting and masking are presentation concerns.
+
+### Account
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | `AccountId` | Stable, client-generated UUID |
+| `userId` | `UserId` | Session owner; immutable |
+| `alias` | String | Trimmed, 1..80 characters; duplicates allowed |
+| `type` | `CASH`, `SAVINGS`, `BANK`, `DIGITAL_WALLET` | Immutable after create |
+| `currency` | `PEN`, `USD` | Immutable after create |
+| `preset` | `BCP`, `BBVA`, `INTERBANK`, `SCOTIABANK`, `BANCO_NACION`, `GENERIC` | Appearance seed only |
+| `iconToken` | String | Approved design token |
+| `colorToken` | String | Approved design token, not arbitrary secret/text |
+| `initialBalance` | Money | Immutable audit snapshot, nonnegative |
+| `openedAt` | Instant | Immutable; correction through movement |
+| `lifecycle` | `ACTIVE`, `ARCHIVED` | Archive/reactivate rules apply |
+| `revision` | Long | Server aggregate revision, starts at 0 locally |
+| `createdAt`, `updatedAt` | Instant | Audit metadata, not conflict truth |
+
+Quota behavior:
+
+- `CASH` does not consume quota.
+- Other account types consume one active-instrument slot.
+- Cuenta Metas is not an EP-CTA account type in Sprint 2; EP-MET owns that virtual object and its exemption.
+
+### Card
+
+Domain is sealed even if persistence is flattened.
+
+```text
+Card
+├── DebitCard(linkedAccountId required, credit fields absent)
+└── CreditCard(linkedAccountId absent, limit/days required)
+```
+
+Common fields:
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id`, `userId` | typed UUID | Stable and immutable |
+| `alias` | String? | Trimmed, 1..80 when present; required and distinct when visible identity collides |
+| `issuer` | String | Trimmed, 1..80; safe display value |
+| `network` | `VISA`, `MASTERCARD`, `AMEX`, `OTHER` | `OTHER` usa identidad y apariencia genericas |
+| `lastFourDigits` | String | Exactly four ASCII digits |
+| `currency` | `PEN`, `USD` | Debit derives from linked account; credit explicit |
+| `preset`, `iconToken`, `colorToken` | appearance values | No financial effect |
+| `lifecycle` | `ACTIVE`, `ARCHIVED` | Active card consumes one quota slot |
+| `revision` | Long | Optimistic concurrency |
+| `createdAt`, `updatedAt` | Instant | Audit only |
+
+Debit-only:
+
+- `linkedAccountId` required.
+- Linked account must be same owner/currency, `ACTIVE`, and type `SAVINGS` or `BANK`.
+- Card balance is a view of linked account balance and is never persisted on card.
+
+Credit-only:
+
+- `linkedAccountId = null`.
+- `creditLimitMinorUnits >= 0`.
+- `billingDay` and `dueDay` in `1..31`.
+- No debt exists merely by registration.
+- `OTHER` permite registrar una red no listada sin inventar una marca; requiere issuer y alias explicitos y usa icono generico.
+
+Issuer+network+last4 is not unique. A collision requires a distinct alias and explicit user continuation.
+
+### FinancialMovement
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `id` | `MovementId` | Stable UUID |
+| `operationId` | `OperationId` | Stable command identity |
+| `sequence` | Int | `>= 0`; unique with operation ID |
+| `userId` | `UserId` | Owner |
+| `kind` | see below | Stable enum |
+| `amountMinorUnits` | Long | Signed effect, exact |
+| `currency` | Currency | Must match target |
+| `accountId` | AccountId? | Target liquid account when applicable |
+| `cardId` | CardId? | Target credit liability when applicable |
+| `effectiveAt` | Instant | Financial date/time |
+| `status` | `POSTED` | Original facts remain posted; neutralization uses a separate reversal |
+| `reversesMovementId` | MovementId? | Explicit reversal link |
+| `adjustsMovementId` | MovementId? | Explicit correction link |
+| `createdAt` | Instant | Audit |
+
+Movement kinds reserved by the shared domain:
+
+- Sprint 2: `OPENING`, `ADJUSTMENT`, `REVERSAL`.
+- Sprint 3 aprobado: `CREDIT_PURCHASE`, `CARD_PAYMENT_CASH`, `CARD_PAYMENT_LIABILITY`.
+
+Sprint 2 code must not emit Sprint 3 kinds. A payment in Sprint 3 uses one operation with two sequenced movements; the reporting classifier marks the pair as transfer/amortization, not expense. Un cargo real de interes requeriria evidencia, confirmacion y un requisito posterior aprobado; una simulacion nunca lo emite.
+
+### InstrumentSyncCommand
+
+| Field | Type | Rules |
+|-------|------|-------|
+| `operationId` | UUID | Primary key |
+| `userId` | UUID | Indexed owner |
+| `commandType` | enum | Exact allowlist |
+| `aggregateType` | `ACCOUNT`, `CARD`, `MOVEMENT` | Required |
+| `aggregateId` | UUID | Required |
+| `predecessorOperationId` | UUID? | Previous local mutation for the same owner/aggregate |
+| `expectedRevision` | Long? | Current remote base when no predecessor; null when predecessor receipt supplies the base |
+| `contractVersion` | Int | Starts at 1 |
+| `payloadJson` | String | Canonical allowlisted JSON; immutable |
+| `payloadHash` | String | Lowercase SHA-256 hex |
+| `state` | internal state enum | See transitions |
+| retry/lease fields | values | Safe technical metadata |
+
+## Local Room Model
+
+### AccountEntity (`accounts`)
+
+| Column | Room type | Constraints |
+|--------|-----------|-------------|
+| `id` | TEXT | UUID; composite PK with owner |
+| `user_id` | TEXT | not null, indexed |
+| `creation_operation_id` | TEXT | not null, unique per owner |
+| `alias` | TEXT | not null, length 1..80 |
+| `type` | TEXT | allowed AccountType |
+| `currency` | TEXT | PEN/USD |
+| `preset_id` | TEXT | allowed preset |
+| `color` | TEXT | approved token |
+| `icon` | TEXT | approved token |
+| `initial_balance_minor_units` | INTEGER | immutable, `0..MAX` |
+| `opened_at` | INTEGER | immutable epoch micros |
+| `is_archived` | INTEGER | Boolean |
+| `remote_revision` | INTEGER | `>= 0` |
+| `created_at`, `updated_at` | INTEGER | epoch micros |
+
+Primary key `(user_id, id)`. Indexes: `(user_id, is_archived)`, `(user_id, type)`, unique `(user_id, creation_operation_id)`.
+
+### CardEntity (`cards`)
+
+| Column | Room type | Constraints |
+|--------|-----------|-------------|
+| `id` | TEXT | UUID; composite PK with owner |
+| `user_id` | TEXT | not null, indexed |
+| `creation_operation_id` | TEXT | not null, unique per owner |
+| `account_id` | TEXT? | required for DEBIT; null for CREDIT |
+| `alias` | TEXT? | null or length 1..80; required/distinct on collision |
+| `type` | TEXT | DEBIT/CREDIT |
+| `currency` | TEXT | PEN/USD |
+| `network` | TEXT | VISA/MASTERCARD/AMEX/OTHER |
+| `issuer` | TEXT | not null, length 1..80 |
+| `last_four_digits` | TEXT | exactly `[0-9]{4}` |
+| `credit_limit_minor_units` | INTEGER? | required for CREDIT; null for DEBIT |
+| `billing_day`, `due_day` | INTEGER? | CREDIT `1..31`; null for DEBIT |
+| `preset_id`, `color`, `icon` | TEXT | appearance |
+| `is_archived` | INTEGER | Boolean |
+| `remote_revision` | INTEGER | `>= 0` |
+| `created_at`, `updated_at` | INTEGER | epoch micros |
+
+Constraints/indices:
+
+- Composite FK `(user_id, account_id) -> accounts(user_id, id)` for debit link.
+- Primary key `(user_id, id)` and unique `(user_id, creation_operation_id)`.
+- Index `(user_id, is_archived, type)`.
+- Non-unique index `(user_id, issuer, network, last_four_digits)` to detect/warn collisions.
+- Debit/credit nullability CHECKs repeated in domain validation.
+
+### FinancialMovementEntity (`financial_movements`)
+
+| Column | Room type | Constraints |
+|--------|-----------|-------------|
+| `id` | TEXT | composite PK with owner |
+| `operation_id` | TEXT | not null |
+| `operation_sequence` | INTEGER | `>= 0` |
+| `user_id` | TEXT | not null, indexed |
+| `kind` | TEXT | allowed movement kind |
+| `amount_minor_units` | INTEGER | in signed range |
+| `currency` | TEXT | PEN/USD |
+| `account_id`, `card_id` | TEXT? | At least one target according to kind |
+| `opening_account_id` | TEXT? | equals account ID only for OPENING; null otherwise |
+| `effective_at` | INTEGER | epoch micros |
+| `status` | TEXT | POSTED |
+| `reverses_movement_id`, `adjusts_movement_id` | TEXT? | Self references |
+| `created_at` | INTEGER | immutable |
+
+Primary key `(user_id, id)`. Unique `(user_id, operation_id, operation_sequence)` and `(user_id, opening_account_id)`. Owner-composite FKs cover account/card and reversal/adjustment targets. Indexes `(user_id, account_id, status, effective_at)` and `(user_id, card_id, status, effective_at)`.
+
+Opening rules:
+
+- At most one `OPENING` per account is structurally enforced locally through non-null `opening_account_id` uniqueness; account creation/pull transactions enforce existence atomically. Remote PostgreSQL uses an equivalent unique partial index plus command checks.
+- `amount`, `currency`, `effectiveAt` equal the account audit snapshot.
+- Zero opening remains a row.
+
+### InstrumentSyncOutboxEntity (`instrument_sync_outbox`)
+
+| Column | Room type | Constraints |
+|--------|-----------|-------------|
+| `operation_id` | TEXT | composite PK with owner |
+| `user_id` | TEXT | not null, indexed |
+| `command_type` | TEXT | allowlisted |
+| `aggregate_type`, `aggregate_id` | TEXT | not null |
+| `predecessor_operation_id` | TEXT? | prior command for same owner/aggregate |
+| `expected_revision` | INTEGER? | `>= 0` |
+| `contract_version` | INTEGER | `= 1` initially |
+| `payload_json`, `payload_hash` | TEXT | immutable |
+| `state` | TEXT | internal sync state |
+| `attempt_count` | INTEGER | `>= 0` |
+| `next_attempt_at`, `lease_until` | INTEGER? | epoch micros |
+| `last_error_code` | TEXT? | safe code only |
+| `created_at`, `updated_at` | INTEGER | epoch micros |
+
+Internal states and UI projection:
+
+| Internal | UI `SyncStatus` | Meaning |
+|----------|-----------------|---------|
+| `PENDING`, `IN_FLIGHT`, `WAITING_FOR_AUTH` | `PENDING` | Work remains |
+| `SYNCED` | `SYNCED` | Remote receipt reconciled |
+| `CONFLICT`, `ERROR` | `ERROR` | User/retry policy required |
+
+Transitions:
+
+```text
+PENDING -> IN_FLIGHT -> SYNCED
+                    -> PENDING          transient failure
+                    -> WAITING_FOR_AUTH no/mismatched session
+                    -> CONFLICT         stale aggregate/collision
+                    -> ERROR            deterministic terminal error
+WAITING_FOR_AUTH -> PENDING             same owner reauthenticates
+IN_FLIGHT -> PENDING                    lease expires
+```
+
+Primary key is `(user_id, operation_id)`. Payload and IDs never mutate during transitions.
+
+Causal rules:
+
+- Create has no predecessor. Each later locally queued mutation points to the aggregate's current tail operation.
+- Only one unsuperseded tail exists per `(user_id, aggregate_type, aggregate_id)`; appending a command and advancing that tail occurs in the same Room transaction.
+- A successor is not lease-eligible until its predecessor is `SYNCED`. If the predecessor ends in `CONFLICT`/`ERROR`, successors remain blocked for explicit resolution.
+- Without a predecessor, a mutable command carries the last reconciled `expectedRevision`. With a predecessor, it stores null because the future accepted revision is not guessed; after reconciliation, the predecessor receipt's `acceptedRevision` becomes the authoritative compare-and-set base. The server rejects cross-owner, cross-aggregate, missing or non-applied predecessors.
+- Pull never overwrites unsynced local fields blindly; it stores/reconciles the remote projection under the conflict policy while preserving local commands.
+
+## Atomic Local Commands
+
+`AccountDao` y `CardDao` publican consultas reactivas `Flow<List<...>>` y ejecutan los comandos atomicos de su aggregate. `FinancialMovementDao` concentra sumas/proyecciones owner-scoped y `InstrumentSyncDao` concentra leasing/transiciones. Ningun DAO se expone fuera de data.
+
+### CreateAccount
+
+One Room transaction:
+
+1. Validate existing operation/hash.
+2. Count active quota-consuming accounts/cards for owner.
+3. Evaluate verified entitlement; Free fifth instrument fails before inserts.
+4. Insert account.
+5. Insert exactly one opening movement.
+6. Insert outbox command containing account ID, stable `openingMovementId` and opening data.
+7. Commit all or roll back all.
+
+`CASH` skips the quota increment but still gets opening movement.
+
+### RegisterDebitCard
+
+One transaction validates linked account owner, lifecycle, type and currency; counts quota; checks collision acknowledgement/alias; inserts card and outbox. It does not insert a movement.
+
+### RegisterCreditCard
+
+One transaction validates limit/days/currency, counts quota, checks collision acknowledgement/alias, inserts card and outbox. It does not insert liability or expense.
+
+### UpdateAppearance
+
+Updates local alias/preset/icon/color immediately and appends to the causal outbox. `remoteRevision` remains the last reconciled server value; it is never optimistically incremented. Opening facts, card type/link/line and movements cannot appear in payload.
+
+### Archive / Reactivate
+
+- Archive updates local lifecycle and outbox without incrementing `remoteRevision`, blocks new asset operations and frees quota; history remains.
+- Archiving an account disables new operations through linked debit cards without deleting links.
+- An archived account may be reactivated; corrections/reversals remain available because they preserve truth. Archive never substitutes for transferring a balance.
+- An archived credit card cannot accept purchases, but a nonzero liability remains in current summaries and may receive an amortizing payment until settled.
+- Reactivate validates quota and debit-link compatibility atomically.
+
+### Delete
+
+- A persisted account always has `OPENING`, so it is archive-only.
+- Card hard delete requires no movements, debt or dependents. It records a tombstone command before local projection removal so stale devices cannot resurrect it.
+
+## Derived Projections
+
+### Liquid Balance
+
+For each `(user, account, currency)`:
+
+```text
+balanceMinor = SUM(amountMinorUnits WHERE status = POSTED)
+```
+
+No sum across currencies. Archived accounts remain queryable for historical periods and are omitted only from active-operation selectors.
+
+### Real Money Dashboard
+
+```text
+realMoney[PEN] = SUM(all non-deleted liquid account balances in PEN)
+realMoney[USD] = SUM(all non-deleted liquid account balances in USD)
+```
+
+Debit cards add zero. Credit cards, limits and unused credit add zero. Archived accounts may be hidden from the default instrument list and cannot accept new operations, but their balances remain in current money totals; archive is not a financial transfer.
+
+### Opening Correction
+
+An opening amount/date correction never edits or voids the original. One idempotent operation appends two sequenced movements linked to the opening:
+
+```text
+sequence 0: REVERSAL   amount = -originalOpeningAmount   effectiveAt = originalOpenedAt
+sequence 1: ADJUSTMENT amount = +correctedOpeningAmount  effectiveAt = correctedOpenedAt
+```
+
+The command carries client-generated IDs for both rows and the server rejects collision with the opening ID or either other. Both rows exist even when either amount is zero. This moves the effect between reporting periods without changing history; current balance changes only by `corrected - original`. A later correction reverses the currently effective correction pair and posts its replacement under a new operation, never the immutable opening row.
+
+### Credit Summary (Sprint 3)
+
+```text
+usedCredit = confirmed posted liability effects
+availableCredit = max(creditLimit - usedCredit, 0)
+utilization = if creditLimit == 0 then Unavailable else usedCredit / creditLimit
+```
+
+Used credit may exceed line. Percent may exceed 100%.
+
+### Effective Day
+
+```text
+effectiveDay(yearMonth, preferredDay) = min(preferredDay, yearMonth.lengthOfMonth)
+```
+
+Preferred value remains unchanged.
+
+## Remote PostgreSQL Model
+
+Canonical projections mirror domain semantics, not Room annotations:
+
+- `public.accounts`
+- `public.cards`
+- `public.financial_movements` or the recovered canonical transaction projection
+- `internal.ledger_entries`
+- `internal.command_receipts`
+- `internal.sync_changes`
+- `private.financial_user_heads`
+
+Before final naming, the recovered baseline must be compared with this model. Renames happen only in a forward migration.
+
+Observed linked-project schema is recovery evidence, not an accepted target. At inspection time it materially differs: `public.accounts` lacks opening/snapshot fields; `public.cards` uses `is_credit`, requires `account_id`, permits nullable/non-ASCII-unchecked last4 and a broader network set; `public.transactions` has positive amounts but no `OPENING` or operation sequence; `internal.ledger_entries` rejects zero; and observed financial FKs are ID-only rather than owner-composite. Existing `command_receipts` also uses text idempotency keys without the contract-versioned receipt identity below. Implementation remains blocked until the missing migrations are recovered and these differences are reconciled forward-only.
+
+Remote-only rules:
+
+- Composite ownership references include `user_id`.
+- Public user-owned tables have RLS enabled and forced.
+- Ledger, receipts, heads and sync live outside exposed schemas.
+- Public projection views use `security_invoker=true`.
+- Receipt retention lasts for the lifetime of the user account; deletion of the auth account cascades according to approved account-deletion policy.
+- `sync_changes.sequence` is server-generated and ordered per user. The complete owner change stream and deletion tombstones remain for the lifetime of the user account so a fresh device can bootstrap by pulling from sequence zero without a snapshot race.
+
+### Command Receipt
+
+| Field | Rule |
+|-------|------|
+| `user_id`, `operation_id` | Composite primary identity |
+| `contract_version`, `command_type` | Included in canonical hash |
+| `payload_hash` | Server-computed SHA-256 |
+| `result_code` | APPLIED/DUPLICATE-compatible deterministic result |
+| `response_json` | Safe projection only, no raw payload |
+| `created_at` | Server time |
+
+The RPC locks/reads receipt first. Existing same hash returns `DUPLICATE`; different hash returns `OPERATION_COLLISION` with no effect.
+
+Remote revision rules: create/register accepts expected absence and returns revision `1`. Each accepted mutable account/card command increments exactly once. Local `remoteRevision` changes only from a receipt or pull projection. Movement facts use immutable event version `1`, not aggregate revision.
+
+## Sprint 3 Additions
+
+These extend, not replace, Sprint 2:
+
+- `credit_threshold_states(card_id, threshold, is_armed, last_crossed_at)`.
+- `credit_alerts` internal/user projection.
+- `rate_catalog_products` with `verified_at`, `stale_after`, source and disclaimer.
+- `personal_rate_history` effective-dated; never overwrites past simulations.
+- `credit_limit_history` effective-dated with an idempotent line-change command; reducing a line never rewrites debt.
+- `installment_simulations` snapshot of rate source and deterministic schedule.
+- Payment/purchase command kinds and movement pairs.
+
+Default rate freshness is 90 days unless a source declares an earlier expiry. Stale references remain labeled and cannot be presented as current.
+
+## State Lifecycles
+
+### Instrument
+
+```text
+ACTIVE -> ARCHIVED -> ACTIVE
+CARD_DRAFT/unused -> HARD_DELETED + tombstone
+```
+
+Account hard delete is unreachable after successful creation because `OPENING` exists.
+
+### Movement
+
+```text
+POSTED -> POSTED + separate ADJUSTMENT/REVERSAL
+```
+
+### Capture Candidate (Sprint 3)
+
+Required fields include stable candidate ID/owner, source kind, source reference/fingerprint, captured timestamp, extracted facts, per-candidate confidence assessment, deduplication key and review metadata. No raw notification/OCR payload is synchronized, logged or sent to telemetry; sensitive Yape OCR remains device-local. Any later evidence retention requires a separately approved policy. Provenance remains sufficient to explain the candidate without retaining raw evidence. No candidate writes a movement.
+
+```text
+PENDING -> CONFIRMED -> financial command
+        -> REJECTED  -> no financial effect
+```
+
+Confirmation always issues the same typed financial command path used by manual entry. Credit-card purchases require explicit confirmation regardless of confidence; uncertain instrument matching is never guessed.
+
+Capture validation covers source/reference and confidence presence, cross-source deduplication, no financial effect before review, mandatory credit-purchase confirmation, local-only OCR/raw evidence handling and manual correction when extraction fails.
+
+## Migration Plan
+
+### Room 2 -> 3
+
+1. Create four EP-CTA tables, indices, FKs and checks.
+2. Do not backfill invented financial instruments from profile/plans.
+3. Preserve all nine existing v2 tables and rows.
+4. Register `MIGRATION_2_3`; export `3.json`.
+5. Test representative v2 data and complete `1 -> 2 -> 3` chain.
+
+### Supabase
+
+1. Recover missing original baseline migrations.
+2. Validate clean PostgreSQL 17 reconstruction.
+3. Compare schema-only result with linked project; classify drift.
+4. Add forward-only EP-CTA/hardening migration.
+5. Add pgTAP for schema, commands, receipts, ledger, sync, RLS/grants and privacy.
+6. Run security/performance advisors; release-blocking findings must be resolved.

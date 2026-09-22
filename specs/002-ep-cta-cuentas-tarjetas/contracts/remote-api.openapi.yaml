@@ -1,0 +1,869 @@
+openapi: 3.1.0
+info:
+  title: Kipu EP-CTA Remote Contract
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Kipu-Proprietary
+  description: >-
+    Logical PostgREST projection and typed RPC contract for financial accounts
+    and cards. Every operation derives the owner from the bearer session. Clients
+    must never send user_id, PAN, CVV, raw request metadata, or banking credentials.
+servers:
+  - url: https://{projectRef}.supabase.co/rest/v1
+    variables:
+      projectRef:
+        default: project-ref
+security:
+  - bearerAuth: []
+paths:
+  /accounts:
+    get:
+      operationId: listAccounts
+      summary: Read owner-scoped account projections
+      parameters:
+        - $ref: '#/components/parameters/Select'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Accounts visible to the authenticated owner
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountProjection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /cards:
+    get:
+      operationId: listCards
+      summary: Read owner-scoped card projections
+      parameters:
+        - $ref: '#/components/parameters/Select'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Cards visible to the authenticated owner
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardProjection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /financial_movements:
+    get:
+      operationId: listFinancialMovements
+      summary: Read immutable owner-scoped movement projections
+      parameters:
+        - $ref: '#/components/parameters/Select'
+        - $ref: '#/components/parameters/UpdatedSince'
+      responses:
+        '200':
+          description: Movements needed to reproduce authenticated-owner balances
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MovementProjection'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/create_account_v1:
+    post:
+      operationId: createAccount
+      summary: Atomically create account, opening effect, receipt and sync event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountCommand'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/register_card_v1:
+    post:
+      operationId: registerCard
+      summary: Register a debit or credit card without financial duplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterCardCommand'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/record_opening_adjustment_v1:
+    post:
+      operationId: recordOpeningAdjustment
+      summary: Append a reversal and replacement adjustment for an immutable opening
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordOpeningAdjustmentCommand'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/update_instrument_appearance_v1:
+    post:
+      operationId: updateInstrumentAppearance
+      summary: Compare-and-set alias and appearance only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppearanceCommand'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/set_instrument_archived_v1:
+    post:
+      operationId: setInstrumentArchived
+      summary: Archive or reactivate after lifecycle and quota validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetArchivedCommand'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/delete_unused_card_v1:
+    post:
+      operationId: deleteUnusedCard
+      summary: Delete only a card proven to have no history, debt, or dependencies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteUnusedCardCommand'
+      responses:
+        '200':
+          $ref: '#/components/responses/CommandResult'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+  /rpc/pull_financial_changes_v1:
+    post:
+      operationId: pullFinancialChanges
+      summary: Pull ordered owner-scoped projections and tombstones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [contract_version, after_sequence, limit]
+              properties:
+                contract_version:
+                  const: 1
+                after_sequence:
+                  type: integer
+                  minimum: 0
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+      responses:
+        '200':
+          description: Ordered changes and next cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePage'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    Select:
+      name: select
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Projection allowlist; server grants remain authoritative.
+    UpdatedSince:
+      name: updated_at
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Optional PostgREST filter; not a synchronization cursor.
+  responses:
+    CommandResult:
+      description: Deterministic command result; HTTP success can include a business rejection.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommandResult'
+    InvalidRequest:
+      description: Invalid media type, shape, value or unsupported contract
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SafeError'
+    Unauthenticated:
+      description: Missing or invalid authenticated session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SafeError'
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+    Currency:
+      type: string
+      enum: [PEN, USD]
+    AccountType:
+      type: string
+      enum: [CASH, SAVINGS, BANK, DIGITAL_WALLET]
+    CardType:
+      type: string
+      enum: [DEBIT, CREDIT]
+    CardNetwork:
+      type: string
+      enum: [VISA, MASTERCARD, AMEX, OTHER]
+    Preset:
+      type: string
+      enum: [BCP, BBVA, INTERBANK, SCOTIABANK, BANCO_NACION, GENERIC]
+    Lifecycle:
+      type: string
+      enum: [ACTIVE, ARCHIVED]
+    CommandBase:
+      type: object
+      required: [contract_version, command_type, operation_id, aggregate_id, occurred_at]
+      properties:
+        contract_version:
+          const: 1
+        command_type:
+          type: string
+          enum: [CREATE_ACCOUNT, REGISTER_CARD, RECORD_OPENING_ADJUSTMENT, UPDATE_APPEARANCE, SET_ARCHIVED, DELETE_UNUSED_CARD]
+        operation_id:
+          $ref: '#/components/schemas/Uuid'
+        aggregate_id:
+          $ref: '#/components/schemas/Uuid'
+        predecessor_operation_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+          description: >-
+            Prior local mutation for the same owner and aggregate. The server
+            requires its applied receipt before accepting this successor.
+        occurred_at:
+          type: string
+          format: date-time
+    CreateAccountCommand:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/CommandBase'
+        - type: object
+          required: [opening_movement_id, alias, account_type, currency, preset_id, color_token, icon_token, initial_balance_minor_units, opened_at]
+          properties:
+            command_type:
+              const: CREATE_ACCOUNT
+            opening_movement_id:
+              $ref: '#/components/schemas/Uuid'
+            alias:
+              type: [string, 'null']
+              minLength: 1
+              maxLength: 80
+            account_type:
+              $ref: '#/components/schemas/AccountType'
+            currency:
+              $ref: '#/components/schemas/Currency'
+            preset_id:
+              $ref: '#/components/schemas/Preset'
+            color_token:
+              type: string
+            icon_token:
+              type: string
+            initial_balance_minor_units:
+              type: integer
+              minimum: 0
+              maximum: 99999999999999
+            opened_at:
+              type: string
+              format: date-time
+          allOf:
+            - if:
+                required: [predecessor_operation_id]
+                properties:
+                  predecessor_operation_id:
+                    type: string
+              then:
+                not: {}
+    RegisterCardCommand:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/CommandBase'
+        - type: object
+          required: [card_type, issuer, network, last_four_digits, currency, preset_id, color_token, icon_token, duplicate_acknowledged]
+          properties:
+            command_type:
+              const: REGISTER_CARD
+            card_type:
+              $ref: '#/components/schemas/CardType'
+            alias:
+              type: [string, 'null']
+              minLength: 1
+              maxLength: 80
+            issuer:
+              type: string
+              minLength: 1
+              maxLength: 80
+            network:
+              $ref: '#/components/schemas/CardNetwork'
+            last_four_digits:
+              type: string
+              pattern: '^[0-9]{4}$'
+            currency:
+              $ref: '#/components/schemas/Currency'
+            linked_account_id:
+              oneOf:
+                - $ref: '#/components/schemas/Uuid'
+                - type: 'null'
+            credit_limit_minor_units:
+              type: [integer, 'null']
+              minimum: 0
+              maximum: 99999999999999
+            billing_day:
+              type: [integer, 'null']
+              minimum: 1
+              maximum: 31
+            due_day:
+              type: [integer, 'null']
+              minimum: 1
+              maximum: 31
+            preset_id:
+              $ref: '#/components/schemas/Preset'
+            color_token:
+              type: string
+            icon_token:
+              type: string
+            duplicate_acknowledged:
+              type: boolean
+          allOf:
+            - if:
+                required: [predecessor_operation_id]
+                properties:
+                  predecessor_operation_id:
+                    type: string
+              then:
+                not: {}
+            - oneOf:
+                - properties:
+                    card_type:
+                      const: DEBIT
+                    linked_account_id:
+                      $ref: '#/components/schemas/Uuid'
+                    credit_limit_minor_units:
+                      type: 'null'
+                    billing_day:
+                      type: 'null'
+                    due_day:
+                      type: 'null'
+                  required: [linked_account_id, credit_limit_minor_units, billing_day, due_day]
+                - properties:
+                    card_type:
+                      const: CREDIT
+                    linked_account_id:
+                      type: 'null'
+                    credit_limit_minor_units:
+                      type: integer
+                      minimum: 0
+                      maximum: 99999999999999
+                    billing_day:
+                      type: integer
+                      minimum: 1
+                      maximum: 31
+                    due_day:
+                      type: integer
+                      minimum: 1
+                      maximum: 31
+                  required: [linked_account_id, credit_limit_minor_units, billing_day, due_day]
+    RecordOpeningAdjustmentCommand:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/CommandBase'
+        - type: object
+          required: [opening_movement_id, reversal_movement_id, adjustment_movement_id, corrected_balance_minor_units, corrected_opened_at]
+          properties:
+            command_type:
+              const: RECORD_OPENING_ADJUSTMENT
+            opening_movement_id:
+              $ref: '#/components/schemas/Uuid'
+            reversal_movement_id:
+              $ref: '#/components/schemas/Uuid'
+            adjustment_movement_id:
+              $ref: '#/components/schemas/Uuid'
+            corrected_balance_minor_units:
+              type: integer
+              minimum: 0
+              maximum: 99999999999999
+            corrected_opened_at:
+              type: string
+              format: date-time
+            expected_revision:
+              type: [integer, 'null']
+              minimum: 0
+          allOf:
+            - if:
+                properties:
+                  predecessor_operation_id:
+                    type: 'null'
+              then:
+                required: [expected_revision]
+                properties:
+                  expected_revision:
+                    type: integer
+                    minimum: 0
+              else:
+                properties:
+                  expected_revision:
+                    type: 'null'
+    UpdateAppearanceCommand:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/CommandBase'
+        - type: object
+          required: [aggregate_type, expected_revision, alias, preset_id, color_token, icon_token]
+          properties:
+            command_type:
+              const: UPDATE_APPEARANCE
+            aggregate_type:
+              type: string
+              enum: [ACCOUNT, CARD]
+            expected_revision:
+              type: [integer, 'null']
+              minimum: 0
+              description: >-
+                Required when predecessor_operation_id is null; otherwise null
+                and resolved from the predecessor receipt.
+            alias:
+              type: string
+              minLength: 1
+              maxLength: 80
+            preset_id:
+              $ref: '#/components/schemas/Preset'
+            color_token:
+              type: string
+            icon_token:
+              type: string
+          allOf:
+            - if:
+                properties:
+                  predecessor_operation_id:
+                    type: 'null'
+              then:
+                required: [expected_revision]
+                properties:
+                  expected_revision:
+                    type: integer
+                    minimum: 0
+              else:
+                properties:
+                  expected_revision:
+                    type: 'null'
+    SetArchivedCommand:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/CommandBase'
+        - type: object
+          required: [aggregate_type, expected_revision, archived]
+          properties:
+            command_type:
+              const: SET_ARCHIVED
+            aggregate_type:
+              type: string
+              enum: [ACCOUNT, CARD]
+            expected_revision:
+              type: [integer, 'null']
+              minimum: 0
+              description: >-
+                Required when predecessor_operation_id is null; otherwise null
+                and resolved from the predecessor receipt.
+            archived:
+              type: boolean
+          allOf:
+            - if:
+                properties:
+                  predecessor_operation_id:
+                    type: 'null'
+              then:
+                required: [expected_revision]
+                properties:
+                  expected_revision:
+                    type: integer
+                    minimum: 0
+              else:
+                properties:
+                  expected_revision:
+                    type: 'null'
+    DeleteUnusedCardCommand:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/CommandBase'
+        - type: object
+          required: [expected_revision]
+          properties:
+            command_type:
+              const: DELETE_UNUSED_CARD
+            expected_revision:
+              type: [integer, 'null']
+              minimum: 0
+              description: >-
+                Required when predecessor_operation_id is null; otherwise null
+                and resolved from the predecessor receipt.
+          allOf:
+            - if:
+                properties:
+                  predecessor_operation_id:
+                    type: 'null'
+              then:
+                required: [expected_revision]
+                properties:
+                  expected_revision:
+                    type: integer
+                    minimum: 0
+              else:
+                properties:
+                  expected_revision:
+                    type: 'null'
+    CommandResult:
+      type: object
+      additionalProperties: false
+      required: [operation_id, outcome]
+      properties:
+        operation_id:
+          $ref: '#/components/schemas/Uuid'
+        outcome:
+          type: string
+          enum: [APPLIED, DUPLICATE, OPERATION_COLLISION, CONFLICT, REJECTED]
+        aggregate_type:
+          type: [string, 'null']
+          enum: [ACCOUNT, CARD, MOVEMENT, null]
+        aggregate_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        accepted_revision:
+          type: [integer, 'null']
+          minimum: 0
+        sync_sequence:
+          type: [integer, 'null']
+          minimum: 0
+        rejection_code:
+          type: [string, 'null']
+          enum: [FREE_LIMIT_REACHED, INVALID_LINK, DEPENDENCIES_EXIST, DEBT_EXISTS, INVALID_VALUE, null]
+      allOf:
+        - if:
+            properties:
+              outcome:
+                enum: [APPLIED, DUPLICATE]
+          then:
+            required: [aggregate_type, aggregate_id, accepted_revision]
+            properties:
+              aggregate_type:
+                type: string
+                enum: [ACCOUNT, CARD, MOVEMENT]
+              aggregate_id:
+                $ref: '#/components/schemas/Uuid'
+              accepted_revision:
+                type: integer
+                minimum: 0
+        - if:
+            properties:
+              outcome:
+                const: REJECTED
+          then:
+            required: [rejection_code]
+            properties:
+              rejection_code:
+                type: string
+                enum: [FREE_LIMIT_REACHED, INVALID_LINK, DEPENDENCIES_EXIST, DEBT_EXISTS, INVALID_VALUE]
+    AccountProjection:
+      type: object
+      additionalProperties: false
+      required: [id, alias, account_type, currency, preset_id, color_token, icon_token, initial_balance_minor_units, opened_at, lifecycle, revision, updated_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        alias:
+          type: string
+        account_type:
+          $ref: '#/components/schemas/AccountType'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        preset_id:
+          $ref: '#/components/schemas/Preset'
+        color_token:
+          type: string
+        icon_token:
+          type: string
+        initial_balance_minor_units:
+          type: integer
+        opened_at:
+          type: string
+          format: date-time
+        lifecycle:
+          $ref: '#/components/schemas/Lifecycle'
+        revision:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+    CardProjection:
+      type: object
+      additionalProperties: false
+      required: [id, card_type, issuer, network, last_four_digits, currency, preset_id, color_token, icon_token, lifecycle, revision, updated_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        alias:
+          type: [string, 'null']
+        card_type:
+          $ref: '#/components/schemas/CardType'
+        issuer:
+          type: string
+        network:
+          $ref: '#/components/schemas/CardNetwork'
+        last_four_digits:
+          type: string
+          pattern: '^[0-9]{4}$'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        linked_account_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        credit_limit_minor_units:
+          type: [integer, 'null']
+        billing_day:
+          type: [integer, 'null']
+        due_day:
+          type: [integer, 'null']
+        preset_id:
+          $ref: '#/components/schemas/Preset'
+        color_token:
+          type: string
+        icon_token:
+          type: string
+        lifecycle:
+          $ref: '#/components/schemas/Lifecycle'
+        revision:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+    MovementProjection:
+      type: object
+      additionalProperties: false
+      required: [id, operation_id, operation_sequence, kind, amount_minor_units, currency, effective_at, status, created_at]
+      properties:
+        id:
+          $ref: '#/components/schemas/Uuid'
+        operation_id:
+          $ref: '#/components/schemas/Uuid'
+        operation_sequence:
+          type: integer
+          minimum: 0
+        kind:
+          type: string
+          enum: [OPENING, ADJUSTMENT, REVERSAL, CREDIT_PURCHASE, CARD_PAYMENT_CASH, CARD_PAYMENT_LIABILITY]
+        amount_minor_units:
+          type: integer
+          minimum: -99999999999999
+          maximum: 99999999999999
+        currency:
+          $ref: '#/components/schemas/Currency'
+        account_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        card_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        effective_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [POSTED]
+        reverses_movement_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        adjusts_movement_id:
+          oneOf:
+            - $ref: '#/components/schemas/Uuid'
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+      allOf:
+        - oneOf:
+            - properties:
+                kind:
+                  enum: [OPENING, ADJUSTMENT, REVERSAL]
+                account_id:
+                  $ref: '#/components/schemas/Uuid'
+                card_id:
+                  type: 'null'
+              required: [kind, account_id, card_id]
+            - properties:
+                kind:
+                  const: CREDIT_PURCHASE
+                account_id:
+                  type: 'null'
+                card_id:
+                  $ref: '#/components/schemas/Uuid'
+              required: [kind, account_id, card_id]
+            - properties:
+                kind:
+                  const: CARD_PAYMENT_CASH
+                account_id:
+                  $ref: '#/components/schemas/Uuid'
+                card_id:
+                  type: 'null'
+              required: [kind, account_id, card_id]
+            - properties:
+                kind:
+                  const: CARD_PAYMENT_LIABILITY
+                account_id:
+                  type: 'null'
+                card_id:
+                  $ref: '#/components/schemas/Uuid'
+              required: [kind, account_id, card_id]
+    ChangePage:
+      type: object
+      additionalProperties: false
+      required: [changes, next_sequence, has_more]
+      properties:
+        changes:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/AccountUpsertChange'
+              - $ref: '#/components/schemas/AccountArchiveChange'
+              - $ref: '#/components/schemas/CardUpsertChange'
+              - $ref: '#/components/schemas/CardArchiveChange'
+              - $ref: '#/components/schemas/CardDeleteChange'
+              - $ref: '#/components/schemas/MovementUpsertChange'
+        next_sequence:
+          type: integer
+        has_more:
+          type: boolean
+    AccountUpsertChange:
+      type: object
+      additionalProperties: false
+      required: [sequence, aggregate_type, aggregate_id, change_type, revision, projection]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        aggregate_type: {const: ACCOUNT}
+        aggregate_id: {$ref: '#/components/schemas/Uuid'}
+        change_type: {const: UPSERT}
+        revision: {type: integer, minimum: 1}
+        projection: {$ref: '#/components/schemas/AccountProjection'}
+    AccountArchiveChange:
+      type: object
+      additionalProperties: false
+      required: [sequence, aggregate_type, aggregate_id, change_type, revision, projection]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        aggregate_type: {const: ACCOUNT}
+        aggregate_id: {$ref: '#/components/schemas/Uuid'}
+        change_type: {const: ARCHIVE}
+        revision: {type: integer, minimum: 1}
+        projection: {$ref: '#/components/schemas/AccountProjection'}
+    CardUpsertChange:
+      type: object
+      additionalProperties: false
+      required: [sequence, aggregate_type, aggregate_id, change_type, revision, projection]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        aggregate_type: {const: CARD}
+        aggregate_id: {$ref: '#/components/schemas/Uuid'}
+        change_type: {const: UPSERT}
+        revision: {type: integer, minimum: 1}
+        projection: {$ref: '#/components/schemas/CardProjection'}
+    CardArchiveChange:
+      type: object
+      additionalProperties: false
+      required: [sequence, aggregate_type, aggregate_id, change_type, revision, projection]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        aggregate_type: {const: CARD}
+        aggregate_id: {$ref: '#/components/schemas/Uuid'}
+        change_type: {const: ARCHIVE}
+        revision: {type: integer, minimum: 1}
+        projection: {$ref: '#/components/schemas/CardProjection'}
+    CardDeleteChange:
+      type: object
+      additionalProperties: false
+      required: [sequence, aggregate_type, aggregate_id, change_type, tombstone_at]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        aggregate_type: {const: CARD}
+        aggregate_id: {$ref: '#/components/schemas/Uuid'}
+        change_type: {const: DELETE}
+        tombstone_at: {type: string, format: date-time}
+    MovementUpsertChange:
+      type: object
+      additionalProperties: false
+      required: [sequence, aggregate_type, aggregate_id, change_type, event_version, projection]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        aggregate_type: {const: MOVEMENT}
+        aggregate_id: {$ref: '#/components/schemas/Uuid'}
+        change_type: {const: UPSERT}
+        event_version: {const: 1}
+        projection: {$ref: '#/components/schemas/MovementProjection'}
+    SafeError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [UNAUTHENTICATED, INVALID_REQUEST, UNSUPPORTED_VERSION, FORBIDDEN, UNAVAILABLE]
+        message:
+          type: string
+          description: Safe non-sensitive user-independent message.
