@@ -330,4 +330,20 @@ With US1 complete:
 - [X] Reorganizar Ajustes según las cinco secciones de la referencia Stitch y conservar los controles de preferencias existentes.
 - [X] Mover Permisos y automatización a Notificaciones y alertas y mantener Biometría en Seguridad y copias de seguridad.
 - [X] Mostrar las funciones de otras épicas como pendientes, sin datos ficticios ni acciones destructivas.
-- [ ] Verificar visualmente en un dispositivo los temas claro y oscuro, el texto ampliado y los controles de PEN/USD y día 1–28.
+- [X] Verificar visualmente en un dispositivo los temas claro y oscuro, el texto ampliado y los controles de PEN/USD y día 1–28.
+
+## Phase 9: Convergence
+
+- [X] T073 CRITICAL Correct profile bootstrap so `handle_new_user()` and `ensure_profile()` work with forced RLS without weakening owner isolation per Constitution III and FR-001/FR-007/FR-041 (contradicts)
+- [X] T074 Add the secured `check_email_exists` RPC and its grants/tests so registration reliably returns `ACCOUNT_EXISTS` per FR-051 and US1/AC5 (missing)
+- [X] T075 Harden the `auth-access` rate-limit boundary by deriving trustworthy request identity, validating CAPTCHA, partitioning by identity and operation, and failing closed per FR-049/FR-050 and plan: backend abuse (contradicts)
+- [X] T076 Reject or defer profile-preference outbox work when its owner differs from the active verified session owner per FR-017 and plan: outbox ownership (contradicts)
+- [X] T077 Route password recovery through `auth-access`, preserve its neutral/rate-limited response, and wire recovery deep links and reset navigation per FR-008--FR-011/FR-050 and US2/AC1-4 (missing)
+- [X] T078 Restore the encrypted session and verified local owner before private navigation, retaining the permitted offline local core safely per FR-012/FR-013/FR-044 and US2/AC5 (missing)
+- [X] T079 Integrate `LocalLockCoordinator` with app lifecycle and render `LockScreenOverlay` over private content at launch and after the background timeout per FR-020/FR-021/FR-047 and US5/AC2-3 (missing)
+- [X] T080 Declare and request own-notification permission only after contextual rationale, preserving manual access and refreshing external revocation state per FR-032--FR-034/FR-039 and US4/AC1-2 (missing)
+- [X] T081 Mark all active-owner EP-PLA and EP-APS outboxes `WAITING_FOR_AUTH` before sign-out clears the session, retaining them under their original owner per FR-014--FR-017 (partial)
+- [X] T082 Install and refresh the encrypted authenticated session in `SupabaseClient` before protected profile RPCs or sync calls per FR-013/FR-025 (partial)
+- [X] T083 Apply account theme and balance masking to the protected runtime surfaces, including transition-safe private views, per FR-025--FR-027/FR-047 (partial)
+- [X] T084 Make the `profiles` migration idempotently establish the baseline and backfill existing Auth users without relying on absent legacy columns per plan: profile migration and Constitution IX (partial)
+- [X] T085 Execute and document device visual validation for both themes, enlarged text, PEN/USD, and month days 1--28 per plan: visual settings and tasks.md visual validation task (partial)

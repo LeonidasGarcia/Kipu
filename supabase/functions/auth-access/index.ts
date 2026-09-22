@@ -14,6 +14,7 @@ export type AuthSessionData = {
 export type Dependencies = {
   consumeRateBucket: (bucketKey: string) => Promise<RateBucketResult>;
   checkEmailExists: (email: string) => Promise<boolean>;
+  validateCaptcha?: (token: string, clientIp: string) => Promise<boolean>;
   signUpWithAuth: (
     email: string,
     password: string,
@@ -72,6 +73,16 @@ function validatePassword(password: unknown): boolean {
   return hasLetter && hasDigit;
 }
 
+function getClientIp(request: Request): string {
+  const cfConnectingIp = request.headers.get("cf-connecting-ip");
+  if (cfConnectingIp) return cfConnectingIp.trim();
+  const xRealIp = request.headers.get("x-real-ip");
+  if (xRealIp) return xRealIp.trim();
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0].trim();
+  return "127.0.0.1";
+}
+
 export function createAuthAccessHandler(deps: Dependencies) {
   return async (request: Request): Promise<Response> => {
     if (request.method === "OPTIONS") {
@@ -92,8 +103,28 @@ export function createAuthAccessHandler(deps: Dependencies) {
       return json({ status: 400, title: "Invalid JSON body" }, 400);
     }
 
-    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "127.0.0.1";
-    const bucketKey = `${path}:${clientIp}`;
+    const clientIp = getClientIp(request);
+    const normalizedEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+
+    async function checkRateLimits(operation: string): Promise<RateBucketResult> {
+      // Partition by operation and client IP
+      const ipRate = await deps.consumeRateBucket(`${operation}:ip:${clientIp}`);
+      if (!ipRate.allowed) return ipRate;
+
+      // Partition by operation and identity (email)
+      if (normalizedEmail) {
+        const idRate = await deps.consumeRateBucket(`${operation}:id:${normalizedEmail}`);
+        if (!idRate.allowed) return idRate;
+      }
+      return { allowed: true, retryAfterSeconds: 0 };
+    }
+
+    async function checkCaptcha(): Promise<boolean> {
+      if (!deps.validateCaptcha) return true;
+      const token = body.captchaToken ?? body.captchaProof;
+      if (typeof token !== "string" || !token.trim()) return false;
+      return deps.validateCaptcha(token.trim(), clientIp);
+    }
 
     if (path === "register") {
       const { email, password } = body;
@@ -108,7 +139,18 @@ export function createAuthAccessHandler(deps: Dependencies) {
         );
       }
 
-      const rate = await deps.consumeRateBucket(bucketKey);
+      if (!(await checkCaptcha())) {
+        return json(
+          {
+            status: 403,
+            title: "CAPTCHA Verification Failed",
+            detail: "La verificación de seguridad falló. Intente nuevamente.",
+          },
+          403,
+        );
+      }
+
+      const rate = await checkRateLimits("register");
       if (!rate.allowed) {
         return json(
           {
@@ -121,7 +163,6 @@ export function createAuthAccessHandler(deps: Dependencies) {
         );
       }
 
-      const normalizedEmail = (email as string).trim().toLowerCase();
       const exists = await deps.checkEmailExists(normalizedEmail);
       if (exists) {
         // FR-051: Disclosure limited to registration
@@ -164,7 +205,18 @@ export function createAuthAccessHandler(deps: Dependencies) {
         );
       }
 
-      const rate = await deps.consumeRateBucket(bucketKey);
+      if (!(await checkCaptcha())) {
+        return json(
+          {
+            status: 403,
+            title: "CAPTCHA Verification Failed",
+            detail: "La verificación de seguridad falló. Intente nuevamente.",
+          },
+          403,
+        );
+      }
+
+      const rate = await checkRateLimits("login");
       if (!rate.allowed) {
         return json(
           {
@@ -177,7 +229,6 @@ export function createAuthAccessHandler(deps: Dependencies) {
         );
       }
 
-      const normalizedEmail = (email as string).trim().toLowerCase();
       const authResponse = await deps.signInWithAuth(normalizedEmail, password as string);
 
       if (authResponse.error || !authResponse.data?.session) {
@@ -210,7 +261,19 @@ export function createAuthAccessHandler(deps: Dependencies) {
 
     if (path === "recovery") {
       const { email } = body;
-      const rate = await deps.consumeRateBucket(bucketKey);
+
+      if (!(await checkCaptcha())) {
+        return json(
+          {
+            status: 403,
+            title: "CAPTCHA Verification Failed",
+            detail: "La verificación de seguridad falló. Intente nuevamente.",
+          },
+          403,
+        );
+      }
+
+      const rate = await checkRateLimits("recovery");
       if (!rate.allowed) {
         return json(
           {
@@ -224,7 +287,6 @@ export function createAuthAccessHandler(deps: Dependencies) {
       }
 
       if (validateEmail(email)) {
-        const normalizedEmail = (email as string).trim().toLowerCase();
         await deps.resetPasswordForEmail(normalizedEmail);
       }
 
@@ -255,7 +317,8 @@ export function createDefaultDeps(): Dependencies {
       const baseUrl = getBaseUrl();
       const serviceKey = getServiceRoleKey();
       if (!baseUrl || !serviceKey) {
-        return { allowed: true, retryAfterSeconds: 0 };
+        // FR-049/FR-050: Fail closed if rate limiting cannot be enforced
+        return { allowed: false, retryAfterSeconds: 60 };
       }
       try {
         const res = await fetch(`${baseUrl}/rest/v1/rpc/consume_auth_rate_bucket`, {
@@ -268,15 +331,15 @@ export function createDefaultDeps(): Dependencies {
           body: JSON.stringify({ p_bucket_key: bucketKey }),
         });
         if (!res.ok) {
-          return { allowed: true, retryAfterSeconds: 0 };
+          return { allowed: false, retryAfterSeconds: 60 };
         }
         const data = await res.json();
         return {
-          allowed: data?.allowed ?? true,
-          retryAfterSeconds: data?.retry_after_seconds ?? 0,
+          allowed: data?.allowed ?? false,
+          retryAfterSeconds: data?.retry_after_seconds ?? 60,
         };
       } catch {
-        return { allowed: true, retryAfterSeconds: 0 };
+        return { allowed: false, retryAfterSeconds: 60 };
       }
     },
 
@@ -301,6 +364,29 @@ export function createDefaultDeps(): Dependencies {
         }
         const exists = await res.json();
         return Boolean(exists);
+      } catch {
+        return false;
+      }
+    },
+
+    validateCaptcha: async (token: string): Promise<boolean> => {
+      const captchaSecret = Deno.env.get("CAPTCHA_SECRET_KEY");
+      if (!captchaSecret) {
+        // Allow in development/test if no secret configured
+        return true;
+      }
+      try {
+        const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            secret: captchaSecret,
+            response: token,
+          }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        return Boolean(data.success);
       } catch {
         return false;
       }

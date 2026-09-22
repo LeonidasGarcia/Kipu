@@ -10,12 +10,12 @@ import com.kipu.app.feature.settings.domain.PermissionSourceGateway
 import com.kipu.app.feature.settings.domain.model.DeviceAuthorization
 import com.kipu.app.feature.settings.domain.model.PermissionSource
 import java.util.UUID
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -87,14 +87,15 @@ class PermissionsViewModelTest {
     }
 
     private class FakeSessionCoordinator(override val currentOwner: LocalOwner?) : SessionCoordinator {
-        override val remoteSession = MutableStateFlow(com.kipu.app.core.session.RemoteSession.Absent)
-        override val localAccess = MutableStateFlow(com.kipu.app.core.session.LocalAccess.Unlocked(UUID.randomUUID()))
-        override suspend fun setActiveOwner(userId: UUID) {}
+        override val remoteSession = MutableStateFlow<com.kipu.app.core.session.RemoteSession>(com.kipu.app.core.session.RemoteSession.Absent)
+        override val localAccess = MutableStateFlow<com.kipu.app.core.session.LocalAccess>(
+            currentOwner?.let { com.kipu.app.core.session.LocalAccess.Available(it.verifiedUserId, com.kipu.app.core.session.RemoteSession.Absent) }
+                ?: com.kipu.app.core.session.LocalAccess.NoOwner
+        )
+        override suspend fun setActiveOwner(userId: String) {}
         override suspend fun clearActiveOwner(explicit: Boolean) {}
-        override fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
-        override fun setLocalLocked(reason: String) {}
-        override fun setLocalUnlocked() {}
-        override fun notifyUserActivity() {}
+        override suspend fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
+        override suspend fun updateLockState(isLocked: Boolean, reason: String) {}
     }
 
     @Test
@@ -103,7 +104,7 @@ class PermissionsViewModelTest {
         try {
             val dao = FakePermissionDao()
             val gateway = FakeGateway()
-            val coordinator = FakeSessionCoordinator(LocalOwner(userId, false))
+            val coordinator = FakeSessionCoordinator(LocalOwner(userId.toString(), false))
             val viewModel = PermissionsViewModel(dao, gateway, coordinator)
 
             advanceUntilIdle()
@@ -124,7 +125,7 @@ class PermissionsViewModelTest {
         try {
             val dao = FakePermissionDao()
             val gateway = FakeGateway()
-            val coordinator = FakeSessionCoordinator(LocalOwner(userId, false))
+            val coordinator = FakeSessionCoordinator(LocalOwner(userId.toString(), false))
             val viewModel = PermissionsViewModel(dao, gateway, coordinator)
 
             advanceUntilIdle()
@@ -147,7 +148,7 @@ class PermissionsViewModelTest {
         try {
             val dao = FakePermissionDao()
             val gateway = FakeGateway()
-            val coordinator = FakeSessionCoordinator(LocalOwner(userId, false))
+            val coordinator = FakeSessionCoordinator(LocalOwner(userId.toString(), false))
             val viewModel = PermissionsViewModel(dao, gateway, coordinator)
 
             advanceUntilIdle()

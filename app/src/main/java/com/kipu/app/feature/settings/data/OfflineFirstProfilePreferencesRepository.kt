@@ -9,7 +9,9 @@ import com.kipu.app.feature.settings.domain.model.ProfilePreferenceDelta
 import com.kipu.app.feature.settings.domain.model.SyncState
 import com.kipu.app.feature.settings.domain.model.ThemeMode
 import com.kipu.app.feature.settings.domain.model.UserProfile
+import com.kipu.app.core.network.AuthenticatedSessionProvider
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import java.time.Instant
@@ -57,6 +59,7 @@ data class RemoteProfileDto(
 class OfflineFirstProfilePreferencesRepository @Inject constructor(
     private val profileDao: ProfilePreferencesDao,
     private val supabaseClient: SupabaseClient,
+    private val sessionProvider: AuthenticatedSessionProvider,
 ) : ProfilePreferencesRepository {
 
     override fun observeProfile(userId: UUID): Flow<UserProfile?> {
@@ -132,6 +135,11 @@ class OfflineFirstProfilePreferencesRepository @Inject constructor(
     }
 
     override suspend fun syncPendingPreferences(userId: UUID): Result<Unit> {
+        val session = sessionProvider.currentSession()
+        if (session != null) {
+            runCatching { supabaseClient.auth.importAuthToken(session.accessToken) }
+        }
+
         val pending = profileDao.findPendingOutbox(userId)
         for (item in pending) {
             try {
@@ -190,6 +198,10 @@ class OfflineFirstProfilePreferencesRepository @Inject constructor(
 
     override suspend fun refreshProfile(userId: UUID): Result<UserProfile> {
         return try {
+            val session = sessionProvider.currentSession()
+            if (session != null) {
+                runCatching { supabaseClient.auth.importAuthToken(session.accessToken) }
+            }
             val remote = supabaseClient.postgrest.rpc("ensure_profile").decodeAs<RemoteProfileDto>()
             val entity = UserProfileCacheEntity(
                 userId = UUID.fromString(remote.userId),

@@ -19,6 +19,7 @@ class PendingChangesRepositoryImpl @Inject constructor(
     }
 
     override suspend fun markWaitingForAuth(userId: UUID) {
+        planPreferencesDao.markAllWaitingForAuth(userId)
         profilePreferencesDao.markOutboxWaitingForAuth(userId)
     }
 }

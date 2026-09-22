@@ -7,10 +7,10 @@ import com.kipu.app.feature.settings.domain.model.DeviceAuthorization
 import com.kipu.app.feature.settings.domain.model.PermissionSource
 import com.kipu.app.feature.settings.domain.model.ProcessingAuthorization
 import java.util.UUID
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class PermissionSourcePolicyTest {
 

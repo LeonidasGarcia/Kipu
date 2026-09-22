@@ -25,22 +25,30 @@ class SyncProfilePreferencesWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
-        val userIdString = inputData.getString(KEY_USER_ID)
-        val userId: UUID? = if (userIdString != null) {
-            runCatching { UUID.fromString(userIdString) }.getOrNull()
-        } else {
-            sessionCoordinator.currentOwner?.verifiedUserId?.let {
-                runCatching { UUID.fromString(it) }.getOrNull()
-            }
+        val currentVerifiedOwner = sessionCoordinator.currentOwner?.verifiedUserId
+        if (currentVerifiedOwner.isNullOrEmpty()) {
+            SecureLog.w("SyncProfileWorker", "No active verified owner found, deferring sync")
+            return Result.retry()
         }
 
-        if (userId == null) {
-            SecureLog.w("SyncProfileWorker", "No active user ID found for sync")
-            return Result.success()
+        val userIdString = inputData.getString(KEY_USER_ID)
+        val targetUserId = if (userIdString != null) {
+            if (userIdString != currentVerifiedOwner) {
+                SecureLog.w("SyncProfileWorker", "Outbox owner ($userIdString) differs from active verified owner ($currentVerifiedOwner), deferring sync")
+                return Result.retry()
+            }
+            runCatching { UUID.fromString(userIdString) }.getOrNull()
+        } else {
+            runCatching { UUID.fromString(currentVerifiedOwner) }.getOrNull()
+        }
+
+        if (targetUserId == null) {
+            SecureLog.w("SyncProfileWorker", "Invalid user ID for sync")
+            return Result.failure()
         }
 
         return try {
-            val syncResult = repository.syncPendingPreferences(userId)
+            val syncResult = repository.syncPendingPreferences(targetUserId)
             if (syncResult.isSuccess) {
                 Result.success()
             } else {

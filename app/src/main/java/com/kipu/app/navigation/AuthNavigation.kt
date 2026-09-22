@@ -15,6 +15,7 @@ import com.kipu.app.feature.auth.presentation.RegisterScreen
 const val AUTH_LOGIN_ROUTE = "auth/login"
 const val AUTH_REGISTER_ROUTE = "auth/register"
 const val AUTH_RECOVERY_ROUTE = "auth/recovery"
+const val AUTH_RESET_PASSWORD_ROUTE = "auth/reset-password"
 
 fun NavGraphBuilder.authDestinations(
     navController: NavController,
@@ -81,6 +82,22 @@ fun NavGraphBuilder.authDestinations(
             onEmailChanged = viewModel::onEmailChanged,
             onSubmitRecovery = viewModel::submitRecoveryRequest,
             onNavigateBack = { navController.popBackStack() },
+        )
+    }
+
+    composable(AUTH_RESET_PASSWORD_ROUTE) {
+        val viewModel: com.kipu.app.feature.auth.presentation.RecoveryViewModel = hiltViewModel()
+        val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+        com.kipu.app.feature.auth.presentation.ResetPasswordScreen(
+            uiState = uiState,
+            onPasswordChanged = viewModel::onNewPasswordChanged,
+            onSubmitNewPassword = viewModel::submitNewPassword,
+            onNavigateToLogin = {
+                navController.navigate(AUTH_LOGIN_ROUTE) {
+                    popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                }
+            },
         )
     }
 }

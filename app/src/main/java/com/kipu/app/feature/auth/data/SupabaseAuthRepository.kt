@@ -2,6 +2,7 @@ package com.kipu.app.feature.auth.data
 
 import com.kipu.app.core.logging.SecureLog
 import com.kipu.app.core.security.KeystoreEncryptedSessionStorage
+import com.kipu.app.core.session.PendingChangesRepository
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.auth.data.remote.ApiResponse
@@ -17,6 +18,7 @@ import com.kipu.app.feature.auth.domain.model.CooldownState
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import java.time.Instant
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +31,7 @@ class SupabaseAuthRepository @Inject constructor(
     private val sessionStorage: KeystoreEncryptedSessionStorage,
     private val sessionCoordinator: SessionCoordinator,
     private val supabaseClient: SupabaseClient,
+    private val pendingChangesRepository: PendingChangesRepository,
 ) : AuthRepository {
 
     private val _cooldownState = MutableStateFlow(CooldownState())
@@ -103,6 +106,9 @@ class SupabaseAuthRepository @Inject constructor(
                 try {
                     // Import session into encrypted storage and Supabase client
                     sessionStorage.save("""{"access_token":"${envelope.accessToken}","refresh_token":"${envelope.refreshToken}","expires_in":${envelope.expiresIn},"token_type":"${envelope.tokenType}","user_id":"${envelope.userId}"}""")
+                    runCatching {
+                        supabaseClient.auth.importAuthToken(envelope.accessToken)
+                    }
                     sessionCoordinator.setActiveOwner(envelope.userId)
                     sessionCoordinator.updateRemoteSession(
                         RemoteSession.Valid(envelope.userId, Instant.now().plusSeconds(envelope.expiresIn))
@@ -135,6 +141,12 @@ class SupabaseAuthRepository @Inject constructor(
 
     override suspend fun signOut(explicit: Boolean): Result<Unit> {
         return try {
+            val ownerId = sessionCoordinator.currentOwner?.verifiedUserId
+            if (ownerId != null) {
+                runCatching { UUID.fromString(ownerId) }.getOrNull()?.let { userId ->
+                    pendingChangesRepository.markWaitingForAuth(userId)
+                }
+            }
             sessionCoordinator.clearActiveOwner(explicit)
             sessionStorage.delete()
             sessionCoordinator.updateRemoteSession(RemoteSession.Absent)
@@ -156,15 +168,25 @@ class SupabaseAuthRepository @Inject constructor(
                 sessionCoordinator.updateRemoteSession(RemoteSession.Absent)
                 return Result.success(null)
             }
-            val currentOwner = sessionCoordinator.currentOwner
-            if (currentOwner != null && !currentOwner.explicitlySignedOut) {
-                sessionCoordinator.updateRemoteSession(
-                    RemoteSession.Valid(currentOwner.verifiedUserId, Instant.now().plusSeconds(3600))
-                )
-                Result.success(AuthResult.Success(currentOwner.verifiedUserId))
-            } else {
-                Result.success(null)
+            val tokenRegex = "\"access_token\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+            val userIdRegex = "\"user_id\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+            val token = tokenRegex.find(sessionJson)?.groupValues?.get(1)
+            val userId = userIdRegex.find(sessionJson)?.groupValues?.get(1)
+
+            if (userId.isNullOrEmpty() || token.isNullOrEmpty()) {
+                sessionCoordinator.updateRemoteSession(RemoteSession.Absent)
+                return Result.success(null)
             }
+
+            runCatching {
+                supabaseClient.auth.importAuthToken(token)
+            }
+
+            sessionCoordinator.setActiveOwner(userId)
+            sessionCoordinator.updateRemoteSession(
+                RemoteSession.Valid(userId, Instant.now().plusSeconds(3600))
+            )
+            Result.success(AuthResult.Success(userId))
         } catch (e: Exception) {
             Result.failure(e)
         }

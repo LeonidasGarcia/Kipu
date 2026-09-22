@@ -27,16 +27,15 @@ class RecoveryViewModelTest {
 
     private val fakeRequestRecovery = object : RequestPasswordRecovery(
         authApi = com.kipu.app.feature.auth.data.remote.AuthApi(io.ktor.client.HttpClient()),
-        supabaseClient = dummyClient,
     ) {
-        // Always succeeds with neutral acceptance
+        override suspend fun invoke(email: String): Result<Unit> = Result.success(Unit)
     }
 
     private var fakeResetResult: Result<Unit> = Result.success(Unit)
     private val fakeCompleteReset = object : CompletePasswordReset(
         supabaseClient = dummyClient,
     ) {
-        // Will test using overridden behavior or validator
+        override suspend fun invoke(newPassword: String): Result<Unit> = fakeResetResult
     }
 
     @Before

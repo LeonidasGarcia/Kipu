@@ -5,9 +5,13 @@ BEGIN
         SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles'
     ) THEN
         IF EXISTS (
-            SELECT 1 FROM public.profiles WHERE biometric_enabled = true
+            SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'biometric_enabled'
         ) THEN
-            RAISE EXCEPTION 'Aborting migration: active legacy biometric_enabled=true detected. Manual remediation required.';
+            IF EXISTS (
+                SELECT 1 FROM public.profiles WHERE biometric_enabled = true
+            ) THEN
+                RAISE EXCEPTION 'Aborting migration: active legacy biometric_enabled=true detected. Manual remediation required.';
+            END IF;
         END IF;
     END IF;
 END $$;
@@ -29,6 +33,11 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 1;
+
+-- Backfill existing Auth users into public.profiles
+INSERT INTO public.profiles (user_id)
+SELECT id FROM auth.users
+ON CONFLICT (user_id) DO NOTHING;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles FORCE ROW LEVEL SECURITY;
@@ -87,9 +96,13 @@ CREATE POLICY profiles_executor_update ON public.profiles
 
 DROP POLICY IF EXISTS profiles_bootstrap_insert ON public.profiles;
 CREATE POLICY profiles_bootstrap_insert ON public.profiles
-    FOR ALL TO profile_bootstrap_executor
-    USING ((select auth.uid()) = user_id)
-    WITH CHECK ((select auth.uid()) = user_id);
+    FOR INSERT TO profile_bootstrap_executor
+    WITH CHECK ((select auth.uid()) IS NULL OR (select auth.uid()) = user_id);
+
+DROP POLICY IF EXISTS profiles_bootstrap_select ON public.profiles;
+CREATE POLICY profiles_bootstrap_select ON public.profiles
+    FOR SELECT TO profile_bootstrap_executor
+    USING ((select auth.uid()) = user_id);
 
 -- RLS Policy on receipts
 DROP POLICY IF EXISTS receipts_executor_policy ON private.profile_preference_receipts;

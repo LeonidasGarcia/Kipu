@@ -42,3 +42,18 @@
 1. **Paso**: Activar modo avión en el dispositivo.
 2. **Paso**: Denegar o revocar todos los permisos de notificaciones y automatización.
 3. **Resultado**: El registro manual de gastos, presupuestos e instrumentos financieros permanece 100% funcional y disponible localmente en Room.
+
+---
+
+## 3. Validación Visual de Perfil, Ajustes y Accesibilidad (T085)
+
+| Dimensión de Prueba | Configuración Evaluada | Criterio de Aceptación | Resultado |
+| :--- | :--- | :--- | :--- |
+| **Tema Claro (Light)** | `ThemeMode.LIGHT` | Contraste de texto >= 4.5:1; paleta Kipu Teal en botones y acentos; fondo claro. | ✓ PASS |
+| **Tema Oscuro (Dark)** | `ThemeMode.DARK` | Contraste de texto en superficies oscuras; sin destellos; `LockScreenOverlay` 100% opaco. | ✓ PASS |
+| **Escala de Texto 200%** | Escala de fuente Android al 200% | Desplazamiento vertical activo; sin truncamiento ni superposición de textos en títulos o botones. Controles táctiles >= 48dp. | ✓ PASS |
+| **Moneda Principal (PEN/USD)** | Selector PEN y USD | Actualización inmediata en estado local; no muta montos ni transacciones existentes en base de datos. | ✓ PASS |
+| **Día de Inicio de Mes (1..28)** | Rango válido: 1, 15, 28 | Guarda localmente y en outbox sin error; previene inconsistencias en febrero. | ✓ PASS |
+| **Día de Inicio de Mes (Fuera)** | Rango inválido: 0, 29, 31 | Rechazo inmediato en UI con mensaje de error; no dispara escritura en Room ni outbox. | ✓ PASS |
+| **Ocultamiento de Saldos** | `LocalBalanceMasked` / `hideBalances` | Sustitución completa de cifras por `••••••` en todas las pantallas protegidas; no altera el valor subyacente. | ✓ PASS |
+

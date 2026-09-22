@@ -1,7 +1,10 @@
 package com.kipu.app.core.security
 
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import com.kipu.app.core.security.model.LocalLockState
 import com.kipu.app.core.security.model.LockReason
+import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.settings.data.local.DeviceAccountSettingsDao
 import com.kipu.app.feature.settings.data.local.DeviceAccountSettingsEntity
@@ -21,7 +24,7 @@ class LocalLockCoordinator(
     private val sessionCoordinator: SessionCoordinator,
     private val monotonicClock: () -> Long,
     private val scope: CoroutineScope,
-) {
+) : DefaultLifecycleObserver {
 
     @Inject
     constructor(
@@ -49,21 +52,40 @@ class LocalLockCoordinator(
 
     init {
         scope.launch {
-            val owner = sessionCoordinator.currentOwner
-            val userId = owner?.verifiedUserId?.let { runCatching { UUID.fromString(it) }.getOrNull() }
-            if (userId != null) {
-                val settings = dao.findSettings(userId)
-                isEnabledForCurrentOwner = settings?.localUnlockEnabled == true
-                if (isEnabledForCurrentOwner) {
-                    _lockState.value = LocalLockState.LOCKED
-                    _lastLockReason.value = LockReason.APP_START
+            sessionCoordinator.localAccess.collect { access ->
+                val userIdStr = when (access) {
+                    is LocalAccess.Available -> access.userId
+                    is LocalAccess.Protected -> access.userId
+                    is LocalAccess.NoOwner -> null
+                }
+                val userId = userIdStr?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                if (userId != null) {
+                    val settings = dao.findSettings(userId)
+                    isEnabledForCurrentOwner = settings?.localUnlockEnabled == true
+                    if (isEnabledForCurrentOwner) {
+                        if (_lockState.value != LocalLockState.UNLOCKED) {
+                            _lockState.value = LocalLockState.LOCKED
+                            if (_lastLockReason.value == null) {
+                                _lastLockReason.value = LockReason.APP_START
+                            }
+                        }
+                    } else {
+                        _lockState.value = LocalLockState.DISABLED
+                    }
                 } else {
+                    isEnabledForCurrentOwner = false
                     _lockState.value = LocalLockState.DISABLED
                 }
-            } else {
-                _lockState.value = LocalLockState.DISABLED
             }
         }
+    }
+
+    override fun onStop(owner: LifecycleOwner) {
+        onAppBackgrounded()
+    }
+
+    override fun onStart(owner: LifecycleOwner) {
+        onAppForegrounded()
     }
 
     suspend fun setLocalUnlockEnabled(userId: UUID, enabled: Boolean, authenticators: Int = 0) {

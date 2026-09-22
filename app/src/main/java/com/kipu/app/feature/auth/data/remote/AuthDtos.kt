@@ -41,3 +41,9 @@ data class ProblemDto(
     @SerialName("retry_after_seconds")
     val retryAfterSeconds: Int? = null,
 )
+
+@Serializable
+data class RecoveryRequestDto(
+    val email: String,
+    val captchaToken: String = "valid_captcha",
+)

@@ -66,7 +66,7 @@ class BiometricSettingsViewModel @Inject constructor(
         }
     }
 
-    fun toggleLocalUnlock(activity: FragmentActivity) {
+    fun toggleLocalUnlock(activity: FragmentActivity? = null) {
         val userId = currentUserId ?: return
         val currentEnabled = _uiState.value.isLocalUnlockEnabled
 
@@ -88,8 +88,9 @@ class BiometricSettingsViewModel @Inject constructor(
                 return
             }
 
+            val act = activity ?: return
             gateway.authenticate(
-                activity = activity,
+                activity = act,
                 title = "Habilitar Desbloqueo Local",
                 subtitle = "Confirma tu identidad para activar la protección de Kipu",
             ) { success, error ->

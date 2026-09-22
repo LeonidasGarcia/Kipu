@@ -57,4 +57,23 @@ class AuthApi @Inject constructor(
             ApiResponse.NetworkFailure(e)
         }
     }
+
+    suspend fun recovery(request: RecoveryRequestDto): ApiResponse<Unit> {
+        return try {
+            val response = httpClient.post("functions/v1/auth-access/recovery") {
+                contentType(ContentType.Application.Json)
+                setBody(request)
+            }
+            when (response.status) {
+                HttpStatusCode.Accepted, HttpStatusCode.OK -> ApiResponse.Success(Unit)
+                else -> {
+                    val problem = try { response.body<ProblemDto>() } catch (_: Exception) { null }
+                    val retryAfter = response.headers["Retry-After"]?.toIntOrNull()
+                    ApiResponse.Error(response.status.value, problem, retryAfter)
+                }
+            }
+        } catch (e: Exception) {
+            ApiResponse.NetworkFailure(e)
+        }
+    }
 }

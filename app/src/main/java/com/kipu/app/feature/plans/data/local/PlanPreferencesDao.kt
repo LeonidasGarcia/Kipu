@@ -44,6 +44,7 @@ abstract class PlanPreferencesDao {
     @Query("SELECT COUNT(*) FROM sync_outbox WHERE user_id=:userId AND status='PENDING'") abstract suspend fun retryablePendingCount(userId: UUID): Int
     @Query("UPDATE sync_outbox SET status='PENDING', next_attempt_at=:now, lease_until=NULL WHERE operation_id=:id") abstract suspend fun makePendingNow(id: UUID, now: Instant)
     @Query("UPDATE sync_outbox SET status='WAITING_FOR_AUTH', lease_until=NULL, updated_at=:now WHERE operation_id=:id") abstract suspend fun waitForAuth(id: UUID, now: Instant)
+    @Query("UPDATE sync_outbox SET status='WAITING_FOR_AUTH', lease_until=NULL, updated_at=:now WHERE user_id=:userId AND status IN ('PENDING','IN_FLIGHT')") abstract suspend fun markAllWaitingForAuth(userId: UUID, now: Instant = Instant.now())
     @Query("UPDATE sync_outbox SET status='TERMINAL_ERROR', last_error_code=:code, lease_until=NULL, updated_at=:now WHERE operation_id=:id") abstract suspend fun terminal(id: UUID, code: String, now: Instant)
     @Query("UPDATE sync_outbox SET status='PENDING', next_attempt_at=:next, lease_until=NULL, last_error_code=:code, updated_at=:now WHERE operation_id=:id") abstract suspend fun retry(id: UUID, code: String?, next: Instant, now: Instant)
 

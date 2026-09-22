@@ -7,8 +7,8 @@ import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.settings.data.local.DeviceAccountSettingsDao
 import com.kipu.app.feature.settings.data.local.DeviceAccountSettingsEntity
 import java.util.UUID
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import org.junit.Assert.assertEquals
+import org.junit.Test
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -33,21 +33,22 @@ class LocalLockTest {
     }
 
     private class FakeCoordinator(override val currentOwner: LocalOwner?) : SessionCoordinator {
-        override val remoteSession = MutableStateFlow(com.kipu.app.core.session.RemoteSession.Absent)
-        override val localAccess = MutableStateFlow(com.kipu.app.core.session.LocalAccess.Unlocked(UUID.randomUUID()))
-        override suspend fun setActiveOwner(userId: UUID) {}
+        override val remoteSession = MutableStateFlow<com.kipu.app.core.session.RemoteSession>(com.kipu.app.core.session.RemoteSession.Absent)
+        override val localAccess = MutableStateFlow<com.kipu.app.core.session.LocalAccess>(
+            currentOwner?.let { com.kipu.app.core.session.LocalAccess.Available(it.verifiedUserId, com.kipu.app.core.session.RemoteSession.Absent) }
+                ?: com.kipu.app.core.session.LocalAccess.NoOwner
+        )
+        override suspend fun setActiveOwner(userId: String) {}
         override suspend fun clearActiveOwner(explicit: Boolean) {}
-        override fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
-        override fun setLocalLocked(reason: String) {}
-        override fun setLocalUnlocked() {}
-        override fun notifyUserActivity() {}
+        override suspend fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
+        override suspend fun updateLockState(isLocked: Boolean, reason: String) {}
     }
 
     @Test
     fun `when disabled, backgrounding and foregrounding keeps state DISABLED`() = runTest {
         var currentTime = 100_000L
         val dao = FakeDeviceSettingsDao()
-        val coordinator = FakeCoordinator(LocalOwner(userId, false))
+        val coordinator = FakeCoordinator(LocalOwner(userId.toString(), false))
         val lockCoordinator = LocalLockCoordinator(
             dao = dao,
             sessionCoordinator = coordinator,
@@ -68,7 +69,7 @@ class LocalLockTest {
     fun `backgrounding for 59s does not lock, backgrounding for 60s locks UI`() = runTest {
         var currentTime = 100_000L
         val dao = FakeDeviceSettingsDao()
-        val coordinator = FakeCoordinator(LocalOwner(userId, false))
+        val coordinator = FakeCoordinator(LocalOwner(userId.toString(), false))
         val lockCoordinator = LocalLockCoordinator(
             dao = dao,
             sessionCoordinator = coordinator,

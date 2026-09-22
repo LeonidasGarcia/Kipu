@@ -8,42 +8,47 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class RequestPasswordRecovery @Inject constructor(
+open class RequestPasswordRecovery @Inject constructor(
     private val authApi: AuthApi,
-    private val supabaseClient: SupabaseClient,
 ) {
     /**
-     * Solicits password recovery instructions for the provided email.
+     * Solicits password recovery instructions for the provided email via auth-access.
      * Complies with FR-008 and SC-002: always returns Success with the same neutral message
-     * regardless of whether the email exists or not.
+     * regardless of whether the email exists or not, and respects rate limiting (FR-050).
      */
-    suspend operator fun invoke(email: String): Result<Unit> {
+    open suspend operator fun invoke(email: String): Result<Unit> {
         val validation = PasswordValidator.validateEmail(email)
         if (!validation.isValid) {
-            // Even on invalid format, return success to maintain neutral behavior externally,
-            // or let the UI validate client-side first.
+            // Even on invalid format, return success to maintain neutral behavior externally
             return Result.success(Unit)
         }
         val normalized = PasswordValidator.normalizeEmail(email)
-        return try {
-            supabaseClient.auth.resetPasswordForEmail(normalized)
-            Result.success(Unit)
-        } catch (_: Exception) {
-            // SC-002: Neutral acceptance even if remote fails
-            Result.success(Unit)
+        return when (val response = authApi.recovery(com.kipu.app.feature.auth.data.remote.RecoveryRequestDto(email = normalized))) {
+            is ApiResponse.Success -> Result.success(Unit)
+            is ApiResponse.Error -> {
+                if (response.statusCode == 429) {
+                    val retry = response.retryAfter ?: 60
+                    Result.failure(Exception("Demasiados intentos. Intenta en $retry segundos."))
+                } else {
+                    Result.success(Unit)
+                }
+            }
+            is ApiResponse.NetworkFailure -> {
+                Result.failure(Exception("Se requiere conexión a internet para solicitar la recuperación."))
+            }
         }
     }
 }
 
 @Singleton
-class CompletePasswordReset @Inject constructor(
+open class CompletePasswordReset @Inject constructor(
     private val supabaseClient: SupabaseClient,
 ) {
     /**
      * Updates the password using the active authenticated session restored from recovery deep link.
      * Complies with FR-010 and FR-011.
      */
-    suspend operator fun invoke(newPassword: String): Result<Unit> {
+    open suspend operator fun invoke(newPassword: String): Result<Unit> {
         val validation = PasswordValidator.validatePassword(newPassword)
         if (!validation.isValid) {
             return Result.failure(Exception((validation as PasswordValidator.ValidationResult.Invalid).reason))

@@ -12,7 +12,7 @@ object LogRedactor {
     private val JWT_REGEX = Regex("""eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+""")
     private val EMAIL_REGEX = Regex("""\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b""")
     private val PASSWORD_JSON_REGEX = Regex("""(?i)"password"\s*:\s*"[^"]*"""")
-    private val PASSWORD_PARAM_REGEX = Regex("""(?i)(password|pass|secret)\s*=\s*([^\s&,;]+)""")
+    private val PASSWORD_PARAM_REGEX = Regex("""(?i)(password|pass|secret)\s*([:= ]\s*)([^\s&,;]+)""")
     private val RECOVERY_TOKEN_REGEX = Regex("""(?i)(recovery_token|token|access_token|refresh_token)\s*=\s*([^\s&,;]+)""")
     private val BEARER_REGEX = Regex("""(?i)Bearer\s+[A-Za-z0-9._~+/-]+=*""")
 
@@ -25,11 +25,9 @@ object LogRedactor {
         sanitized = JWT_REGEX.replace(sanitized, "[REDACTED_JWT]")
         sanitized = BEARER_REGEX.replace(sanitized, "Bearer [REDACTED_TOKEN]")
         sanitized = PASSWORD_JSON_REGEX.replace(sanitized, """"password":"[REDACTED_PASSWORD]"""")
-        sanitized = PASSWORD_PARAM_REGEX.replace(sanitized, "$1=[REDACTED_PASSWORD]")
+        sanitized = PASSWORD_PARAM_REGEX.replace(sanitized, "$1$2[REDACTED_PASSWORD]")
         sanitized = RECOVERY_TOKEN_REGEX.replace(sanitized, "$1=[REDACTED_TOKEN]")
-        sanitized = EMAIL_REGEX.replace(sanitized) { matchResult ->
-            maskEmail(matchResult.value)
-        }
+        sanitized = EMAIL_REGEX.replace(sanitized, "[REDACTED_EMAIL]")
         return sanitized
     }
 
