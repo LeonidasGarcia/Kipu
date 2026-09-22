@@ -34,4 +34,42 @@
     <string name="plan_continue_free">Continuar con Plan Free</string>
     <string name="plan_confirming">Guardando…</string>
     <string name="plan_scope_note">Validez fiscal y operativa: esta selección registra una preferencia local. En esta versión no se realizan cobros, no se inicia una prueba y no se habilitan beneficios Premium.</string>
+
+    <!-- EP-APS Auth strings -->
+    <string name="auth_login_title">Iniciar Sesión</string>
+    <string name="auth_register_title">Crear Cuenta</string>
+    <string name="auth_email_label">Correo electrónico</string>
+    <string name="auth_password_label">Contraseña</string>
+    <string name="auth_login_button">Ingresar</string>
+    <string name="auth_register_button">Registrarme</string>
+    <string name="auth_goto_register">¿No tienes cuenta? Regístrate</string>
+    <string name="auth_goto_login">¿Ya tienes cuenta? Inicia sesión</string>
+    <string name="auth_existing_account_dialog_title">Cuenta existente</string>
+    <string name="auth_existing_account_dialog_message">El correo ingresado ya está asociado a una cuenta Kipu. ¿Deseas iniciar sesión?</string>
+    <string name="auth_confirmation_required_message">Te hemos enviado un correo de confirmación. Por favor verifica tu cuenta para ingresar.</string>
+    <string name="auth_neutral_error">Correo o contraseña incorrectos.</string>
+    <string name="auth_network_required">Se requiere conexión a internet para esta operación.</string>
+    <string name="auth_cooldown_message">Demasiados intentos. Por favor espera %d segundos.</string>
+    <string name="auth_recovery_button">¿Olvidaste tu contraseña?</string>
+    <string name="auth_recovery_title">Recuperar Acceso</string>
+    <string name="auth_recovery_sent_message">Si la cuenta existe, recibirás instrucciones en tu correo para restablecer tu acceso.</string>
+
+    <!-- EP-APS HU-05 Permissions and Consent strings -->
+    <string name="perm_title">Permisos y Automatización</string>
+    <string name="perm_subtitle">Control contextual de permisos del dispositivo y consentimiento de cuenta</string>
+    <string name="perm_manual_core_intact">El registro manual siempre permanece 100% operativo sin importar estos permisos.</string>
+    <string name="perm_own_notifications_title">Notificaciones de Kipu</string>
+    <string name="perm_own_notifications_desc">Recordatorios de presupuesto, vencimientos de deudas y balances.</string>
+    <string name="perm_own_notifications_rationale">Para enviarte alertas oportunas sobre tus finanzas personales, necesitamos permiso para mostrar notificaciones en este dispositivo. Puedes activarlo o desactivarlo en cualquier momento.</string>
+    <string name="perm_notification_listener_title">Lectura de Notificaciones Bancarias</string>
+    <string name="perm_notification_listener_desc">Sugerir transacciones automáticamente desde notificaciones bancarias.</string>
+    <string name="perm_notification_listener_rationale">Kipu puede interpretar únicamente las alertas emitidas por aplicaciones bancarias compatibles para sugerir borradores de gastos. Ningún dato sensible sale de tu dispositivo. Esta función requiere el plan Premium.</string>
+    <string name="perm_premium_required">Esta fuente de automatización requiere una suscripción Premium activa.</string>
+    <string name="perm_device_granted">Permiso concedido en el sistema</string>
+    <string name="perm_device_denied">Permiso desactivado en el sistema</string>
+    <string name="perm_account_consent_granted">Consentimiento activo</string>
+    <string name="perm_account_consent_revoked">Consentimiento revocado</string>
+    <string name="perm_open_settings">Abrir Ajustes del Sistema</string>
+    <string name="perm_grant_consent">Otorgar Consentimiento</string>
+    <string name="perm_revoke_consent">Revocar Consentimiento</string>
 </resources>

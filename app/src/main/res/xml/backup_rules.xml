@@ -4,4 +4,8 @@
     <exclude domain="database" path="kipu.db" />
     <exclude domain="database" path="kipu.db-wal" />
     <exclude domain="database" path="kipu.db-shm" />
+    <!-- Encrypted session storage and local security state must never be backed up (FR-006, FR-043) -->
+    <exclude domain="file" path="kipu_session.enc" />
+    <exclude domain="file" path="datastore/" />
+    <exclude domain="sharedpref" path="." />
 </full-backup-content>

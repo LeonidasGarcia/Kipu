@@ -201,7 +201,7 @@ class PlanSelectionViewModelTest {
             status = TrialEligibilityStatus.ELIGIBLE,
             source = TrialEligibilitySource.VERIFIED_ACCOUNT_HISTORY,
             verifiedAt = Instant.parse("2026-09-15T10:00:00Z"),
-            validUntil = Instant.parse("2026-09-16T10:00:00Z"),
+            validUntil = Instant.parse("2030-01-01T00:00:00Z"),
         )
         val ineligible = TrialEligibilitySnapshot(
             status = TrialEligibilityStatus.INELIGIBLE,

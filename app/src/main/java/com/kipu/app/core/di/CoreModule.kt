@@ -14,7 +14,14 @@ import javax.inject.Singleton
 
 @Module @InstallIn(SingletonComponent::class)
 object CoreModule {
-    @Provides @Singleton fun database(@ApplicationContext context: Context): KipuDatabase = Room.databaseBuilder(context, KipuDatabase::class.java, "kipu.db").build()
+    @Provides @Singleton fun database(@ApplicationContext context: Context): KipuDatabase =
+        Room.databaseBuilder(context, KipuDatabase::class.java, "kipu.db")
+            .addMigrations(com.kipu.app.core.database.MIGRATION_1_2)
+            .build()
+
     @Provides fun dao(database: KipuDatabase): PlanPreferencesDao = database.planPreferencesDao()
+    @Provides fun profileDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.ProfilePreferencesDao = database.profilePreferencesDao()
+    @Provides fun permissionConsentDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.PermissionConsentDao = database.permissionConsentDao()
+    @Provides fun deviceAccountSettingsDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.DeviceAccountSettingsDao = database.deviceAccountSettingsDao()
     @Provides fun clock(): Clock = Clock.systemUTC()
 }
