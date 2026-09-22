@@ -36,10 +36,12 @@ import com.kipu.app.navigation.AUTH_RESET_PASSWORD_ROUTE
 import com.kipu.app.navigation.AuthDeepLinkHandler
 import com.kipu.app.navigation.BIOMETRIC_ROUTE
 import com.kipu.app.navigation.DeepLinkResult
+import com.kipu.app.navigation.MOVEMENTS_HISTORY_ROUTE
 import com.kipu.app.navigation.PLAN_SELECTION_ROUTE
 import com.kipu.app.navigation.PROFILE_SETTINGS_ROUTE
 import com.kipu.app.navigation.accountsDestinations
 import com.kipu.app.navigation.authDestinations
+import com.kipu.app.navigation.movementsDestinations
 import com.kipu.app.navigation.planSelectionDestination
 import com.kipu.app.navigation.settingsDestinations
 import com.kipu.app.ui.component.LocalBalanceMasked
@@ -111,7 +113,7 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(Unit) {
                 val restoreResult = authRepository.restoreSession()
                 if (restoreResult.getOrNull() is AuthResult.Success && pendingDeepLink == null) {
-                    navController.navigate(PROFILE_SETTINGS_ROUTE) {
+                    navController.navigate(MOVEMENTS_HISTORY_ROUTE) {
                         popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
                     }
                 }
@@ -163,6 +165,9 @@ class MainActivity : FragmentActivity() {
                                     },
                                 )
                                 accountsDestinations(
+                                    navController = navController,
+                                )
+                                movementsDestinations(
                                     navController = navController,
                                 )
                             }

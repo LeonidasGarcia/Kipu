@@ -55,6 +55,8 @@ fun ProfileSettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPermissions: (() -> Unit)? = null,
     onNavigateToBiometrics: (() -> Unit)? = null,
+    onNavigateToMovements: (() -> Unit)? = null,
+    onNavigateToAccounts: (() -> Unit)? = null,
     onSignOut: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -108,6 +110,29 @@ fun ProfileSettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 SyncStateBanner(state.syncState)
+
+                if (onNavigateToMovements != null || onNavigateToAccounts != null) {
+                    SettingsSection("PANTALLAS PRINCIPALES") {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                                onNavigateToMovements?.let {
+                                    ActiveSetting(
+                                        title = "Historial de Movimientos (Pantalla 10)",
+                                        subtitle = "Consultar ledger, filtros rápidos y registrar gastos/ingresos",
+                                        onClick = it,
+                                    )
+                                }
+                                onNavigateToAccounts?.let {
+                                    ActiveSetting(
+                                        title = "Mi Dinero Real / Cuentas (Dashboard)",
+                                        subtitle = "Ver cuentas bancarias y tarjetas de crédito",
+                                        onClick = it,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
 
                 SettingsSection("MI SUSCRIPCIÓN") {
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
