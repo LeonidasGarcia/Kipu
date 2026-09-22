@@ -19,6 +19,7 @@ object CoreModule {
             .addMigrations(
                 com.kipu.app.core.database.MIGRATION_1_2,
                 com.kipu.app.core.database.MIGRATION_2_3,
+                com.kipu.app.core.database.MIGRATION_3_4,
             )
             .build()
 
@@ -30,5 +31,6 @@ object CoreModule {
     @Provides fun cardDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.CardDao = database.cardDao()
     @Provides fun financialMovementDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.FinancialMovementDao = database.financialMovementDao()
     @Provides fun instrumentSyncDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.InstrumentSyncDao = database.instrumentSyncDao()
+    @Provides fun movementDao(database: KipuDatabase): com.kipu.app.feature.movements.data.local.MovementDao = database.movementDao()
     @Provides fun clock(): Clock = Clock.systemUTC()
 }

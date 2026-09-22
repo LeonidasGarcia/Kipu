@@ -11,6 +11,12 @@ import com.kipu.app.feature.accounts.data.local.FinancialMovementDao
 import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncDao
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncOutboxEntity
+import com.kipu.app.feature.movements.data.local.BalanceProjectionEntity
+import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
+import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
+import com.kipu.app.feature.movements.data.local.MovementDao
+import com.kipu.app.feature.movements.data.local.MovementOutboxEntity
+import com.kipu.app.feature.movements.data.local.TransactionEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.plans.data.local.PlanPreferencesEntity
@@ -37,8 +43,13 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         CardEntity::class,
         FinancialMovementEntity::class,
         InstrumentSyncOutboxEntity::class,
+        TransactionEntity::class,
+        LedgerEntryEntity::class,
+        LocalCommandReceiptEntity::class,
+        MovementOutboxEntity::class,
+        BalanceProjectionEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -51,4 +62,5 @@ abstract class KipuDatabase : RoomDatabase() {
     abstract fun cardDao(): CardDao
     abstract fun financialMovementDao(): FinancialMovementDao
     abstract fun instrumentSyncDao(): InstrumentSyncDao
+    abstract fun movementDao(): MovementDao
 }
