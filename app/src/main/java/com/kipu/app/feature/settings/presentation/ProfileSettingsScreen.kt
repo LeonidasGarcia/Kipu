@@ -1,5 +1,7 @@
 package com.kipu.app.feature.settings.presentation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,36 +12,62 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +83,7 @@ fun ProfileSettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToPermissions: (() -> Unit)? = null,
     onNavigateToBiometrics: (() -> Unit)? = null,
+    onNavigateToCategories: (() -> Unit)? = null,
     onNavigateToMovements: (() -> Unit)? = null,
     onNavigateToAccounts: (() -> Unit)? = null,
     onSignOut: (() -> Unit)? = null,
@@ -62,6 +91,7 @@ fun ProfileSettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var currencyDropdownExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let {
@@ -80,7 +110,7 @@ fun ProfileSettingsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Ajustes", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Ajustes", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
@@ -106,158 +136,326 @@ fun ProfileSettingsScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(18.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 SyncStateBanner(state.syncState)
 
-                if (onNavigateToMovements != null || onNavigateToAccounts != null) {
-                    SettingsSection("PANTALLAS PRINCIPALES") {
-                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                            Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                                onNavigateToMovements?.let {
-                                    ActiveSetting(
-                                        title = "Historial de Movimientos (Pantalla 10)",
-                                        subtitle = "Consultar ledger, filtros rápidos y registrar gastos/ingresos",
-                                        onClick = it,
-                                    )
-                                }
-                                onNavigateToAccounts?.let {
-                                    ActiveSetting(
-                                        title = "Mi Dinero Real / Cuentas (Dashboard)",
-                                        subtitle = "Ver cuentas bancarias y tarjetas de crédito",
-                                        onClick = it,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                SettingsSection("MI SUSCRIPCIÓN") {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                // 1. Divisa principal
+                SettingsCard(
+                    icon = Icons.Default.Payments,
+                    title = "Divisa principal",
+                    subtitle = "Moneda base para balances y consolidado",
+                ) {
+                    ExposedDropdownMenuBox(
+                        expanded = currencyDropdownExpanded,
+                        onExpandedChange = { currencyDropdownExpanded = !currencyDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth().menuAnchor(),
                         ) {
-                            Text("Estado actual", style = MaterialTheme.typography.labelMedium)
-                            Text("Pendiente de conectar", fontWeight = FontWeight.SemiBold)
-                            InfoLine("Vigencia", "Sin datos")
-                            InfoLine("Facturación", "Sin datos")
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = {}, enabled = false) { Text("Restaurar compras") }
-                                OutlinedButton(onClick = {}, enabled = false) { Text("Ver cupos") }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                    ) {
+                                        Text(
+                                            text = state.currencyCode,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (state.currencyCode == "PEN") "Soles peruanos (S/)" else "Dólares americanos ($)",
+                                        fontWeight = FontWeight.Medium,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyDropdownExpanded)
                             }
-                            Text("Funciones de suscripción próximamente", style = MaterialTheme.typography.bodySmall)
+                        }
+
+                        ExposedDropdownMenu(
+                            expanded = currencyDropdownExpanded,
+                            onDismissRequest = { currencyDropdownExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("PEN - Soles peruanos (S/)") },
+                                onClick = {
+                                    viewModel.onCurrencyCodeChanged("PEN")
+                                    viewModel.savePreferences()
+                                    currencyDropdownExpanded = false
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("USD - Dólares americanos ($)") },
+                                onClick = {
+                                    viewModel.onCurrencyCodeChanged("USD")
+                                    viewModel.savePreferences()
+                                    currencyDropdownExpanded = false
+                                },
+                            )
                         }
                     }
                 }
 
-                SettingsSection("PREFERENCIAS FINANCIERAS") {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-                            Text("Divisa principal", fontWeight = FontWeight.SemiBold)
-                            Text("Moneda base para consolidación de saldos", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                CurrencyOption("Soles (PEN)", state.currencyCode == "PEN", Modifier.weight(1f)) {
-                                    viewModel.onCurrencyCodeChanged("PEN")
-                                }
-                                CurrencyOption("Dólares (USD)", state.currencyCode == "USD", Modifier.weight(1f)) {
-                                    viewModel.onCurrencyCodeChanged("USD")
-                                }
-                            }
-                            Spacer(Modifier.height(18.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Inicio del ciclo mensual", fontWeight = FontWeight.Medium)
-                                    Text("Día de corte para presupuestos", style = MaterialTheme.typography.bodySmall)
-                                }
+                // 2. Inicio del ciclo contable
+                SettingsCard(
+                    icon = Icons.Default.CalendarToday,
+                    title = "Inicio del ciclo contable",
+                    subtitle = "Reinicio mensual de presupuestos y balances",
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Día de corte",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            ) {
                                 IconButton(
-                                    onClick = { viewModel.onMonthStartChanged(state.monthStart - 1) },
+                                    onClick = {
+                                        viewModel.onMonthStartChanged(state.monthStart - 1)
+                                        viewModel.savePreferences()
+                                    },
                                     enabled = state.monthStart > 1,
-                                ) { Text("−", fontSize = 22.sp) }
-                                Text("Día ${state.monthStart}", fontWeight = FontWeight.SemiBold)
-                                IconButton(
-                                    onClick = { viewModel.onMonthStartChanged(state.monthStart + 1) },
-                                    enabled = state.monthStart < 28,
-                                ) { Text("+", fontSize = 22.sp) }
-                            }
-                            Spacer(Modifier.height(14.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Modo de privacidad", fontWeight = FontWeight.Medium)
-                                    Text("Enmascarar cifras numéricas (••••)", style = MaterialTheme.typography.bodySmall)
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Text("−", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Switch(
-                                    checked = state.hideBalances,
-                                    onCheckedChange = { viewModel.toggleHideBalances() },
+
+                                Text(
+                                    text = "Día ${state.monthStart}",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                )
+
+                                IconButton(
+                                    onClick = {
+                                        viewModel.onMonthStartChanged(state.monthStart + 1)
+                                        viewModel.savePreferences()
+                                    },
+                                    enabled = state.monthStart < 28,
+                                    modifier = Modifier.size(36.dp),
+                                ) {
+                                    Text("+", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Tema de la aplicación
+                SettingsCard(
+                    icon = Icons.Default.Palette,
+                    title = "Tema de la aplicación",
+                    subtitle = "Preferencia visual de interfaz",
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = state.themeMode == ThemeMode.LIGHT,
+                            onClick = {
+                                viewModel.onThemeModeChanged(ThemeMode.LIGHT)
+                                viewModel.savePreferences()
+                            },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.LightMode, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Claro", fontSize = 12.sp)
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+
+                        FilterChip(
+                            selected = state.themeMode == ThemeMode.DARK,
+                            onClick = {
+                                viewModel.onThemeModeChanged(ThemeMode.DARK)
+                                viewModel.savePreferences()
+                            },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Oscuro", fontSize = 12.sp)
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+
+                        FilterChip(
+                            selected = state.themeMode == ThemeMode.SYSTEM,
+                            onClick = {
+                                viewModel.onThemeModeChanged(ThemeMode.SYSTEM)
+                                viewModel.savePreferences()
+                            },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Sistema", fontSize = 12.sp)
+                                }
+                            },
+                            modifier = Modifier.weight(1f).height(40.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                selectedLabelColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    }
+                }
+
+                // 4. Ocultar montos sensibles
+                SettingsCard(
+                    icon = Icons.Default.VisibilityOff,
+                    title = "Ocultar montos sensibles",
+                    subtitle = "Modo MoneyText en vista general",
+                    trailing = {
+                        Switch(
+                            checked = state.hideBalances,
+                            onCheckedChange = {
+                                viewModel.toggleHideBalances()
+                                viewModel.savePreferences()
+                            },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                            ),
+                        )
+                    },
+                )
+
+                // 5. Alertas de vencimiento
+                SettingsCard(
+                    icon = Icons.Default.Notifications,
+                    title = "Alertas de vencimiento",
+                    subtitle = "Días de anticipación para recordatorios",
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Avisar previo al corte",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    text = "3 días",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            PendingSetting("Categorías", "Administrar categorías de ingresos y gastos")
                         }
                     }
                 }
 
-                SettingsSection("TEMA DE LA APLICACIÓN") {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            ThemeOption("Sistema", state.themeMode == ThemeMode.SYSTEM) { viewModel.onThemeModeChanged(ThemeMode.SYSTEM) }
-                            ThemeOption("Claro", state.themeMode == ThemeMode.LIGHT) { viewModel.onThemeModeChanged(ThemeMode.LIGHT) }
-                            ThemeOption("Oscuro", state.themeMode == ThemeMode.DARK) { viewModel.onThemeModeChanged(ThemeMode.DARK) }
-                        }
-                    }
+                // Acceso a Historial de Movimientos
+                onNavigateToMovements?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.Payments,
+                        title = "Historial de Movimientos (Ledger)",
+                        subtitle = "Consultar ledger y registrar operaciones",
+                        onClick = it,
+                    )
                 }
 
-                Button(
-                    onClick = viewModel::savePreferences,
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    enabled = !state.isSaving && state.monthStartError == null,
-                ) {
-                    if (state.isSaving) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                    else Text("Guardar cambios")
+                // Acceso a Cuentas y Tarjetas
+                onNavigateToAccounts?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.AccountBalance,
+                        title = "Mi Dinero Real / Cuentas",
+                        subtitle = "Ver cuentas bancarias y tarjetas registradas",
+                        onClick = it,
+                    )
                 }
 
-                SettingsSection("NOTIFICACIONES Y ALERTAS") {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Anticipación de vencimientos", fontWeight = FontWeight.Medium)
-                                    Text("Aviso previo a la fecha límite", style = MaterialTheme.typography.bodySmall)
-                                }
-                                Text("3 días (ejemplo)", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Text("Configuración próximamente", style = MaterialTheme.typography.labelSmall)
-                            onNavigateToPermissions?.let {
-                                ActiveSetting("Permisos y automatización", "Alertas y fuentes de datos opcionales", it)
-                            }
-                        }
-                    }
-                }
+                // 6. Gestionar Categorías
+                SettingsActionCard(
+                    icon = Icons.Default.Category,
+                    title = "Gestionar Categorías",
+                    subtitle = "Ingresos, gastos y presupuestos asignados",
+                    onClick = { onNavigateToCategories?.invoke() },
+                )
 
-                SettingsSection("SEGURIDAD Y COPIAS DE SEGURIDAD") {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                            onNavigateToBiometrics?.let {
-                                ActiveSetting("Bloqueo local y biometría", "Protege el acceso y tus balances", it)
-                            }
-                            PendingSetting("Exportar datos contables", "Archivos CSV y JSON")
-                            PendingSetting("Restaurar respaldo local", "Copia de seguridad local")
-                            PendingSetting("Eliminar cuenta y registros", "Borrado de datos locales y remotos", destructive = true)
-                        }
-                    }
-                }
+                // 7. Configurar Captura / Permisos
+                SettingsActionCard(
+                    icon = Icons.Default.Chat,
+                    title = "Configurar Captura",
+                    subtitle = "Lectura de notificaciones y SMS bancarios",
+                    onClick = { onNavigateToPermissions?.invoke() },
+                )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // 8. Botón Cerrar sesión
                 if (onSignOut != null) {
-                    OutlinedButton(
+                    Button(
                         onClick = viewModel::requestSignOut,
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                    ) { Text("Cerrar sesión") }
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFDE8E8),
+                            contentColor = Color(0xFFE53935),
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cerrar sesión", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    }
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -272,64 +470,102 @@ fun ProfileSettingsScreen(
 }
 
 @Composable
-private fun SettingsSection(title: String, content: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-        content()
-    }
-}
-
-@Composable
-private fun InfoLine(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodySmall)
-        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-private fun CurrencyOption(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    if (selected) Button(onClick = onClick, modifier = modifier) { Text(label, maxLines = 1) }
-    else OutlinedButton(onClick = onClick, modifier = modifier) { Text(label, maxLines = 1) }
-}
-
-@Composable
-private fun ThemeOption(label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        RadioButton(selected = selected, onClick = onClick)
-        Text(label, fontSize = 13.sp)
-    }
-}
-
-@Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun ActiveSetting(title: String, subtitle: String, onClick: () -> Unit) {
-    OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall)
-            }
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
-        }
-    }
-}
-
-@Composable
-private fun PendingSetting(title: String, subtitle: String, destructive: Boolean = false) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+private fun SettingsCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    trailing: (@Composable () -> Unit)? = null,
+    content: (@Composable () -> Unit)? = null,
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                title,
-                fontWeight = FontWeight.Medium,
-                color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-            )
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                trailing?.invoke()
+            }
+
+            content?.invoke()
         }
-        Text("Próximamente", style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun SettingsActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 
@@ -343,10 +579,15 @@ private fun SyncStateBanner(syncState: SyncState) {
         SyncState.ERROR -> "Error al sincronizar"
     }
     Surface(
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(10.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(message, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall)
+        Text(
+            text = message,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
     }
 }

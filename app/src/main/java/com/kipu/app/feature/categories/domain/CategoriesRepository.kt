@@ -1,0 +1,30 @@
+package com.kipu.app.feature.categories.domain
+
+import com.kipu.app.core.finance.domain.model.MovementId
+import com.kipu.app.core.finance.domain.model.UserId
+import com.kipu.app.feature.categories.domain.model.Category
+import com.kipu.app.feature.categories.domain.model.CategoryConflict
+import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.ConflictId
+import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MovementClassification
+import kotlinx.coroutines.flow.Flow
+
+interface CategoriesRepository {
+    fun observeCategories(userId: UserId): Flow<List<Category>>
+    fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>>
+    suspend fun getCategory(categoryId: CategoryId): Category?
+    suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category>
+    suspend fun setCategoryActive(categoryId: CategoryId, isActive: Boolean): Result<Unit>
+    suspend fun updateCategoryPresentation(presentation: CategoryPresentation, expectedRevision: Long): Result<Unit>
+
+    fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>>
+    fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?>
+    suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit>
+    suspend fun clearCategoryClassification(movementId: MovementId): Result<Unit>
+    suspend fun clearMerchantClassification(movementId: MovementId): Result<Unit>
+
+    fun observeConflicts(userId: UserId): Flow<List<CategoryConflict>>
+    suspend fun resolveConflict(conflictId: ConflictId, chosenVersion: String): Result<Unit>
+}

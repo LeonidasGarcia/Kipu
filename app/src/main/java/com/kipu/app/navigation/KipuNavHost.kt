@@ -20,5 +20,6 @@ fun NavGraphBuilder.appDestinations(
     planSelectionDestination(onConfirmed = { navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) })
     settingsDestinations(navController = navController, onSignOut = onSignOut)
     accountsDestinations(navController = navController)
+    movementDestinations(navController = navController)
     movementsDestinations(navController = navController)
 }

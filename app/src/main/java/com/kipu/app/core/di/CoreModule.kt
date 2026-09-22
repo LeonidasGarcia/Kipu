@@ -12,6 +12,8 @@ import dagger.hilt.components.SingletonComponent
 import java.time.Clock
 import javax.inject.Singleton
 
+import androidx.room.withTransaction
+
 @Module @InstallIn(SingletonComponent::class)
 object CoreModule {
     @Provides @Singleton fun database(@ApplicationContext context: Context): KipuDatabase =
@@ -20,8 +22,15 @@ object CoreModule {
                 com.kipu.app.core.database.MIGRATION_1_2,
                 com.kipu.app.core.database.MIGRATION_2_3,
                 com.kipu.app.core.database.MIGRATION_3_4,
+                com.kipu.app.core.database.MIGRATION_4_5,
             )
             .build()
+
+    @Provides @Singleton fun transactionRunner(database: KipuDatabase): com.kipu.app.core.database.DatabaseTransactionRunner =
+        object : com.kipu.app.core.database.DatabaseTransactionRunner {
+            override suspend operator fun <R> invoke(block: suspend () -> R): R =
+                database.withTransaction { block() }
+        }
 
     @Provides fun dao(database: KipuDatabase): PlanPreferencesDao = database.planPreferencesDao()
     @Provides fun profileDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.ProfilePreferencesDao = database.profilePreferencesDao()
@@ -31,6 +40,8 @@ object CoreModule {
     @Provides fun cardDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.CardDao = database.cardDao()
     @Provides fun financialMovementDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.FinancialMovementDao = database.financialMovementDao()
     @Provides fun instrumentSyncDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.InstrumentSyncDao = database.instrumentSyncDao()
+    @Provides fun categoryDao(database: KipuDatabase): com.kipu.app.feature.categories.data.local.CategoryDao = database.categoryDao()
+    @Provides fun merchantCatalogDao(database: KipuDatabase): com.kipu.app.feature.categories.data.local.MerchantCatalogDao = database.merchantCatalogDao()
     @Provides fun movementDao(database: KipuDatabase): com.kipu.app.feature.movements.data.local.MovementDao = database.movementDao()
     @Provides fun clock(): Clock = Clock.systemUTC()
 }

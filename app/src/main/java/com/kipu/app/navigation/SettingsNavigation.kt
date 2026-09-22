@@ -18,6 +18,7 @@ import com.kipu.app.feature.settings.presentation.SettingsViewModel
 const val BIOMETRIC_ROUTE = "onboarding/biometrics"
 const val PROFILE_SETTINGS_ROUTE = "settings/profile"
 const val PERMISSIONS_ROUTE = "settings/permissions"
+const val CATEGORIES_ROUTE = "settings/categories"
 
 fun NavGraphBuilder.settingsDestinations(
     navController: NavController,
@@ -42,10 +43,18 @@ fun NavGraphBuilder.settingsDestinations(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onNavigateToPermissions = { navController.navigate(PERMISSIONS_ROUTE) },
-            onNavigateToBiometrics = { navController.navigate(BIOMETRIC_ROUTE) },
+            onNavigateToCategories = { navController.navigate(CATEGORIES_ROUTE) },
             onNavigateToMovements = { navController.navigate(MOVEMENTS_HISTORY_ROUTE) },
             onNavigateToAccounts = { navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) },
             onSignOut = onSignOut,
+        )
+    }
+
+    composable(CATEGORIES_ROUTE) {
+        val viewModel: com.kipu.app.feature.categories.presentation.categories.CategoriesViewModel = hiltViewModel()
+        com.kipu.app.feature.categories.presentation.categories.CategoriesScreen(
+            viewModel = viewModel,
+            onNavigateBack = { navController.popBackStack() },
         )
     }
 

@@ -11,6 +11,13 @@ import com.kipu.app.feature.accounts.data.local.FinancialMovementDao
 import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncDao
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncOutboxEntity
+import com.kipu.app.feature.categories.data.local.CategoryConflictEntity
+import com.kipu.app.feature.categories.data.local.CategoryDao
+import com.kipu.app.feature.categories.data.local.CategoryEntity
+import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
+import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
+import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
+import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.movements.data.local.BalanceProjectionEntity
 import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
 import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
@@ -43,13 +50,18 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         CardEntity::class,
         FinancialMovementEntity::class,
         InstrumentSyncOutboxEntity::class,
+        CategoryEntity::class,
+        CategoryPresentationEntity::class,
+        MerchantCatalogEntity::class,
+        CategoryConflictEntity::class,
+        CategorySyncOutboxEntity::class,
         TransactionEntity::class,
         LedgerEntryEntity::class,
         LocalCommandReceiptEntity::class,
         MovementOutboxEntity::class,
         BalanceProjectionEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -62,5 +74,7 @@ abstract class KipuDatabase : RoomDatabase() {
     abstract fun cardDao(): CardDao
     abstract fun financialMovementDao(): FinancialMovementDao
     abstract fun instrumentSyncDao(): InstrumentSyncDao
+    abstract fun categoryDao(): CategoryDao
+    abstract fun merchantCatalogDao(): MerchantCatalogDao
     abstract fun movementDao(): MovementDao
 }
