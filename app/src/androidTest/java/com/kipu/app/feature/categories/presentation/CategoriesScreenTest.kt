@@ -1,0 +1,177 @@
+package com.kipu.app.feature.categories.presentation
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
+import com.kipu.app.core.finance.domain.model.UserId
+import com.kipu.app.feature.categories.domain.model.Category
+import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryOrigin
+import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.usecase.CategoryItem
+import com.kipu.app.feature.categories.presentation.categories.CategoryRootCard
+import com.kipu.app.feature.categories.presentation.categories.QuotaBanner
+import org.junit.Rule
+import org.junit.Test
+
+class CategoriesScreenTest {
+
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    private val testUserId = UserId.generate()
+
+    @Test
+    fun displaysHierarchyWithRootAndSubcategories() {
+        val rootId = CategoryId.generate()
+        val subId = CategoryId.generate()
+
+        val subItem = CategoryItem(
+            category = Category(
+                id = subId,
+                ownerId = testUserId,
+                parentId = rootId,
+                origin = CategoryOrigin.CUSTOM,
+                isActive = true,
+            ),
+            presentation = CategoryPresentation(
+                categoryId = subId,
+                ownerId = testUserId,
+                name = "Restaurantes",
+                icon = "restaurant",
+                color = "#E91E63",
+            ),
+        )
+
+        val rootItem = CategoryItem(
+            category = Category(
+                id = rootId,
+                ownerId = testUserId,
+                parentId = null,
+                origin = CategoryOrigin.CUSTOM,
+                isActive = true,
+            ),
+            presentation = CategoryPresentation(
+                categoryId = rootId,
+                ownerId = testUserId,
+                name = "Alimentación",
+                icon = "food",
+                color = "#4CAF50",
+            ),
+            subcategories = listOf(subItem),
+        )
+
+        composeTestRule.setContent {
+            CategoryRootCard(
+                item = rootItem,
+                onToggleActive = {},
+                onAddSubcategory = {},
+                onToggleSubcategoryActive = { _, _ -> },
+            )
+        }
+
+        composeTestRule.onNodeWithText("Alimentación").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Restaurantes").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Personalizada").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Activa").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Agregar subcategoría").assertIsDisplayed()
+    }
+
+    @Test
+    fun displaysDisabledStateWhenRootIsInactive() {
+        val rootId = CategoryId.generate()
+        val subId = CategoryId.generate()
+
+        val subItem = CategoryItem(
+            category = Category(
+                id = subId,
+                ownerId = testUserId,
+                parentId = rootId,
+                origin = CategoryOrigin.CUSTOM,
+                isActive = true,
+            ),
+            presentation = CategoryPresentation(
+                categoryId = subId,
+                ownerId = testUserId,
+                name = "Subcat",
+                icon = "label",
+                color = "#757575",
+            ),
+        )
+
+        val inactiveRoot = CategoryItem(
+            category = Category(
+                id = rootId,
+                ownerId = testUserId,
+                parentId = null,
+                origin = CategoryOrigin.CUSTOM,
+                isActive = false,
+            ),
+            presentation = CategoryPresentation(
+                categoryId = rootId,
+                ownerId = testUserId,
+                name = "Categoría Inactiva",
+                icon = "folder",
+                color = "#757575",
+            ),
+            subcategories = listOf(subItem),
+        )
+
+        composeTestRule.setContent {
+            CategoryRootCard(
+                item = inactiveRoot,
+                onToggleActive = {},
+                onAddSubcategory = {},
+                onToggleSubcategoryActive = { _, _ -> },
+            )
+        }
+
+        composeTestRule.onNodeWithText("Categoría Inactiva").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Inactiva (bloquea nuevas asignaciones)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Inactiva por categoría padre").assertIsDisplayed()
+    }
+
+    @Test
+    fun displaysQuotaBannerAndLimitReachedWarning() {
+        composeTestRule.setContent {
+            QuotaBanner(
+                activeCount = 5,
+                maxCount = 5,
+                isLimitReached = true,
+            )
+        }
+
+        composeTestRule.onNodeWithText("Categorías personalizadas activas: 5 / 5").assertIsDisplayed()
+        composeTestRule.onNodeWithText(
+            "Límite del plan Gratuito alcanzado. Desactiva una categoría para activar otra."
+        ).assertIsDisplayed()
+    }
+
+    @Test
+    fun rendersCleanlyUnder200PercentTextScaling() {
+        composeTestRule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(density = 2.0f, fontScale = 2.0f)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    QuotaBanner(
+                        activeCount = 3,
+                        maxCount = 5,
+                        isLimitReached = false,
+                    )
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithText("Categorías personalizadas activas: 3 / 5").assertIsDisplayed()
+    }
+}
