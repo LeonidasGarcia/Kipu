@@ -53,6 +53,8 @@ import com.kipu.app.ui.component.LocalBalanceMasked
 import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
 
+import androidx.compose.material.icons.filled.Settings
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -60,6 +62,7 @@ fun DashboardScreen(
     onNavigateToNewAccount: () -> Unit,
     onNavigateToNewCard: () -> Unit,
     onAccountClick: (String) -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.dashboardUiState.collectAsState()
@@ -80,6 +83,12 @@ fun DashboardScreen(
                             Icon(
                                 imageVector = if (state.isMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                 contentDescription = if (state.isMasked) "Mostrar saldos" else "Ocultar saldos",
+                            )
+                        }
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Ajustes",
                             )
                         }
                     }

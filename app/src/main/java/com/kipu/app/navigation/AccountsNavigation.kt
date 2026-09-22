@@ -39,6 +39,7 @@ fun NavGraphBuilder.accountsDestinations(
             viewModel = viewModel,
             onNavigateToNewAccount = { navController.navigateToAccountForm() },
             onNavigateToNewCard = { navController.navigateToCardForm() },
+            onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
         )
     }
 
