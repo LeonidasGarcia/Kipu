@@ -21,4 +21,5 @@ fun NavGraphBuilder.appDestinations(
     settingsDestinations(navController = navController, onSignOut = onSignOut)
     accountsDestinations(navController = navController)
     movementDestinations(navController = navController)
+    movementsDestinations(navController = navController)
 }

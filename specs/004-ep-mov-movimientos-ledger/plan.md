@@ -23,7 +23,6 @@ Diferido:
 
 - HU20 edición, HU21 anulación, HU22 reembolso, HU24 filtros avanzados y HU25 permisos granulares.
 - Acciones contextuales Editar/Anular/Reembolsar y filtros avanzados de la Pantalla 10.
-- Fidelidad visual final hasta localizar o reemplazar formalmente `DESIGN.md`.
 
 ## Technical Context
 
@@ -88,7 +87,7 @@ Regla de formulario: la categoría es obligatoria para Gasto y opcional para Ing
 
 - Pantalla 11: tabs Gasto/Ingreso/Transferencia; monto, cuenta origen, destino para transferencia, categoría/comercio opcionales según reglas acordadas, fecha/hora, nota y confirmación de posible duplicado.
 - Pantalla 10 mínima: grupos cronológicos y filas con icono, descripción, cuenta, monto con signo y estado de sincronización.
-- Se reutilizan tema y componentes existentes. La ausencia de `DESIGN.md` se registra como deuda de diseño, no como licencia para inventar un sistema visual nuevo.
+- Se implementa con fidelidad visual estricta a `docs/stitch-design-system.md` y `Stich Prompts.md` (Pantalla 10 para Historial y Pantalla 11 para Modal de Registro en Bottom Sheet). Reutiliza tema, componentes, tokens de color (Primary #0F766E, Income #16A34A, Expense #E85D5D) y números tabulares `tnum`.
 
 ### Sincronización
 

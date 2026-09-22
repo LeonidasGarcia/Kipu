@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Chat
@@ -83,6 +84,8 @@ fun ProfileSettingsScreen(
     onNavigateToPermissions: (() -> Unit)? = null,
     onNavigateToBiometrics: (() -> Unit)? = null,
     onNavigateToCategories: (() -> Unit)? = null,
+    onNavigateToMovements: (() -> Unit)? = null,
+    onNavigateToAccounts: (() -> Unit)? = null,
     onSignOut: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -393,6 +396,26 @@ fun ProfileSettingsScreen(
                             }
                         }
                     }
+                }
+
+                // Acceso a Historial de Movimientos
+                onNavigateToMovements?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.Payments,
+                        title = "Historial de Movimientos (Ledger)",
+                        subtitle = "Consultar ledger y registrar operaciones",
+                        onClick = it,
+                    )
+                }
+
+                // Acceso a Cuentas y Tarjetas
+                onNavigateToAccounts?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.AccountBalance,
+                        title = "Mi Dinero Real / Cuentas",
+                        subtitle = "Ver cuentas bancarias y tarjetas registradas",
+                        onClick = it,
+                    )
                 }
 
                 // 6. Gestionar Categorías

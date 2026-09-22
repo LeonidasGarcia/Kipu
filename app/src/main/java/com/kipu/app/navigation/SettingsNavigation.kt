@@ -30,7 +30,7 @@ fun NavGraphBuilder.settingsDestinations(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onContinue = {
-                navController.navigate(PROFILE_SETTINGS_ROUTE) {
+                navController.navigate(MOVEMENTS_HISTORY_ROUTE) {
                     popUpTo(PLAN_SELECTION_ROUTE) { inclusive = true }
                 }
             },
@@ -43,8 +43,9 @@ fun NavGraphBuilder.settingsDestinations(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onNavigateToPermissions = { navController.navigate(PERMISSIONS_ROUTE) },
-            onNavigateToBiometrics = { navController.navigate(BIOMETRIC_ROUTE) },
             onNavigateToCategories = { navController.navigate(CATEGORIES_ROUTE) },
+            onNavigateToMovements = { navController.navigate(MOVEMENTS_HISTORY_ROUTE) },
+            onNavigateToAccounts = { navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) },
             onSignOut = onSignOut,
         )
     }

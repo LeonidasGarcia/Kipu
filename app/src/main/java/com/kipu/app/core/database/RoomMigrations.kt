@@ -299,3 +299,104 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+/**
+ * Migration 4 -> 5: Adds EP-MOV tables for transactions, ledger_entries,
+ * local_command_receipts, movement_outbox, and balance_projections.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // 1. transactions
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `transactions` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `type` TEXT NOT NULL,
+                `amount_minor` INTEGER NOT NULL,
+                `currency_code` TEXT NOT NULL,
+                `source_account_id` TEXT,
+                `destination_account_id` TEXT,
+                `category_id` TEXT,
+                `merchant_id` TEXT,
+                `occurred_at` INTEGER NOT NULL,
+                `note` TEXT,
+                `status` TEXT NOT NULL,
+                `sync_status` TEXT NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`),
+                FOREIGN KEY(`user_id`, `source_account_id`) REFERENCES `accounts`(`user_id`, `id`) ON DELETE SET NULL
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_user_id_occurred_at` ON `transactions` (`user_id`, `occurred_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_user_id_source_account_id_occurred_at` ON `transactions` (`user_id`, `source_account_id`, `occurred_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_user_id_sync_status` ON `transactions` (`user_id`, `sync_status`)")
+
+        // 2. ledger_entries
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `ledger_entries` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `transaction_id` TEXT NOT NULL,
+                `account_id` TEXT NOT NULL,
+                `role` TEXT NOT NULL,
+                `signed_amount_minor` INTEGER NOT NULL,
+                `currency_code` TEXT NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_ledger_entries_user_id_transaction_id` ON `ledger_entries` (`user_id`, `transaction_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_ledger_entries_user_id_account_id` ON `ledger_entries` (`user_id`, `account_id`)")
+
+        // 3. local_command_receipts
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `local_command_receipts` (
+                `user_id` TEXT NOT NULL,
+                `idempotency_key` TEXT NOT NULL,
+                `request_hash` TEXT NOT NULL,
+                `transaction_id` TEXT,
+                `status` TEXT NOT NULL,
+                `response_payload` TEXT,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `idempotency_key`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_local_command_receipts_user_id_transaction_id` ON `local_command_receipts` (`user_id`, `transaction_id`)")
+
+        // 4. movement_outbox
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `movement_outbox` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `idempotency_key` TEXT NOT NULL,
+                `aggregate_id` TEXT NOT NULL,
+                `payload` TEXT NOT NULL,
+                `state` TEXT NOT NULL,
+                `attempt_count` INTEGER NOT NULL,
+                `next_attempt_at` INTEGER,
+                `lease_until` INTEGER,
+                `last_error_code` TEXT,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_movement_outbox_user_id_state_next_attempt_at` ON `movement_outbox` (`user_id`, `state`, `next_attempt_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_movement_outbox_user_id_aggregate_id` ON `movement_outbox` (`user_id`, `aggregate_id`)")
+
+        // 5. balance_projections
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `balance_projections` (
+                `user_id` TEXT NOT NULL,
+                `account_id` TEXT NOT NULL,
+                `balance_minor` INTEGER NOT NULL,
+                `currency_code` TEXT NOT NULL,
+                `last_transaction_at` INTEGER,
+                `updated_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `account_id`)
+            )
+        """.trimIndent())
+    }
+}
+

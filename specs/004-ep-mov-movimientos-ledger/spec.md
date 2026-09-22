@@ -366,7 +366,7 @@ No quedan decisiones funcionales abiertas que impidan planificar el incremento d
 - Free conserva registro manual, historial básico y deduplicación; Premium amplía filtros y automatización sin cambiar la verdad financiera.
 - Una referencia histórica bloqueada puede seguir visible y computable, pero no autoriza nuevas operaciones si la política vigente lo impide.
 - El reloj y los generadores de identidad usados para validar reglas pueden sustituirse durante las pruebas.
-- No se localizó `DESIGN.md`; hasta que el equipo indique su ubicación o reemplazo oficial, el incremento reutiliza el tema y los componentes existentes y no declara fidelidad visual definitiva.
+- Las fuentes visuales y contratos de diseño normativos son `docs/stitch-design-system.md` y `Stich Prompts.md` (Pantalla 10 para Historial y Pantalla 11 para Registro en Bottom Sheet), aplicando tokens de color, números tabulares `tnum` y componentes establecidos.
 
 ## Dependencies
 

@@ -72,4 +72,49 @@
     <string name="perm_open_settings">Abrir Ajustes del Sistema</string>
     <string name="perm_grant_consent">Otorgar Consentimiento</string>
     <string name="perm_revoke_consent">Revocar Consentimiento</string>
+
+    <!-- EP-MOV Movements strings -->
+    <string name="movements_title">Historial</string>
+    <string name="movements_search_placeholder">Buscar transacciones…</string>
+    <string name="movements_empty_title">Sin movimientos registrados</string>
+    <string name="movements_empty_desc">Toca el botón + para registrar tu primera transacción</string>
+    <string name="movements_sync_synced">Sincronizado</string>
+    <string name="movements_sync_pending">Pendiente de sincronizar</string>
+    <string name="movements_sync_error">Error de sincronización</string>
+    <string name="movements_filter_period">Período</string>
+    <string name="movements_filter_category">Categoría</string>
+    <string name="movements_filter_account">Cuenta</string>
+    <string name="movements_filter_card">Tarjeta</string>
+    <string name="movements_filter_merchant">Comercio</string>
+    <string name="movements_filter_amount">Monto</string>
+    <string name="movements_filter_status">Estado</string>
+
+    <string name="movement_register_title">Registrar Transacción</string>
+    <string name="movement_type_expense">Gasto</string>
+    <string name="movement_type_income">Ingreso</string>
+    <string name="movement_type_transfer">Transferencia</string>
+    <string name="movement_amount_label">Monto</string>
+    <string name="movement_source_account">Cuenta origen</string>
+    <string name="movement_destination_account">Cuenta destino</string>
+    <string name="movement_category">Categoría</string>
+    <string name="movement_select_category">Seleccionar categoría</string>
+    <string name="movement_merchant">Comercio</string>
+    <string name="movement_select_merchant">Seleccionar comercio</string>
+    <string name="movement_more_details">Más detalles</string>
+    <string name="movement_date">Fecha</string>
+    <string name="movement_note">Nota</string>
+    <string name="movement_note_placeholder">Escribe una nota opcional</string>
+    <string name="movement_save">Guardar</string>
+    <string name="movement_saving">Guardando…</string>
+
+    <string name="movement_duplicate_title">Posible Movimiento Duplicado</string>
+    <string name="movement_duplicate_message">Se ha detectado una transacción idéntica registrada recientemente en esta cuenta. ¿Deseas guardarla de todas formas?</string>
+    <string name="movement_duplicate_cancel">Cancelar</string>
+    <string name="movement_duplicate_confirm">Confirmar</string>
+
+    <!-- Context actions for S4/S7 preparation -->
+    <string name="movement_action_edit">Editar</string>
+    <string name="movement_action_void">Anular</string>
+    <string name="movement_action_delete">Eliminar</string>
+    <string name="movement_action_refund">Reembolso</string>
 </resources>

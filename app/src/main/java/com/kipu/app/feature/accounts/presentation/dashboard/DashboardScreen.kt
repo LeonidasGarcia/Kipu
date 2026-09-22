@@ -61,6 +61,7 @@ fun DashboardScreen(
     viewModel: AccountsViewModel,
     onNavigateToNewAccount: () -> Unit,
     onNavigateToNewCard: () -> Unit,
+    onNavigateToMovements: () -> Unit = {},
     onAccountClick: (String) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -79,6 +80,12 @@ fun DashboardScreen(
                         )
                     },
                     actions = {
+                        IconButton(onClick = onNavigateToMovements) {
+                            Icon(
+                                imageVector = Icons.Default.Payments,
+                                contentDescription = "Historial de Movimientos",
+                            )
+                        }
                         IconButton(onClick = { viewModel.toggleMasked() }) {
                             Icon(
                                 imageVector = if (state.isMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
