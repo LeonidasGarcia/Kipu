@@ -1,0 +1,108 @@
+package com.kipu.app.feature.movements.data.local
+
+import android.content.Context
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.feature.accounts.data.local.AccountEntity
+import com.kipu.app.feature.movements.domain.model.MovementType
+import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
+import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
+import java.util.UUID
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+
+@RunWith(AndroidJUnit4::class)
+class MovementLocalDataSourceTest {
+    private lateinit var database: KipuDatabase
+    private lateinit var dao: MovementDao
+    private lateinit var source: MovementLocalDataSource
+    private val userId = UUID.randomUUID().toString()
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        database = Room.inMemoryDatabaseBuilder(context, KipuDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        dao = database.movementDao()
+        source = MovementLocalDataSource(database, dao, BalanceProjectionStore(dao))
+    }
+
+    @After
+    fun tearDown() = database.close()
+
+    @Test
+    fun firstMovementAndRetryLeaveProjectionEqualToLedger() = runTest {
+        seedAccount("source")
+        val command = command(MovementType.EXPENSE, "source", amount = 1_250L)
+
+        val first = source.commitTransactionAtomic(command, "same-hash")
+        val retry = source.commitTransactionAtomic(command, "same-hash")
+
+        assertTrue(first is RegisterTransactionResult.Success)
+        assertFalse((first as RegisterTransactionResult.Success).isDuplicate)
+        assertTrue(retry is RegisterTransactionResult.Success)
+        assertTrue((retry as RegisterTransactionResult.Success).isDuplicate)
+        assertEquals(1, dao.getLedgerEntriesForTransaction(userId, first.transaction.id).size)
+        assertEquals(-1_250L, dao.calculateLedgerSumForAccount(userId, "source"))
+        assertEquals(-1_250L, dao.getBalanceProjection(userId, "source")?.balanceMinor)
+    }
+
+    @Test
+    fun transferUpdatesBothAccountsExactlyOnce() = runTest {
+        seedAccount("source")
+        seedAccount("destination")
+        val command = command(MovementType.TRANSFER, "source", "destination", 4_200L)
+
+        val result = source.commitTransactionAtomic(command, "transfer-hash")
+
+        assertTrue(result is RegisterTransactionResult.Success)
+        assertEquals(-4_200L, dao.calculateLedgerSumForAccount(userId, "source"))
+        assertEquals(4_200L, dao.calculateLedgerSumForAccount(userId, "destination"))
+        assertEquals(-4_200L, dao.getBalanceProjection(userId, "source")?.balanceMinor)
+        assertEquals(4_200L, dao.getBalanceProjection(userId, "destination")?.balanceMinor)
+    }
+
+    private suspend fun seedAccount(id: String) {
+        database.accountDao().insert(
+            AccountEntity(
+                id = id,
+                userId = userId,
+                creationOperationId = UUID.randomUUID().toString(),
+                alias = id,
+                type = "SAVINGS",
+                currency = "PEN",
+                presetId = null,
+                color = null,
+                icon = null,
+                initialBalanceMinorUnits = 0L,
+                openedAt = 1L,
+                createdAt = 1L,
+                updatedAt = 1L,
+            )
+        )
+    }
+
+    private fun command(
+        type: MovementType,
+        source: String,
+        destination: String? = null,
+        amount: Long,
+    ) = RegisterTransactionCommand(
+        idempotencyKey = UUID.randomUUID().toString(),
+        userId = userId,
+        type = type,
+        amountMinor = amount,
+        currency = "PEN",
+        sourceAccountId = source,
+        destinationAccountId = destination,
+    )
+}

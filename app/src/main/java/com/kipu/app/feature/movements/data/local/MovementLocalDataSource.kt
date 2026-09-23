@@ -162,19 +162,13 @@ class MovementLocalDataSource @Inject constructor(
             }
             movementDao.insertLedgerEntries(ledgerEntries)
 
-            // 4. Update balance projections
-            for (entry in ledgerEntries) {
-                val currentBalance = balanceProjectionStore.getBalance(command.userId, entry.accountId)
-                val newBalance = currentBalance + entry.signedAmountMinor
-                movementDao.upsertBalanceProjection(
-                    BalanceProjectionEntity(
-                        userId = command.userId,
-                        accountId = entry.accountId,
-                        balanceMinor = newBalance,
-                        currencyCode = entry.currencyCode,
-                        lastTransactionAt = command.occurredAt,
-                        updatedAt = now,
-                    )
+            // 4. Rebuild each affected projection from the authoritative ledger.
+            // The new entries are already visible inside this Room transaction.
+            for (entry in ledgerEntries.distinctBy { it.accountId }) {
+                balanceProjectionStore.rebuildBalanceFromLedger(
+                    userId = command.userId,
+                    accountId = entry.accountId,
+                    currencyCode = entry.currencyCode,
                 )
             }
 
