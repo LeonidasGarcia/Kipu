@@ -90,6 +90,26 @@ class MovementLocalDataSourceTest {
         assertEquals(null, dao.calculateLedgerSumForAccount(userId, "owned"))
     }
 
+    @Test
+    fun orphanedReceiptDoesNotPostASecondTransaction() = runTest {
+        seedAccount("source")
+        val command = command(MovementType.INCOME, "source", amount = 100L)
+        dao.insertOrUpdateReceipt(
+            LocalCommandReceiptEntity(
+                userId = userId,
+                idempotencyKey = command.idempotencyKey,
+                requestHash = "same-hash",
+                transactionId = UUID.randomUUID().toString(),
+                status = "APPLIED",
+            )
+        )
+
+        val result = source.commitTransactionAtomic(command, "same-hash")
+
+        assertTrue(result is RegisterTransactionResult.Failure)
+        assertEquals(null, dao.calculateLedgerSumForAccount(userId, "source"))
+    }
+
     private suspend fun seedAccount(id: String, owner: String = userId) {
         database.accountDao().insert(
             AccountEntity(

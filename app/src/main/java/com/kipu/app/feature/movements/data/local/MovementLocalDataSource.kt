@@ -69,6 +69,9 @@ class MovementLocalDataSource @Inject constructor(
                             isDuplicate = true,
                         )
                     }
+                    return@withTransaction RegisterTransactionResult.Failure(
+                        "El recibo local existe, pero falta su transacción; se requiere reconciliación"
+                    )
                 } else {
                     return@withTransaction RegisterTransactionResult.Conflict(
                         "Idempotency conflict: key ${command.idempotencyKey} already used with different payload"
