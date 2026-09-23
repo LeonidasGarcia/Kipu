@@ -10,8 +10,10 @@ import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
+import com.kipu.app.feature.movements.data.remote.RegisterTransactionRequestDto
 import java.util.UUID
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -55,6 +57,24 @@ class MovementLocalDataSourceTest {
         assertEquals(1, dao.getLedgerEntriesForTransaction(userId, first.transaction.id).size)
         assertEquals(-1_250L, dao.calculateLedgerSumForAccount(userId, "source"))
         assertEquals(-1_250L, dao.getBalanceProjection(userId, "source")?.balanceMinor)
+    }
+
+    @Test
+    fun provisionalMerchantSurvivesLocalCommitAndOutbox() = runTest {
+        seedAccount("source")
+        val result = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 800L)
+                .copy(merchantProvisionalText = "Bodega del barrio"),
+            "merchant-hash",
+        ) as RegisterTransactionResult.Success
+
+        val stored = dao.getTransactionById(userId, result.transaction.id)
+        assertEquals("Bodega del barrio", stored?.merchantProvisionalText)
+        assertEquals(null, stored?.merchantId)
+        val outbox = dao.claimPendingOutbox(userId, System.currentTimeMillis()).single()
+        val payload = Json.decodeFromString<RegisterTransactionRequestDto>(outbox.payload)
+        assertEquals("Bodega del barrio", payload.transaction.merchantProvisionalText)
+        assertEquals(null, payload.transaction.merchantId)
     }
 
     @Test

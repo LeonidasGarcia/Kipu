@@ -61,7 +61,7 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         MovementOutboxEntity::class,
         BalanceProjectionEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

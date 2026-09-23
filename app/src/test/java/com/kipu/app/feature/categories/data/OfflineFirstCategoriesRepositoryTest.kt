@@ -48,6 +48,10 @@ class FakeCategoryDao : CategoryDao {
         categories.forEach { insertCategory(it) }
     }
 
+    override suspend fun insertCategoriesIfAbsent(categories: List<CategoryEntity>) {
+        categories.forEach { this.categories.putIfAbsent(it.id, it) }
+    }
+
     override suspend fun updateCategory(category: CategoryEntity) {
         categories[category.id] = category
     }
@@ -65,6 +69,10 @@ class FakeCategoryDao : CategoryDao {
 
     override suspend fun insertPresentation(presentation: CategoryPresentationEntity) {
         presentations["${presentation.userId}_${presentation.categoryId}"] = presentation
+    }
+
+    override suspend fun insertPresentationsIfAbsent(presentations: List<CategoryPresentationEntity>) {
+        presentations.forEach { this.presentations.putIfAbsent("${it.userId}_${it.categoryId}", it) }
     }
 
     override suspend fun updatePresentation(presentation: CategoryPresentationEntity) {
@@ -145,6 +153,8 @@ class FakeMerchantCatalogDao : MerchantCatalogDao {
 
     override fun getAllActiveMerchants(): Flow<List<MerchantCatalogEntity>> =
         flowOf(merchants.values.filter { it.isActive })
+
+    override fun observeMerchants(): Flow<List<MerchantCatalogEntity>> = flowOf(merchants.values.toList())
 
     override suspend fun getMerchantById(id: String): MerchantCatalogEntity? = merchants[id]
 

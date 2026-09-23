@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(8);
+SELECT plan(11);
 
 -- Test 1: Function register_transaction_v1 exists
 SELECT has_function('public', 'register_transaction_v1', ARRAY['jsonb'], 'register_transaction_v1 exists');
@@ -47,6 +47,32 @@ SELECT is(
 );
 
 -- Test 6: Verify duplicate returns original response without creating duplicate transaction
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'idemp-provisional-1', 'request_hash', 'hash-provisional-1',
+        'transaction', jsonb_build_object(
+            'id', 'b3333333-0000-0000-0000-000000000003',
+            'type', 'EXPENSE', 'amount_minor', 800, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_provisional_text', 'Bodega del barrio'
+        )))->>'status'), 'APPLIED', 'Provisional merchant is accepted');
+SELECT is(
+    (SELECT merchant_provisional_text FROM public.transactions
+     WHERE id = 'b3333333-0000-0000-0000-000000000003'),
+    'Bodega del barrio', 'Provisional merchant text is persisted');
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'idemp-provisional-conflict', 'request_hash', 'hash-provisional-conflict',
+        'transaction', jsonb_build_object(
+            'id', 'b3333333-0000-0000-0000-000000000004',
+            'type', 'EXPENSE', 'amount_minor', 800, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_provisional_text', 'Bodega del barrio'
+        )))->'error'->>'code'), 'MERCHANT_CONFLICT', 'Merchant UUID and text are exclusive');
+
 SELECT is(
     (public.register_transaction_v1(
         jsonb_build_object(

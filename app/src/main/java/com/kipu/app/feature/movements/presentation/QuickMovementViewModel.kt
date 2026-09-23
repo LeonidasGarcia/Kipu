@@ -3,10 +3,14 @@ package com.kipu.app.feature.movements.presentation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kipu.app.core.finance.domain.MoneyInputParser
+import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
+import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
+import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.movements.domain.RegisterTransaction
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
@@ -31,16 +35,6 @@ data class CategoryOption(
     val icon: String,
 )
 
-val DEFAULT_CATEGORIES = listOf(
-    CategoryOption("cat-food", "Alimentación", "restaurant"),
-    CategoryOption("cat-transport", "Transporte", "directions_car"),
-    CategoryOption("cat-services", "Servicios", "bolt"),
-    CategoryOption("cat-health", "Salud", "medical_services"),
-    CategoryOption("cat-shopping", "Compras", "shopping_bag"),
-    CategoryOption("cat-entertainment", "Entretenimiento", "movie"),
-    CategoryOption("cat-other", "Otros", "category"),
-)
-
 data class QuickMovementUiState(
     val type: MovementType = MovementType.EXPENSE,
     val amountText: String = "",
@@ -51,12 +45,14 @@ data class QuickMovementUiState(
     val selectedCategoryName: String? = null,
     val selectedCategoryIcon: String? = null,
     val merchantName: String = "",
+    val selectedMerchantId: String? = null,
+    val merchantProvisionalText: String? = null,
     val occurredAt: Long = System.currentTimeMillis(),
     val note: String = "",
     val isMoreDetailsExpanded: Boolean = false,
     val isSaving: Boolean = false,
     val availableAccounts: List<Account> = emptyList(),
-    val availableCategories: List<CategoryOption> = DEFAULT_CATEGORIES,
+    val availableCategories: List<CategoryOption> = emptyList(),
     val amountError: String? = null,
     val accountError: String? = null,
     val categoryError: String? = null,
@@ -75,6 +71,8 @@ sealed interface QuickMovementUiEvent {
 class QuickMovementViewModel @Inject constructor(
     private val registerTransactionUseCase: RegisterTransaction,
     private val observeInstruments: ObserveInstruments,
+    private val observeCategories: ObserveCategories,
+    private val categorySyncScheduler: CategorySyncScheduler,
     private val sessionCoordinator: SessionCoordinator,
 ) : ViewModel() {
 
@@ -85,6 +83,25 @@ class QuickMovementViewModel @Inject constructor(
     val events = _events.receiveAsFlow()
 
     init {
+        getUserId()?.let { ownerId ->
+            categorySyncScheduler.scheduleSync(ownerId)
+            viewModelScope.launch {
+                observeCategories(UserId(ownerId)).collect { items ->
+                    val options = items.flatMap { root -> listOf(root) + root.subcategories }
+                        .filter { it.category.isActive }
+                        .map { CategoryOption(it.category.id.value, it.displayName, it.icon) }
+                    _uiState.update { current ->
+                        val selection = options.find { it.id == current.selectedCategoryId }
+                        current.copy(
+                            availableCategories = options,
+                            selectedCategoryId = selection?.id,
+                            selectedCategoryName = selection?.name,
+                            selectedCategoryIcon = selection?.icon,
+                        )
+                    }
+                }
+            }
+        }
         viewModelScope.launch {
             observeInstruments.observeAccounts(activeOnly = true).collect { accounts ->
                 _uiState.update { current ->
@@ -135,8 +152,21 @@ class QuickMovementViewModel @Inject constructor(
         }
     }
 
-    fun onMerchantChanged(merchant: String) {
-        _uiState.update { it.copy(merchantName = merchant) }
+    fun onMerchantSelected(merchant: MerchantCatalogEntry) {
+        _uiState.update {
+            it.copy(merchantName = merchant.name, selectedMerchantId = merchant.id.value, merchantProvisionalText = null)
+        }
+    }
+
+    fun onMerchantProvisionalText(text: String) {
+        val name = text.trim()
+        _uiState.update {
+            it.copy(merchantName = name, selectedMerchantId = null, merchantProvisionalText = name.takeIf(String::isNotBlank))
+        }
+    }
+
+    fun onMerchantCleared() {
+        _uiState.update { it.copy(merchantName = "", selectedMerchantId = null, merchantProvisionalText = null) }
     }
 
     fun onOccurredAtChanged(occurredAt: Long) {
@@ -180,7 +210,10 @@ class QuickMovementViewModel @Inject constructor(
             }
         }
 
-        val userId = getUserId()
+        val userId = getUserId() ?: run {
+            _uiState.update { it.copy(generalError = "Inicia sesión para registrar un movimiento") }
+            return
+        }
         val command = RegisterTransactionCommand(
             idempotencyKey = UUID.randomUUID().toString(),
             userId = userId,
@@ -190,7 +223,8 @@ class QuickMovementViewModel @Inject constructor(
             sourceAccountId = state.selectedSourceAccountId,
             destinationAccountId = if (state.type == MovementType.TRANSFER) state.selectedDestinationAccountId else null,
             categoryId = state.selectedCategoryId,
-            merchantId = state.merchantName.takeIf { it.isNotBlank() },
+            merchantId = state.selectedMerchantId,
+            merchantProvisionalText = state.merchantProvisionalText,
             occurredAt = state.occurredAt,
             note = state.note.takeIf { it.isNotBlank() },
             ignoreSimilarityWarning = false,
@@ -267,9 +301,8 @@ class QuickMovementViewModel @Inject constructor(
         return MoneyInputParser.parseMinorUnits(amountText)
     }
 
-    private fun getUserId(): String {
+    private fun getUserId(): String? {
         return sessionCoordinator.currentOwner?.verifiedUserId
             ?: (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId
-            ?: "local_user"
     }
 }

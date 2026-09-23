@@ -40,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetState
@@ -73,6 +74,8 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.R
+import com.kipu.app.feature.categories.presentation.components.MerchantPickerBottomSheet
+import com.kipu.app.feature.categories.presentation.components.MerchantPickerViewModel
 import com.kipu.app.feature.movements.domain.model.MovementType
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -89,9 +92,12 @@ fun QuickMovementBottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: QuickMovementViewModel = hiltViewModel(),
+    merchantPickerViewModel: MerchantPickerViewModel = hiltViewModel(),
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val merchantPickerState by merchantPickerViewModel.uiState.collectAsStateWithLifecycle()
+    var showMerchantPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -126,12 +132,36 @@ fun QuickMovementBottomSheet(
             onSourceAccountSelected = viewModel::onSourceAccountSelected,
             onDestinationAccountSelected = viewModel::onDestinationAccountSelected,
             onCategorySelected = viewModel::onCategorySelected,
-            onMerchantChanged = viewModel::onMerchantChanged,
+            onOpenMerchantPicker = { showMerchantPicker = true },
+            onClearMerchant = {
+                merchantPickerViewModel.clearSelection()
+                viewModel.onMerchantCleared()
+            },
             onNoteChanged = viewModel::onNoteChanged,
             onToggleMoreDetails = viewModel::onToggleMoreDetails,
             onSave = viewModel::onSave,
             onClose = onDismissRequest,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+    }
+
+    if (showMerchantPicker) {
+        MerchantPickerBottomSheet(
+            state = merchantPickerState,
+            onQueryChange = merchantPickerViewModel::onQueryChanged,
+            onSelectMerchant = { merchant ->
+                merchantPickerViewModel.selectMerchant(merchant)
+                viewModel.onMerchantSelected(merchant)
+            },
+            onSetProvisionalText = { name ->
+                merchantPickerViewModel.setProvisionalText(name)
+                viewModel.onMerchantProvisionalText(name)
+            },
+            onClearSelection = {
+                merchantPickerViewModel.clearSelection()
+                viewModel.onMerchantCleared()
+            },
+            onDismiss = { showMerchantPicker = false },
         )
     }
 
@@ -152,7 +182,8 @@ fun QuickMovementContent(
     onSourceAccountSelected: (String) -> Unit,
     onDestinationAccountSelected: (String) -> Unit,
     onCategorySelected: (CategoryOption) -> Unit,
-    onMerchantChanged: (String) -> Unit,
+    onOpenMerchantPicker: () -> Unit,
+    onClearMerchant: () -> Unit,
     onNoteChanged: (String) -> Unit,
     onToggleMoreDetails: () -> Unit,
     onSave: () -> Unit,
@@ -345,6 +376,13 @@ fun QuickMovementContent(
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+                if (uiState.availableCategories.isEmpty()) {
+                    Text(
+                        "Cargando categorías. Conéctate para sincronizarlas si aún no aparecen.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -375,22 +413,22 @@ fun QuickMovementContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Merchant input
-            OutlinedTextField(
-                value = uiState.merchantName,
-                onValueChange = onMerchantChanged,
-                label = { Text(stringResource(R.string.movement_merchant)) },
-                placeholder = { Text(stringResource(R.string.movement_select_merchant)) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryTeal,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("input_merchant"),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(
+                    onClick = onOpenMerchantPicker,
+                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
+                ) {
+                    Text(
+                        uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
+                        maxLines = 1,
+                    )
+                }
+                if (uiState.merchantName.isNotBlank()) {
+                    IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))

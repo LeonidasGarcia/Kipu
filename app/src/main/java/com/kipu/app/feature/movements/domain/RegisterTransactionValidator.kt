@@ -21,6 +21,12 @@ class RegisterTransactionValidator {
             val fieldName = if (command.type == MovementType.INCOME) "destination_account" else "source_account"
             return ValidationResult.Invalid(fieldName, "La cuenta es obligatoria")
         }
+        if (command.merchantId != null && command.merchantProvisionalText != null) {
+            return ValidationResult.Invalid("merchant", "Selecciona un comercio o escribe un nombre provisional")
+        }
+        if (command.merchantProvisionalText != null && command.merchantProvisionalText.trim().isEmpty()) {
+            return ValidationResult.Invalid("merchant", "El nombre del comercio no puede estar vacío")
+        }
 
         when (command.type) {
             MovementType.EXPENSE -> {

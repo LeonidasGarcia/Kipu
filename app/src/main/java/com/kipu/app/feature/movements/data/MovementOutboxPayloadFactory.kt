@@ -31,6 +31,7 @@ internal object MovementOutboxPayloadFactory {
                 destinationAccountId = transaction.destinationAccountId,
                 categoryId = transaction.categoryId,
                 merchantId = transaction.merchantId,
+                merchantProvisionalText = transaction.merchantProvisionalText,
                 occurredAt = Instant.ofEpochMilli(transaction.occurredAt).toString(),
                 note = transaction.note,
             ),

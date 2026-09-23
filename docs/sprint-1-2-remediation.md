@@ -68,3 +68,10 @@
 - Una migración posterior limita los privilegios sobrantes de `private.registration_rate_buckets` y `public.merchant_services`; otra corrige el tipo UUID del RPC de resolución de conflictos y exige un conflicto abierto del usuario autenticado.
 - Se actualizaron pruebas pgTAP que usaban columnas y valores anteriores al esquema actual. Tras `supabase db reset --local`, pasan 11 de 13 archivos pgTAP. Siguen fallando `financial_payment.test.sql` y `financial_purchase.test.sql`: los RPC del avance EP-CTA consultan `public.command_receipts`, mientras la tabla real es `internal.command_receipts`. Estos RPC también necesitan una revisión de moneda de tarjeta y saldo remoto antes de desplegarse.
 - Las correcciones SQL se validaron exclusivamente en Docker local. No se aplicó DDL al proyecto Supabase conectado.
+
+### Formulario de movimientos y catálogos S2
+
+- El formulario ya no ofrece categorías con IDs ficticios. Observa las categorías activas de Room y solicita su carga desde Supabase al abrirse; el worker incorpora las categorías y presentaciones que faltan sin reemplazar ediciones locales pendientes. Las categorías de sistema usan su nombre de servidor si aún no existe una presentación personalizada.
+- La selección de comercio reutiliza el catálogo. Un comercio seleccionado envía su UUID; un nombre libre se guarda como `merchant_provisional_text`, separado del UUID, en Room v7, el outbox y el RPC. El historial muestra nombre de categoría y comercio al observar sus cachés locales.
+- `supabase db reset --local` y `movements_register_transaction_test.sql` pasan, incluidas las pruebas de texto provisional y exclusividad. La suite pgTAP completa continúa en 11/13 archivos por los dos RPC de EP-CTA indicados arriba. `testDebugUnitTest` y `assembleDebug` pasan; `MovementRoomMigrationTest` 2/2 y `SyncCategoryCommandsWorkerTest` 1/1 pasan en `com.kipu.app.lab`.
+- Falta probar el catálogo con un usuario real contra el servidor conectado y reconciliar datos entre dos dispositivos. Ninguna migración SQL de esta rama se aplicó al proyecto Supabase conectado.

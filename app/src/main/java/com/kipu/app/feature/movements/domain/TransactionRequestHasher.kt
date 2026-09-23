@@ -13,6 +13,7 @@ class TransactionRequestHasher {
             append("currency_code:").append(command.currency).append(";")
             append("destination_account_id:").append(command.destinationAccountId ?: "").append(";")
             append("merchant_id:").append(command.merchantId ?: "").append(";")
+            append("merchant_provisional_text:").append(command.merchantProvisionalText ?: "").append(";")
             append("note:").append(command.note ?: "").append(";")
             append("occurred_at:").append(command.occurredAt).append(";")
             append("source_account_id:").append(command.sourceAccountId ?: "").append(";")

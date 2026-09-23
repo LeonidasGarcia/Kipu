@@ -62,6 +62,7 @@ data class Transaction(
     val destinationAccountId: String? = null,
     val categoryId: String? = null,
     val merchantId: String? = null,
+    val merchantProvisionalText: String? = null,
     val legacyKind: String? = null,
     val occurredAt: Long,
     val note: String? = null,

@@ -14,6 +14,8 @@ import com.kipu.app.core.logging.SecureLog
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.categories.data.local.CategoryConflictEntity
 import com.kipu.app.feature.categories.data.local.CategoryDao
+import com.kipu.app.feature.categories.data.local.CategoryEntity
+import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.categories.data.remote.CategoriesApi
@@ -25,6 +27,7 @@ import com.kipu.app.feature.categories.data.remote.UpdateCategoryPresentationReq
 import com.kipu.app.feature.categories.data.remote.UpdateMovementClassificationRequestDto
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
@@ -50,6 +53,9 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
 
+        // Fill missing server categories without overwriting pending local edits.
+        hydrateCategories(userId)
+
         // 1. Hydrate / refresh merchant catalog
         hydrateMerchantCatalog()
 
@@ -74,6 +80,54 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
         }
 
         return Result.success()
+    }
+
+    private suspend fun hydrateCategories(userId: String) {
+        try {
+            val categories = when (val response = api.fetchCategories()) {
+                is CategoryApiResponse.Success -> {
+                    val visible = response.data.filter { it.userId == null || it.userId == userId }
+                    categoryDao.insertCategoriesIfAbsent(visible.map { dto ->
+                        CategoryEntity(
+                            id = dto.id, userId = dto.userId, parentId = dto.parentId,
+                            origin = dto.origin, isActive = dto.isActive,
+                            remoteRevision = dto.remoteRevision,
+                            createdAt = Instant.parse(dto.createdAt).toEpochMilli(),
+                            updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
+                        )
+                    })
+                    visible
+                }
+                else -> {
+                    SecureLog.w("SyncCategoryCommandsWorker", "Failed to load categories")
+                    emptyList()
+                }
+            }
+            when (val response = api.fetchCategoryPresentations()) {
+                is CategoryApiResponse.Success -> categoryDao.insertPresentationsIfAbsent(
+                    response.data.filter { it.userId == userId }.map { dto ->
+                        CategoryPresentationEntity(
+                            categoryId = dto.categoryId, userId = dto.userId,
+                            name = dto.name, icon = dto.icon, color = dto.color,
+                            remoteRevision = dto.remoteRevision,
+                            updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
+                        )
+                    }
+                )
+                else -> SecureLog.w("SyncCategoryCommandsWorker", "Failed to load category presentations")
+            }
+            // System categories have a server name but no user presentation until customized.
+            categoryDao.insertPresentationsIfAbsent(categories.filter { it.origin == "SYSTEM" }.map { dto ->
+                CategoryPresentationEntity(
+                    categoryId = dto.id, userId = userId, name = dto.name,
+                    icon = dto.iconKey ?: "category", color = "#757575",
+                    remoteRevision = dto.remoteRevision,
+                    updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
+                )
+            })
+        } catch (e: Exception) {
+            SecureLog.e("SyncCategoryCommandsWorker", "Error loading categories", e)
+        }
     }
 
     private suspend fun hydrateMerchantCatalog() {

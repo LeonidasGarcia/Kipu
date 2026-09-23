@@ -42,6 +42,8 @@ data class TransactionEntity(
     val categoryId: String? = null,
     @ColumnInfo(name = "merchant_id")
     val merchantId: String? = null,
+    @ColumnInfo(name = "merchant_provisional_text")
+    val merchantProvisionalText: String? = null,
     @ColumnInfo(name = "legacy_kind")
     val legacyKind: String? = null,
     @ColumnInfo(name = "occurred_at")

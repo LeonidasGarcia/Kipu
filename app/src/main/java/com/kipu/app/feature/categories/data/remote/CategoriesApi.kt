@@ -68,6 +68,28 @@ class CategoriesApi @Inject constructor(
         }
     }
 
+    suspend fun fetchCategories(): CategoryApiResponse<List<CategoryCatalogItemDto>> = try {
+        val auth = getAuthHeader() ?: return CategoryApiResponse.Error(401, "No active session")
+        val response = httpClient.get("rest/v1/categories") {
+            header(HttpHeaders.Authorization, auth)
+            url { parameters.append("select", "id,name,icon_key,user_id,parent_id,origin,is_active,remote_revision,created_at,updated_at") }
+        }
+        CategoryApiResponse.Success(response.body())
+    } catch (e: Exception) {
+        CategoryApiResponse.NetworkFailure(e)
+    }
+
+    suspend fun fetchCategoryPresentations(): CategoryApiResponse<List<CategoryPresentationCatalogItemDto>> = try {
+        val auth = getAuthHeader() ?: return CategoryApiResponse.Error(401, "No active session")
+        val response = httpClient.get("rest/v1/category_presentations") {
+            header(HttpHeaders.Authorization, auth)
+            url { parameters.append("select", "category_id,user_id,name,icon,color,remote_revision,updated_at") }
+        }
+        CategoryApiResponse.Success(response.body())
+    } catch (e: Exception) {
+        CategoryApiResponse.NetworkFailure(e)
+    }
+
     private suspend inline fun <reified REQ : Any> callRpc(
         rpcName: String,
         body: REQ

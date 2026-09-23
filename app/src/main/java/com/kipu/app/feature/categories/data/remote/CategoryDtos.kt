@@ -4,6 +4,31 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class CategoryCatalogItemDto(
+    val id: String,
+    val name: String,
+    @SerialName("icon_key") val iconKey: String? = null,
+    @SerialName("user_id") val userId: String? = null,
+    @SerialName("parent_id") val parentId: String? = null,
+    val origin: String,
+    @SerialName("is_active") val isActive: Boolean,
+    @SerialName("remote_revision") val remoteRevision: Long,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+@Serializable
+data class CategoryPresentationCatalogItemDto(
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("user_id") val userId: String,
+    val name: String,
+    val icon: String,
+    val color: String,
+    @SerialName("remote_revision") val remoteRevision: Long,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+@Serializable
 data class CreateCategoryRequestDto(
     @SerialName("operation_id") val operationId: String,
     @SerialName("category_id") val categoryId: String,

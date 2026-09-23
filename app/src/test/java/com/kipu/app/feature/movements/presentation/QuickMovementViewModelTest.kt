@@ -14,6 +14,19 @@ import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
+import com.kipu.app.feature.categories.domain.CategoriesRepository
+import com.kipu.app.feature.categories.domain.model.Category
+import com.kipu.app.feature.categories.domain.model.CategoryConflict
+import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryOrigin
+import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.ConflictId
+import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MerchantId
+import com.kipu.app.feature.categories.domain.model.MovementClassification
+import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
+import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
+import com.kipu.app.core.finance.domain.model.MovementId
 import com.kipu.app.feature.movements.domain.MovementRepository
 import com.kipu.app.feature.movements.domain.RegisterTransaction
 import com.kipu.app.feature.movements.domain.RegisterTransactionValidator
@@ -47,6 +60,7 @@ class QuickMovementViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val testAccountId = AccountId.generate()
     private val testUserId = UserId.generate()
+    private val testCategoryId = CategoryId.generate()
     private lateinit var fakeMovementRepo: FakeMovementRepo
     private lateinit var fakeInstrumentsRepo: FakeInstrumentsRepo
     private lateinit var fakeSessionCoordinator: FakeSessionCoordinator
@@ -66,6 +80,11 @@ class QuickMovementViewModelTest {
         viewModel = QuickMovementViewModel(
             registerTransactionUseCase = registerUseCase,
             observeInstruments = observeInstruments,
+            observeCategories = ObserveCategories(FakeCategoriesRepo(testUserId, testCategoryId)),
+            categorySyncScheduler = object : CategorySyncScheduler {
+                override fun scheduleSync(userId: String) = Unit
+                override fun cancelSync(userId: String) = Unit
+            },
             sessionCoordinator = fakeSessionCoordinator,
         )
     }
@@ -81,6 +100,7 @@ class QuickMovementViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(MovementType.EXPENSE, state.type)
         assertEquals(testAccountId.value, state.selectedSourceAccountId)
+        assertEquals(testCategoryId.value, state.availableCategories.single().id)
     }
 
     @Test
@@ -115,7 +135,7 @@ class QuickMovementViewModelTest {
     fun `valid expense registration succeeds`() = runTest {
         advanceUntilIdle()
         viewModel.onAmountChanged("25.50")
-        viewModel.onCategorySelected(CategoryOption("cat-food", "Alimentación", "restaurant"))
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
         viewModel.onSave()
         advanceUntilIdle()
 
@@ -129,7 +149,7 @@ class QuickMovementViewModelTest {
         fakeMovementRepo.triggerDuplicateWarning = true
 
         viewModel.onAmountChanged("30.00")
-        viewModel.onCategorySelected(CategoryOption("cat-food", "Alimentación", "restaurant"))
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
         viewModel.onSave()
         advanceUntilIdle()
 
@@ -144,6 +164,56 @@ class QuickMovementViewModelTest {
         assertEquals(false, viewModel.uiState.value.showDuplicateWarning)
         assertEquals(1, fakeMovementRepo.registeredCommands.size)
         assertTrue(fakeMovementRepo.registeredCommands.first().ignoreSimilarityWarning)
+    }
+
+    @Test
+    fun `provisional merchant is not sent as a catalog UUID`() = runTest {
+        advanceUntilIdle()
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onMerchantProvisionalText("Bodega del barrio")
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        val command = fakeMovementRepo.registeredCommands.single()
+        assertEquals(null, command.merchantId)
+        assertEquals("Bodega del barrio", command.merchantProvisionalText)
+    }
+
+    @Test
+    fun `catalog merchant uses its UUID and clears provisional text`() = runTest {
+        advanceUntilIdle()
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onMerchantProvisionalText("Bodega del barrio")
+        val merchantId = MerchantId.generate()
+        viewModel.onMerchantSelected(MerchantCatalogEntry(merchantId, "Tambo", "tambo"))
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        val command = fakeMovementRepo.registeredCommands.single()
+        assertEquals(merchantId.value, command.merchantId)
+        assertEquals(null, command.merchantProvisionalText)
+    }
+
+    private class FakeCategoriesRepo(private val userId: UserId, private val categoryId: CategoryId) : CategoriesRepository {
+        override fun observeCategories(userId: UserId): Flow<List<Category>> = flowOf(listOf(
+            Category(categoryId, null, null, CategoryOrigin.SYSTEM, true),
+        ))
+        override fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>> = flowOf(listOf(
+            CategoryPresentation(categoryId, this.userId, "Alimentación", "restaurant", "#ffffff"),
+        ))
+        override suspend fun getCategory(categoryId: CategoryId): Category? = null
+        override suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category> = Result.failure(UnsupportedOperationException())
+        override suspend fun setCategoryActive(categoryId: CategoryId, isActive: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override suspend fun updateCategoryPresentation(presentation: CategoryPresentation, expectedRevision: Long): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>> = flowOf(emptyList())
+        override fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?> = flowOf(null)
+        override suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override suspend fun clearCategoryClassification(movementId: MovementId): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override suspend fun clearMerchantClassification(movementId: MovementId): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override fun observeConflicts(userId: UserId): Flow<List<CategoryConflict>> = flowOf(emptyList())
+        override suspend fun resolveConflict(conflictId: ConflictId, chosenVersion: String): Result<Unit> = Result.failure(UnsupportedOperationException())
     }
 
     private class FakeMovementRepo : MovementRepository {

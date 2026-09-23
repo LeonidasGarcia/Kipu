@@ -22,7 +22,7 @@ class MovementOutboxPayloadFactoryTest {
             sourceAccountId = "account-id",
             categoryId = "category-id",
             occurredAt = occurredAt.toEpochMilli(),
-        ).copy(note = note)
+        ).copy(note = note, merchantProvisionalText = "Bodega del barrio")
 
         val payload = MovementOutboxPayloadFactory.build(
             transaction = transaction,
@@ -35,5 +35,7 @@ class MovementOutboxPayloadFactoryTest {
         assertEquals("operation-id", decoded.idempotencyKey)
         assertEquals(occurredAt.toString(), decoded.transaction.occurredAt)
         assertEquals(note, decoded.transaction.note)
+        assertEquals(null, decoded.transaction.merchantId)
+        assertEquals("Bodega del barrio", decoded.transaction.merchantProvisionalText)
     }
 }
