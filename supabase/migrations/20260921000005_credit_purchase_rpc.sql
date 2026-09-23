@@ -10,15 +10,14 @@ AS $$
 DECLARE
     v_user_id UUID;
     v_op_id UUID;
-    v_card_id TEXT;
+    v_card_id UUID;
     v_amount_minor BIGINT;
     v_currency TEXT;
     v_merchant TEXT;
     v_installments INT;
     v_effective_at TIMESTAMPTZ;
     v_existing_receipt RECORD;
-    v_card_type TEXT;
-    v_card_curr TEXT;
+    v_card_is_credit BOOLEAN;
     v_card_archived BOOLEAN;
     v_mov_id UUID;
 BEGIN
@@ -28,7 +27,7 @@ BEGIN
     END IF;
 
     v_op_id := (p_command->>'operation_id')::uuid;
-    v_card_id := p_command->>'card_id';
+    v_card_id := (p_command->>'card_id')::uuid;
     v_amount_minor := (p_command->>'amount_minor_units')::bigint;
     v_currency := p_command->>'currency';
     v_merchant := COALESCE(p_command->>'merchant', 'Compra');
@@ -44,27 +43,24 @@ BEGIN
     END IF;
 
     -- Idempotency check
-    SELECT * INTO v_existing_receipt FROM public.command_receipts
-    WHERE user_id = v_user_id AND operation_id = v_op_id;
+    SELECT * INTO v_existing_receipt FROM internal.command_receipts
+    WHERE user_id = v_user_id AND idempotency_key = v_op_id::text;
     IF FOUND THEN
         RETURN v_existing_receipt.response_payload;
     END IF;
 
     -- Verify credit card
-    SELECT type, currency, is_archived INTO v_card_type, v_card_curr, v_card_archived
+    SELECT is_credit, is_archived INTO v_card_is_credit, v_card_archived
     FROM public.cards
     WHERE user_id = v_user_id AND id = v_card_id;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Card not found' USING ERRCODE = 'P0002';
     END IF;
-    IF v_card_type != 'CREDIT' THEN
+    IF NOT v_card_is_credit THEN
         RAISE EXCEPTION 'Only credit cards can record credit purchases' USING ERRCODE = '22000';
     END IF;
     IF v_card_archived THEN
         RAISE EXCEPTION 'Cannot record purchase on archived card' USING ERRCODE = '22000';
-    END IF;
-    IF v_card_curr != v_currency THEN
-        RAISE EXCEPTION 'Card currency mismatch' USING ERRCODE = '22023';
     END IF;
 
     v_mov_id := gen_random_uuid();
@@ -74,15 +70,15 @@ BEGIN
         id, operation_id, operation_sequence, user_id, kind, amount_minor_units, currency,
         card_id, effective_at, status, created_at
     ) VALUES (
-        v_mov_id::text, v_op_id, 0, v_user_id, 'CREDIT_PURCHASE', v_amount_minor, v_currency,
+        v_mov_id, v_op_id, 0, v_user_id, 'CREDIT_PURCHASE', v_amount_minor, v_currency,
         v_card_id, v_effective_at, 'POSTED', now()
     );
 
     -- Receipt
-    INSERT INTO public.command_receipts (
-        user_id, operation_id, command_type, aggregate_type, aggregate_id, payload_hash, response_payload, created_at
+    INSERT INTO internal.command_receipts (
+        user_id, idempotency_key, command_type, request_hash, response_payload, status, created_at
     ) VALUES (
-        v_user_id, v_op_id, 'CONFIRM_CREDIT_PURCHASE', 'CARD', v_card_id,
+        v_user_id, v_op_id::text, 'CONFIRM_CREDIT_PURCHASE',
         COALESCE(p_command->>'payload_hash', 'unhashed'),
         jsonb_build_object(
             'status', 'SUCCESS',
@@ -92,6 +88,7 @@ BEGIN
             'merchant', v_merchant,
             'installments', v_installments
         ),
+        'APPLIED',
         now()
     );
 
