@@ -71,11 +71,30 @@ class MovementLocalDataSourceTest {
         assertEquals(4_200L, dao.getBalanceProjection(userId, "destination")?.balanceMinor)
     }
 
-    private suspend fun seedAccount(id: String) {
+    @Test
+    fun rejectsForeignOrWrongCurrencyAccountWithoutPosting() = runTest {
+        seedAccount("owned")
+        seedAccount("foreign", owner = UUID.randomUUID().toString())
+
+        val foreignResult = source.commitTransactionAtomic(
+            command(MovementType.INCOME, "foreign", amount = 100L), "foreign-hash"
+        )
+        val currencyResult = source.commitTransactionAtomic(
+            command(MovementType.INCOME, "owned", amount = 100L).copy(currency = "USD"),
+            "currency-hash",
+        )
+
+        assertTrue(foreignResult is RegisterTransactionResult.ValidationError)
+        assertTrue(currencyResult is RegisterTransactionResult.ValidationError)
+        assertEquals(null, dao.getBalanceProjection(userId, "owned"))
+        assertEquals(null, dao.calculateLedgerSumForAccount(userId, "owned"))
+    }
+
+    private suspend fun seedAccount(id: String, owner: String = userId) {
         database.accountDao().insert(
             AccountEntity(
                 id = id,
-                userId = userId,
+                userId = owner,
                 creationOperationId = UUID.randomUUID().toString(),
                 alias = id,
                 type = "SAVINGS",

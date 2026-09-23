@@ -76,6 +76,35 @@ class MovementLocalDataSource @Inject constructor(
                 }
             }
 
+            val sourceId = command.sourceAccountId
+                ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta es obligatoria"
+                )
+            val sourceAccount = database.accountDao().getById(command.userId, sourceId)
+                ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta no existe para este usuario"
+                )
+            if (sourceAccount.isArchived || sourceAccount.currency != command.currency) {
+                return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta está archivada o su moneda no coincide"
+                )
+            }
+            if (command.type == MovementType.TRANSFER) {
+                val destinationId = command.destinationAccountId
+                    ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta de destino es obligatoria"
+                    )
+                val destinationAccount = database.accountDao().getById(command.userId, destinationId)
+                    ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta de destino no existe para este usuario"
+                    )
+                if (destinationId == sourceId || destinationAccount.isArchived || destinationAccount.currency != command.currency) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta de destino es inválida para esta transferencia"
+                    )
+                }
+            }
+
             // 2. Insert transaction
             val transactionId = UUID.randomUUID().toString()
             val now = System.currentTimeMillis()
