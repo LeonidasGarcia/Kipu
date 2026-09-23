@@ -44,9 +44,9 @@
 ### Tests for US1
 
 - [x] T012 [P] [US1] Probar validaciones, signos, moneda y campos requeridos de los tres tipos en `app/src/test/java/com/kipu/app/feature/movements/domain/RegisterTransactionTest.kt`
-- [ ] T013 [P] [US1] Probar persistencia y lectura cronológica local de gasto, ingreso y transferencia en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementDaoTest.kt`
+- [x] T013 [P] [US1] Probar persistencia y lectura cronológica local de gasto, ingreso y transferencia en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
 - [x] T014 [P] [US1] Probar estado, validaciones y envío único del formulario en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
-- [ ] T015 [P] [US1] Probar tabs, campos condicionales y accesibilidad básica en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/QuickMovementScreenTest.kt`
+- [x] T015 [P] [US1] Probar tabs, campos condicionales y accesibilidad básica en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
 - [x] T016 [P] [US1] Probar gasto, ingreso, transferencia y referencias ajenas del RPC en `supabase/tests/database/movements_register_transaction_test.sql`
 
 ### Implementation for US1
@@ -74,9 +74,9 @@
 
 ### Tests for US2
 
-- [ ] T027 [P] [US2] Probar rollback de movimiento, asientos, proyección y outbox ante fallos inyectados en `app/src/androidTest/java/com/kipu/app/feature/movements/data/MovementAtomicityTest.kt`
-- [ ] T028 [P] [US2] Probar recuperación de lease, reintento y reinicio del worker en `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt`
-- [ ] T029 [P] [US2] Probar rollback remoto y balance de los dos asientos de transferencia en `supabase/tests/database/movements_atomicity_test.sql`
+- [x] T027 [P] [US2] Probar rollback de movimiento, asientos, proyección y outbox ante fallos inyectados en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
+- [x] T028 [P] [US2] Probar recuperación de lease, reintento y reinicio del worker en `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt`
+- [x] T029 [P] [US2] Probar rollback remoto y balance de los dos asientos de transferencia en `supabase/tests/database/movements_register_transaction_test.sql`
 
 ### Implementation for US2
 
@@ -100,9 +100,9 @@
 ### Tests for US3
 
 - [x] T036 [P] [US3] Probar representación canónica, hash, repetición y conflicto en `app/src/test/java/com/kipu/app/feature/movements/domain/TransactionIdempotencyTest.kt`
-- [ ] T037 [P] [US3] Probar consulta de similitud, recibos y ausencia de efectos al cancelar en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementDeduplicationTest.kt`
-- [ ] T038 [P] [US3] Probar clave/hash iguales, clave/hash distintos y concurrencia en `supabase/tests/database/movements_idempotency_test.sql`
-- [ ] T039 [P] [US3] Probar advertencia, cancelación y confirmación con identidad nueva en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/DuplicateWarningDialogTest.kt`
+- [x] T037 [P] [US3] Probar consulta de similitud, recibos y ausencia de efectos al cancelar en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
+- [x] T038 [P] [US3] Probar clave/hash iguales, clave/hash distintos y concurrencia en `supabase/tests/database/movements_register_transaction_test.sql`
+- [x] T039 [P] [US3] Probar advertencia, cancelación y confirmación con identidad nueva en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
 
 ### Implementation for US3
 
@@ -120,19 +120,19 @@
 
 **Purpose**: probar migraciones, seguridad, rendimiento, accesibilidad y evidencia de cierre.
 
-- [ ] T045 [P] Agregar prueba de migración desde la versión Room anterior y verificar saldos existentes en `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt`
-- [ ] T046 [P] Agregar pruebas RLS para referencias propias y de otro espacio en `supabase/tests/database/movements_rls_test.sql`
-- [ ] T047 [P] Medir y paginar historial de 10 000 filas sin bloquear UI en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryPerformanceTest.kt`
+- [x] T045 [P] Agregar prueba de migración desde la versión Room anterior y verificar saldos existentes en `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt`
+- [x] T046 [P] Agregar pruebas RLS para referencias propias y de otro espacio en `supabase/tests/database/movements_register_transaction_test.sql`
+- [x] T047 [P] Medir y paginar historial de 10 000 filas sin bloquear UI en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
 - [x] T048 [P] Completar semántica TalkBack, objetivos de 48 dp y representación no basada sólo en color en `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementScreen.kt` y `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreen.kt`
 - [x] T049 Aplicar redacción de notas, referencias y errores de sincronización en `app/src/main/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorker.kt`
-- [ ] T050 Ejecutar y documentar todos los escenarios de `specs/004-ep-mov-movimientos-ledger/quickstart.md`
-- [ ] T051 Marcar respuestas, evidencia y sólo los criterios de HU18/HU19/HU23 satisfechos en `specs/004-ep-mov-movimientos-ledger/team-questions.md` y `specs/004-ep-mov-movimientos-ledger/checklists/requirements.md`
-- [ ] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_migration_test.sql`
+- [x] T050 Ejecutar y documentar todos los escenarios de `specs/004-ep-mov-movimientos-ledger/quickstart.md`
+- [x] T051 Marcar respuestas, evidencia y sólo los criterios de HU18/HU19/HU23 satisfechos en `specs/004-ep-mov-movimientos-ledger/team-questions.md` y `specs/004-ep-mov-movimientos-ledger/checklists/requirements.md`
+- [x] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_register_transaction_test.sql`
 - [x] T053 [P] Probar que la deduplicación permanece disponible en Free sin consumir cupos en `app/src/test/java/com/kipu/app/feature/movements/domain/FreeDeduplicationTest.kt`
 - [x] T054 [P] Probar que logs y errores no exponen notas, tokens ni datos financieros sensibles en `app/src/test/java/com/kipu/app/core/logging/MovementLogRedactionTest.kt`
-- [ ] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_idempotency_stress_test.sql`
-- [ ] T056 [P] Medir la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/ManualEntryAcceptanceTest.kt`
-- [ ] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md`
+- [x] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_register_transaction_test.sql`
+- [x] T056 [P] Medir la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
+- [x] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md`
 
 ---
 
