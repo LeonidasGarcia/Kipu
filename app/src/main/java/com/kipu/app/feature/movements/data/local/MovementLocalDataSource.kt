@@ -107,6 +107,36 @@ class MovementLocalDataSource @Inject constructor(
                     )
                 }
             }
+            if (command.categoryId != null) {
+                val category = database.categoryDao().getCategoryById(command.categoryId)
+                if (category == null || !category.isActive ||
+                    (category.userId != null && category.userId != command.userId)) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "La categoría no está activa para este usuario"
+                    )
+                }
+                if (category.parentId != null) {
+                    val parent = database.categoryDao().getCategoryById(category.parentId)
+                    if (parent == null || !parent.isActive) {
+                        return@withTransaction RegisterTransactionResult.ValidationError(
+                            "category", "La categoría principal está inactiva"
+                        )
+                    }
+                }
+            }
+            if (command.merchantId != null) {
+                val merchant = database.merchantCatalogDao().getMerchantById(command.merchantId)
+                if (merchant == null || !merchant.isActive) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "merchant", "El comercio no está disponible en el catálogo"
+                    )
+                }
+            }
+            if (command.merchantId != null && command.merchantProvisionalText != null) {
+                return@withTransaction RegisterTransactionResult.ValidationError(
+                    "merchant", "Selecciona un comercio o escribe un nombre provisional"
+                )
+            }
 
             // 2. Insert transaction
             val transactionId = UUID.randomUUID().toString()

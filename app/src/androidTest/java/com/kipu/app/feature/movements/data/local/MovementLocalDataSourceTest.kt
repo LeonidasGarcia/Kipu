@@ -7,12 +7,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kipu.app.core.database.KipuDatabase
 import com.kipu.app.feature.accounts.data.local.AccountEntity
 import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
+import com.kipu.app.feature.categories.data.local.CategoryEntity
+import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
 import com.kipu.app.feature.movements.data.remote.RegisterTransactionRequestDto
 import java.util.UUID
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -37,6 +40,11 @@ class MovementLocalDataSourceTest {
             .build()
         dao = database.movementDao()
         source = MovementLocalDataSource(database, dao, BalanceProjectionStore(dao))
+        runBlocking {
+            database.categoryDao().insertCategory(
+                CategoryEntity("category-id", null, null, "SYSTEM", createdAt = 1L, updatedAt = 1L)
+            )
+        }
     }
 
     @After
@@ -139,6 +147,50 @@ class MovementLocalDataSourceTest {
         assertTrue(currencyResult is RegisterTransactionResult.ValidationError)
         assertEquals(null, dao.getBalanceProjection(userId, "owned"))
         assertEquals(null, dao.calculateLedgerSumForAccount(userId, "owned"))
+    }
+
+    @Test
+    fun rejectsForeignInactiveCategoryAndUnknownMerchant() = runTest {
+        seedAccount("source")
+        database.categoryDao().insertCategory(
+            CategoryEntity("foreign-category", UUID.randomUUID().toString(), null, "CUSTOM", createdAt = 1L, updatedAt = 1L)
+        )
+        database.categoryDao().insertCategory(
+            CategoryEntity("inactive-category", null, null, "SYSTEM", isActive = false, createdAt = 1L, updatedAt = 1L)
+        )
+        database.categoryDao().insertCategory(
+            CategoryEntity("child-category", null, "inactive-category", "SYSTEM", createdAt = 1L, updatedAt = 1L)
+        )
+        val base = command(MovementType.EXPENSE, "source", amount = 100L)
+        assertTrue(source.commitTransactionAtomic(base.copy(categoryId = "foreign-category"), "foreign-cat") is RegisterTransactionResult.ValidationError)
+        assertTrue(source.commitTransactionAtomic(base.copy(categoryId = "inactive-category"), "inactive-cat") is RegisterTransactionResult.ValidationError)
+        assertTrue(source.commitTransactionAtomic(base.copy(categoryId = "child-category"), "inactive-parent") is RegisterTransactionResult.ValidationError)
+        assertTrue(source.commitTransactionAtomic(base.copy(merchantId = "unknown"), "unknown-merchant") is RegisterTransactionResult.ValidationError)
+        assertEquals(null, dao.calculateLedgerSumForAccount(userId, "source"))
+    }
+
+    @Test
+    fun archivedAccountCannotPost() = runTest {
+        seedAccount("source")
+        database.accountDao().setArchived(userId, "source", true, 2L)
+        val result = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 100L), "archived-account"
+        )
+        assertTrue(result is RegisterTransactionResult.ValidationError)
+        assertEquals(null, dao.calculateLedgerSumForAccount(userId, "source"))
+    }
+
+    @Test
+    fun acceptsActiveCatalogMerchant() = runTest {
+        seedAccount("source")
+        database.merchantCatalogDao().insertMerchants(listOf(
+            MerchantCatalogEntity("merchant-id", "Tambo", "tambo", lastSyncedAt = 1L)
+        ))
+        val result = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 100L).copy(merchantId = "merchant-id"),
+            "catalog-merchant",
+        )
+        assertTrue(result is RegisterTransactionResult.Success)
     }
 
     @Test

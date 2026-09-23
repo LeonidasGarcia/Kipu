@@ -1,8 +1,9 @@
 BEGIN;
-SELECT plan(11);
+SELECT plan(15);
 
 -- Test 1: Function register_transaction_v1 exists
 SELECT has_function('public', 'register_transaction_v1', ARRAY['jsonb'], 'register_transaction_v1 exists');
+SELECT ok(NOT has_function_privilege('anon', 'public.register_transaction_v1(jsonb)', 'EXECUTE'), 'anon cannot execute financial RPC');
 
 -- Test 2: Tables exist
 SELECT has_table('public', 'transactions', 'transactions table exists');
@@ -118,6 +119,32 @@ SELECT is(
 );
 
 -- Test 8: RLS isolation - User 4 cannot see User 3 transactions
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'invalid-category', 'request_hash', 'invalid-category',
+        'transaction', jsonb_build_object(
+            'type', 'EXPENSE', 'amount_minor', 100, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000099'
+        )))->'error'->>'code'), 'CATEGORY_UNAVAILABLE', 'Unknown category is rejected');
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'invalid-merchant', 'request_hash', 'invalid-merchant',
+        'transaction', jsonb_build_object(
+            'type', 'EXPENSE', 'amount_minor', 100, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_id', '00000000-0000-0000-0000-000000000099'
+        )))->'error'->>'code'), 'MERCHANT_UNAVAILABLE', 'Unknown merchant is rejected');
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'invalid-currency', 'request_hash', 'invalid-currency',
+        'transaction', jsonb_build_object(
+            'type', 'EXPENSE', 'amount_minor', 100, 'currency_code', 'USD',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001'
+        )))->'error'->>'code'), 'ACCOUNT_NOT_FOUND', 'Account currency mismatch is rejected');
+
 SET LOCAL "request.jwt.claim.sub" = '44444444-4444-4444-4444-444444444444';
 
 SELECT is(

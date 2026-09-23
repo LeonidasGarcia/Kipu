@@ -59,6 +59,7 @@ class QuickMovementViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val testAccountId = AccountId.generate()
+    private val usdAccountId = AccountId.generate()
     private val testUserId = UserId.generate()
     private val testCategoryId = CategoryId.generate()
     private lateinit var fakeMovementRepo: FakeMovementRepo
@@ -70,7 +71,7 @@ class QuickMovementViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeMovementRepo = FakeMovementRepo()
-        fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, testUserId)
+        fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, usdAccountId, testUserId)
         fakeSessionCoordinator = FakeSessionCoordinator(testUserId.value)
 
         val validator = RegisterTransactionValidator()
@@ -164,6 +165,18 @@ class QuickMovementViewModelTest {
         assertEquals(false, viewModel.uiState.value.showDuplicateWarning)
         assertEquals(1, fakeMovementRepo.registeredCommands.size)
         assertTrue(fakeMovementRepo.registeredCommands.first().ignoreSimilarityWarning)
+    }
+
+    @Test
+    fun `selecting a USD account updates the movement currency`() = runTest {
+        advanceUntilIdle()
+        viewModel.onSourceAccountSelected(usdAccountId.value)
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals("USD", fakeMovementRepo.registeredCommands.single().currency)
     }
 
     @Test
@@ -270,7 +283,7 @@ class QuickMovementViewModelTest {
         override fun observeBalance(userId: String, accountId: String): Flow<Long?> = flowOf(0L)
     }
 
-    private class FakeInstrumentsRepo(val accountId: AccountId, val userId: UserId) : FinancialInstrumentsRepository {
+    private class FakeInstrumentsRepo(val accountId: AccountId, val usdAccountId: AccountId, val userId: UserId) : FinancialInstrumentsRepository {
         val accounts = listOf(
             Account(
                 id = accountId,
@@ -280,7 +293,16 @@ class QuickMovementViewModelTest {
                 currency = Currency.PEN,
                 initialBalance = Money(100000L, Currency.PEN),
                 openedAt = java.time.Instant.now(),
-            )
+            ),
+            Account(
+                id = usdAccountId,
+                userId = userId,
+                alias = "Dólares",
+                type = AccountType.SAVINGS,
+                currency = Currency.USD,
+                initialBalance = Money(100000L, Currency.USD),
+                openedAt = java.time.Instant.now(),
+            ),
         )
 
         override fun observeAccounts(activeOnly: Boolean): Flow<List<Account>> = flowOf(accounts)

@@ -346,7 +346,9 @@ fun QuickMovementContent(
             Spacer(modifier = Modifier.height(16.dp))
             AccountDropdownSelector(
                 label = stringResource(R.string.movement_destination_account),
-                accounts = uiState.availableAccounts.filter { it.id.value != uiState.selectedSourceAccountId },
+                accounts = uiState.availableAccounts.filter {
+                    it.id.value != uiState.selectedSourceAccountId && it.currency.name == uiState.currency
+                },
                 selectedAccountId = uiState.selectedDestinationAccountId,
                 onAccountSelected = onDestinationAccountSelected,
                 error = uiState.destinationAccountError,

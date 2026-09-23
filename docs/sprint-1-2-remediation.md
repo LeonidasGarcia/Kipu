@@ -75,3 +75,8 @@
 - La selección de comercio reutiliza el catálogo. Un comercio seleccionado envía su UUID; un nombre libre se guarda como `merchant_provisional_text`, separado del UUID, en Room v7, el outbox y el RPC. El historial muestra nombre de categoría y comercio al observar sus cachés locales.
 - `supabase db reset --local` y `movements_register_transaction_test.sql` pasan, incluidas las pruebas de texto provisional y exclusividad. La suite pgTAP completa continúa en 11/13 archivos por los dos RPC de EP-CTA indicados arriba. `testDebugUnitTest` y `assembleDebug` pasan; `MovementRoomMigrationTest` 2/2 y `SyncCategoryCommandsWorkerTest` 1/1 pasan en `com.kipu.app.lab`.
 - Falta probar el catálogo con un usuario real contra el servidor conectado y reconciliar datos entre dos dispositivos. Ninguna migración SQL de esta rama se aplicó al proyecto Supabase conectado.
+
+### Validación de referencias S2
+
+- El commit local rechaza cuentas ajenas, archivadas o de otra moneda; categorías inexistentes, inactivas o de otro usuario; hijas con raíz inactiva; y comercios ausentes o inactivos. Una transferencia sólo ofrece cuentas de la misma moneda. El formulario toma PEN/USD de la cuenta de origen, y al cambiar de tipo limpia campos que ya no corresponden.
+- El RPC `register_transaction_v1` en una nueva migración valida cuenta activa con moneda coincidente, categoría activa del usuario y comercio activo antes de escribir. Fija `search_path` y revoca `EXECUTE` a `anon`. pgTAP local cubre categoría/comercio desconocido, moneda distinta y privilegios; `movements_register_transaction_test.sql` pasa 15/15. La suite general mantiene los dos fallos previos de EP-CTA. `MovementLocalDataSourceTest` pasa 9/9 en la variante lab.

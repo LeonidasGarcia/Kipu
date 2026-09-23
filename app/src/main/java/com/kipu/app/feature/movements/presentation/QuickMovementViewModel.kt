@@ -87,7 +87,8 @@ class QuickMovementViewModel @Inject constructor(
             categorySyncScheduler.scheduleSync(ownerId)
             viewModelScope.launch {
                 observeCategories(UserId(ownerId)).collect { items ->
-                    val options = items.flatMap { root -> listOf(root) + root.subcategories }
+                    val options = items.filter { it.category.isActive }
+                        .flatMap { root -> listOf(root) + root.subcategories }
                         .filter { it.category.isActive }
                         .map { CategoryOption(it.category.id.value, it.displayName, it.icon) }
                     _uiState.update { current ->
@@ -105,10 +106,14 @@ class QuickMovementViewModel @Inject constructor(
         viewModelScope.launch {
             observeInstruments.observeAccounts(activeOnly = true).collect { accounts ->
                 _uiState.update { current ->
-                    val defaultAccount = current.selectedSourceAccountId ?: accounts.firstOrNull()?.id?.value
+                    val selectedAccount = accounts.find { it.id.value == current.selectedSourceAccountId }
+                        ?: accounts.firstOrNull()
                     current.copy(
                         availableAccounts = accounts,
-                        selectedSourceAccountId = defaultAccount,
+                        selectedSourceAccountId = selectedAccount?.id?.value,
+                        currency = selectedAccount?.currency?.name ?: current.currency,
+                        selectedDestinationAccountId = current.selectedDestinationAccountId
+                            ?.takeIf { destination -> accounts.any { it.id.value == destination } },
                     )
                 }
             }
@@ -119,6 +124,12 @@ class QuickMovementViewModel @Inject constructor(
         _uiState.update { current ->
             current.copy(
                 type = type,
+                selectedCategoryId = if (type == MovementType.EXPENSE) current.selectedCategoryId else null,
+                selectedCategoryName = if (type == MovementType.EXPENSE) current.selectedCategoryName else null,
+                selectedCategoryIcon = if (type == MovementType.EXPENSE) current.selectedCategoryIcon else null,
+                merchantName = if (type == MovementType.EXPENSE) current.merchantName else "",
+                selectedMerchantId = if (type == MovementType.EXPENSE) current.selectedMerchantId else null,
+                merchantProvisionalText = if (type == MovementType.EXPENSE) current.merchantProvisionalText else null,
                 amountError = null,
                 accountError = null,
                 categoryError = null,
@@ -134,7 +145,19 @@ class QuickMovementViewModel @Inject constructor(
     }
 
     fun onSourceAccountSelected(accountId: String) {
-        _uiState.update { it.copy(selectedSourceAccountId = accountId, accountError = null) }
+        _uiState.update { current ->
+            val account = current.availableAccounts.find { it.id.value == accountId } ?: return@update current
+            current.copy(
+                selectedSourceAccountId = accountId,
+                currency = account.currency.name,
+                selectedDestinationAccountId = current.selectedDestinationAccountId
+                    ?.takeIf { destination ->
+                        current.availableAccounts.any { it.id.value == destination && it.currency == account.currency }
+                    },
+                accountError = null,
+                destinationAccountError = null,
+            )
+        }
     }
 
     fun onDestinationAccountSelected(accountId: String) {
@@ -206,6 +229,10 @@ class QuickMovementViewModel @Inject constructor(
             }
             if (state.selectedSourceAccountId == state.selectedDestinationAccountId) {
                 _uiState.update { it.copy(destinationAccountError = "La cuenta de origen y destino deben ser distintas") }
+                return
+            }
+            if (state.availableAccounts.find { it.id.value == state.selectedDestinationAccountId }?.currency?.name != state.currency) {
+                _uiState.update { it.copy(destinationAccountError = "Las cuentas deben usar la misma moneda") }
                 return
             }
         }
@@ -292,6 +319,7 @@ class QuickMovementViewModel @Inject constructor(
                 type = MovementType.EXPENSE,
                 availableAccounts = current.availableAccounts,
                 selectedSourceAccountId = current.availableAccounts.firstOrNull()?.id?.value,
+                currency = current.availableAccounts.firstOrNull()?.currency?.name ?: current.currency,
                 availableCategories = current.availableCategories,
             )
         }
