@@ -30,6 +30,7 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.auth.domain.AuthRepository
 import com.kipu.app.feature.auth.domain.model.AuthResult
+import com.kipu.app.feature.auth.data.RecoverySessionInstaller
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.settings.data.local.ProfilePreferencesDao
 import com.kipu.app.navigation.AUTH_LOGIN_ROUTE
@@ -77,6 +78,9 @@ class MainActivity : FragmentActivity() {
 
     @Inject
     lateinit var planPreferencesDao: PlanPreferencesDao
+
+    @Inject
+    lateinit var recoverySessionInstaller: RecoverySessionInstaller
 
     private var pendingDeepLink by mutableStateOf<DeepLinkResult?>(null)
 
@@ -133,6 +137,7 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(pendingDeepLink) {
                 when (val link = pendingDeepLink) {
                     is DeepLinkResult.ResetPassword -> {
+                        recoverySessionInstaller.install(link.callbackUrl)
                         navController.navigate(AUTH_RESET_PASSWORD_ROUTE)
                         pendingDeepLink = null
                     }

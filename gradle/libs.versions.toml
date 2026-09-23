@@ -27,6 +27,7 @@ mockk = "1.14.11"
 
 [libraries]
 mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
+mockk-jvm = { group = "io.mockk", name = "mockk-jvm", version.ref = "mockk" }
 mockk-agent = { group = "io.mockk", name = "mockk-agent", version.ref = "mockk" }
 
 # Android Core

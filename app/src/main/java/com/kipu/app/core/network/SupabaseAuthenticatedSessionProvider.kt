@@ -4,6 +4,7 @@ import com.kipu.app.core.security.KeystoreEncryptedSessionStorage
 import com.kipu.app.core.security.StoredAuthSession
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.core.session.RemoteSession
+import com.kipu.app.core.session.LocalAccess
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import java.time.Instant
@@ -18,6 +19,7 @@ class SupabaseAuthenticatedSessionProvider @Inject constructor(
     private val sessionCoordinator: SessionCoordinator,
 ) : AuthenticatedSessionProvider {
     override suspend fun currentSession(): AuthenticatedSession? {
+        if (sessionCoordinator.localAccess.value !is LocalAccess.Available) return null
         val supabaseSession = runCatching {
             supabaseClient.auth.awaitInitialization()
             supabaseClient.auth.currentSessionOrNull()?.toAuthenticatedSession()
@@ -34,6 +36,7 @@ class SupabaseAuthenticatedSessionProvider @Inject constructor(
     }
 
     override suspend fun refreshSession(): AuthenticatedSession? {
+        if (sessionCoordinator.localAccess.value !is LocalAccess.Available) return null
         supabaseClient.auth.awaitInitialization()
         val stored = sessionStorage.load()?.let(StoredAuthSession::parse) ?: return null
         val ownerId = sessionCoordinator.currentOwner?.verifiedUserId ?: return null
