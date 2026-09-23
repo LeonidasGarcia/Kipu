@@ -48,11 +48,14 @@ select lives_ok(
 );
 
 grant plan_selection_executor to postgres;
+-- pgTAP lives in extensions; grant only within this rolled-back test transaction.
+grant usage on schema extensions to plan_selection_executor;
+grant execute on all functions in schema extensions to plan_selection_executor;
 set local role plan_selection_executor;
 select set_config('request.jwt.claim.sub', '50000000-0000-4000-8000-000000000005', true);
-select is((select count(*) from public.plan_preferences where user_id = '40000000-0000-4000-8000-000000000004'), 0::bigint, 'executor cannot read another user preference');
-select is((select count(*) from private.plan_selection_heads where user_id = '40000000-0000-4000-8000-000000000004'), 0::bigint, 'executor cannot read another user head');
-select is((select count(*) from private.plan_selection_receipts where user_id = '40000000-0000-4000-8000-000000000004'), 0::bigint, 'executor cannot read another user receipt');
+select is((select count(*)::integer from public.plan_preferences where user_id = '40000000-0000-4000-8000-000000000004'), 0, 'executor cannot read another user preference');
+select is((select count(*)::integer from private.plan_selection_heads where user_id = '40000000-0000-4000-8000-000000000004'), 0, 'executor cannot read another user head');
+select is((select count(*)::integer from private.plan_selection_receipts where user_id = '40000000-0000-4000-8000-000000000004'), 0, 'executor cannot read another user receipt');
 select throws_ok(
   $$insert into public.plan_preferences(user_id, selection) values ('40000000-0000-4000-8000-000000000004', 'FREE')$$,
   '42501', null, 'executor cannot insert another user preference'
@@ -79,6 +82,8 @@ select throws_ok(
   '42501', null, 'anonymous eligibility access is denied'
 );
 grant plan_eligibility_writer to postgres;
+grant usage on schema extensions to plan_eligibility_writer;
+grant execute on all functions in schema extensions to plan_eligibility_writer;
 set local role plan_eligibility_writer;
 select throws_ok(
   $$select private.write_trial_eligibility('40000000-0000-4000-8000-000000000004', 'ELIGIBLE', now(), now() + interval '7 days', false)$$,

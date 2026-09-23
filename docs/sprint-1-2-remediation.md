@@ -62,3 +62,9 @@
 - Las operaciones nuevas de EP-CTA que afectan a una cuenta insertan el movimiento heredado, la transacción y el asiento dentro de una transacción Room. Los movimientos de deuda de tarjeta siguen su flujo previo. El saldo mostrado y la comprobación de fondos de pago de tarjeta consultan `balance_projections`, reconstruida desde `ledger_entries`.
 - `MovementRoomMigrationTest`: 2/2 en el dispositivo físico, con esquemas históricos v4 y v5; incluye apertura, ajuste, reversión, pago de tarjeta, asiento manual previo y deuda separada. `MovementLocalDataSourceTest`: 5/5, incluido apertura heredada más gasto manual. La variante lab mantiene `com.kipu.app` intacta.
 - Esto resuelve la coherencia **local** de saldo e historial. No demuestra reconciliación remota ni sustituye la revisión pendiente del esquema conectado, RPC y RLS.
+
+### Reconstrucción SQL local
+
+- Una migración posterior limita los privilegios sobrantes de `private.registration_rate_buckets` y `public.merchant_services`; otra corrige el tipo UUID del RPC de resolución de conflictos y exige un conflicto abierto del usuario autenticado.
+- Se actualizaron pruebas pgTAP que usaban columnas y valores anteriores al esquema actual. Tras `supabase db reset --local`, pasan 11 de 13 archivos pgTAP. Siguen fallando `financial_payment.test.sql` y `financial_purchase.test.sql`: los RPC del avance EP-CTA consultan `public.command_receipts`, mientras la tabla real es `internal.command_receipts`. Estos RPC también necesitan una revisión de moneda de tarjeta y saldo remoto antes de desplegarse.
+- Las correcciones SQL se validaron exclusivamente en Docker local. No se aplicó DDL al proyecto Supabase conectado.
