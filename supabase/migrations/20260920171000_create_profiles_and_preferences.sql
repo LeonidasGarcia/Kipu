@@ -74,7 +74,7 @@ GRANT profile_bootstrap_executor TO postgres;
 GRANT USAGE, CREATE ON SCHEMA public TO profile_preferences_executor, profile_bootstrap_executor;
 
 -- Table Grants
-REVOKE ALL ON TABLE public.profiles FROM PUBLIC, anon;
+REVOKE ALL ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.profiles TO authenticated;
 GRANT SELECT, UPDATE ON TABLE public.profiles TO profile_preferences_executor;
 GRANT INSERT, SELECT ON TABLE public.profiles TO profile_bootstrap_executor;
@@ -97,12 +97,12 @@ CREATE POLICY profiles_executor_update ON public.profiles
 DROP POLICY IF EXISTS profiles_bootstrap_insert ON public.profiles;
 CREATE POLICY profiles_bootstrap_insert ON public.profiles
     FOR INSERT TO profile_bootstrap_executor
-    WITH CHECK ((select auth.uid()) IS NULL OR (select auth.uid()) = user_id);
+    WITH CHECK (true);
 
 DROP POLICY IF EXISTS profiles_bootstrap_select ON public.profiles;
 CREATE POLICY profiles_bootstrap_select ON public.profiles
     FOR SELECT TO profile_bootstrap_executor
-    USING ((select auth.uid()) = user_id);
+    USING (true);
 
 -- RLS Policy on receipts
 DROP POLICY IF EXISTS receipts_executor_policy ON private.profile_preference_receipts;

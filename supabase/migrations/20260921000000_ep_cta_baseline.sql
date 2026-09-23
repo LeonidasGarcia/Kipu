@@ -43,6 +43,10 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- A credit card is a liability and need not link to a liquid account.
+ALTER TABLE public.cards ALTER COLUMN account_id DROP NOT NULL;
+ALTER TABLE public.cards ADD COLUMN IF NOT EXISTS is_archived boolean NOT NULL DEFAULT false;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cards_user_creation_op ON public.cards(user_id, creation_operation_id);
 
 -- 3. Financial movements table
@@ -307,7 +311,7 @@ BEGIN
 
     INSERT INTO public.cards (
         id, user_id, creation_operation_id, account_id, network, alias, last4,
-        is_credit, credit_limit_minor, billing_close_day, payment_due_day,
+        is_credit, credit_limit_minor, closing_day, due_day,
         preset_id, color, icon, is_archived, revision
     ) VALUES (
         v_card_id, v_user_id, v_operation_id, v_account_id, v_network, COALESCE(v_alias, v_issuer), v_last_four,

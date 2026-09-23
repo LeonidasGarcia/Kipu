@@ -15,7 +15,7 @@ INSERT INTO auth.users (id, email) VALUES
     ('44444444-4444-4444-4444-444444444444', 'user4@kipu.app')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.accounts (id, user_id, alias, type, currency_code) VALUES
+INSERT INTO public.accounts (id, user_id, name, account_type, currency_code) VALUES
     ('a3333333-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'BCP Ahorros', 'SAVINGS', 'PEN'),
     ('a3333333-0000-0000-0000-000000000002', '33333333-3333-3333-3333-333333333333', 'Efectivo', 'CASH', 'PEN')
 ON CONFLICT (id) DO NOTHING;
@@ -31,12 +31,12 @@ SELECT is(
             'idempotency_key', 'idemp-tx-1',
             'request_hash', 'hash-tx-1',
             'transaction', jsonb_build_object(
-                'id', 't3333333-0000-0000-0000-000000000001',
+                'id', 'b3333333-0000-0000-0000-000000000001',
                 'type', 'EXPENSE',
                 'amount_minor', 2500,
                 'currency_code', 'PEN',
                 'source_account_id', 'a3333333-0000-0000-0000-000000000001',
-                'category_id', 'c3333333-0000-0000-0000-000000000001',
+                'category_id', '00000000-0000-0000-0000-000000000001',
                 'occurred_at', now()::text,
                 'note', 'Almuerzo'
             )
@@ -54,12 +54,12 @@ SELECT is(
             'idempotency_key', 'idemp-tx-1',
             'request_hash', 'hash-tx-1',
             'transaction', jsonb_build_object(
-                'id', 't3333333-0000-0000-0000-000000000001',
+                'id', 'b3333333-0000-0000-0000-000000000001',
                 'type', 'EXPENSE',
                 'amount_minor', 2500,
                 'currency_code', 'PEN',
                 'source_account_id', 'a3333333-0000-0000-0000-000000000001',
-                'category_id', 'c3333333-0000-0000-0000-000000000001',
+                'category_id', '00000000-0000-0000-0000-000000000001',
                 'occurred_at', now()::text,
                 'note', 'Almuerzo'
             )
@@ -77,12 +77,12 @@ SELECT is(
             'idempotency_key', 'idemp-tx-1',
             'request_hash', 'different-hash',
             'transaction', jsonb_build_object(
-                'id', 't3333333-0000-0000-0000-000000000002',
+                'id', 'b3333333-0000-0000-0000-000000000002',
                 'type', 'EXPENSE',
                 'amount_minor', 5000,
                 'currency_code', 'PEN',
                 'source_account_id', 'a3333333-0000-0000-0000-000000000001',
-                'category_id', 'c3333333-0000-0000-0000-000000000001',
+                'category_id', '00000000-0000-0000-0000-000000000001',
                 'occurred_at', now()::text
             )
         )

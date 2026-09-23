@@ -12,8 +12,8 @@ INSERT INTO auth.users (id, email) VALUES
     ('33333333-3333-3333-3333-333333333333', 'user3@kipu.app')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.accounts (id, user_id, creation_operation_id, alias, type, currency, initial_balance_minor_units, opened_at, created_at, updated_at)
-VALUES ('acc-test-3333', '33333333-3333-3333-3333-333333333333', 'op-acc-3333', 'Cuenta BCP', 'SAVINGS', 'PEN', 10000, now(), now(), now())
+INSERT INTO public.accounts (id, user_id, creation_operation_id, name, account_type, currency_code, initial_balance_minor_units, opened_at, created_at, updated_at)
+VALUES ('a3333333-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'b3333333-0000-0000-0000-000000000001', 'Cuenta BCP', 'SAVINGS', 'PEN', 10000, now(), now(), now())
 ON CONFLICT DO NOTHING;
 
 -- Test 3: Register debit card linked to account
@@ -24,14 +24,14 @@ SELECT lives_ok(
     $$
     SELECT public.register_card_v1(
         jsonb_build_object(
-            'operation_id', 'op-card-debit-3333',
-            'card_id', 'card-debit-3333',
+            'operation_id', 'c3333333-0000-0000-0000-000000000001',
+            'card_id', 'd3333333-0000-0000-0000-000000000001',
             'type', 'DEBIT',
             'issuer', 'BCP',
             'network', 'VISA',
             'last_four_digits', '5555',
             'currency', 'PEN',
-            'account_id', 'acc-test-3333',
+            'account_id', 'a3333333-0000-0000-0000-000000000001',
             'payload_hash', 'hash-debit-3333'
         )
     );
@@ -41,7 +41,7 @@ SELECT lives_ok(
 
 -- Test 4: Debit card does NOT create financial movements
 SELECT is(
-    (SELECT COUNT(*)::integer FROM public.financial_movements WHERE card_id = 'card-debit-3333'),
+    (SELECT COUNT(*)::integer FROM public.financial_movements WHERE card_id = 'd3333333-0000-0000-0000-000000000001'),
     0,
     'Debit card registration creates zero movements'
 );
@@ -51,8 +51,8 @@ SELECT lives_ok(
     $$
     SELECT public.register_card_v1(
         jsonb_build_object(
-            'operation_id', 'op-card-credit-3333',
-            'card_id', 'card-credit-3333',
+            'operation_id', 'c3333333-0000-0000-0000-000000000002',
+            'card_id', 'd3333333-0000-0000-0000-000000000002',
             'type', 'CREDIT',
             'issuer', 'BBVA',
             'network', 'VISA',
@@ -73,8 +73,8 @@ SELECT throws_ok(
     $$
     SELECT public.register_card_v1(
         jsonb_build_object(
-            'operation_id', 'op-card-invalid',
-            'card_id', 'card-invalid',
+            'operation_id', 'c3333333-0000-0000-0000-000000000003',
+            'card_id', 'd3333333-0000-0000-0000-000000000003',
             'type', 'CREDIT',
             'issuer', 'BCP',
             'network', 'VISA',
@@ -87,7 +87,7 @@ SELECT throws_ok(
         )
     );
     $$,
-    '22023',
+    'P0001',
     NULL,
     'Full PAN is rejected by check constraint or validation'
 );

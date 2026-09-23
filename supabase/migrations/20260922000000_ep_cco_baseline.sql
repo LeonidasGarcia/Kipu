@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS public.categories (
     CONSTRAINT chk_categories_no_self_parent CHECK (id <> parent_id)
 );
 
+-- The financial core baseline already created categories with is_system/revision.
+-- Evolve those rows before indexing or calling the EP-CCO RPCs.
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS origin text;
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS remote_revision bigint;
+UPDATE public.categories
+SET origin = CASE WHEN is_system THEN 'SYSTEM' ELSE 'CUSTOM' END,
+    remote_revision = revision
+WHERE origin IS NULL OR remote_revision IS NULL;
+ALTER TABLE public.categories ALTER COLUMN origin SET NOT NULL;
+ALTER TABLE public.categories ALTER COLUMN remote_revision SET DEFAULT 1;
+ALTER TABLE public.categories ALTER COLUMN remote_revision SET NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_categories_user_id ON public.categories(user_id);
 CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON public.categories(parent_id);
 CREATE INDEX IF NOT EXISTS idx_categories_user_active ON public.categories(user_id, is_active);
@@ -65,6 +77,9 @@ CREATE TABLE IF NOT EXISTS public.merchant_services (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.merchant_services ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true;
+ALTER TABLE public.merchant_services ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1;
+
 CREATE INDEX IF NOT EXISTS idx_merchant_services_normalized_name ON public.merchant_services(normalized_name);
 CREATE INDEX IF NOT EXISTS idx_merchant_services_is_active ON public.merchant_services(is_active);
 
@@ -80,6 +95,7 @@ CREATE TABLE IF NOT EXISTS public.category_conflicts (
     resolution_operation_id uuid,
     created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE public.category_conflicts ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_category_conflicts_user_status ON public.category_conflicts(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_category_conflicts_category_id ON public.category_conflicts(category_id);
@@ -101,11 +117,11 @@ CREATE INDEX IF NOT EXISTS idx_financial_movements_user_category ON public.finan
 CREATE INDEX IF NOT EXISTS idx_financial_movements_merchant_id ON public.financial_movements(merchant_id);
 
 -- 6. Seed Predetermined Categories (Alimentación, Transporte, Servicios)
-INSERT INTO public.categories (id, user_id, parent_id, origin, is_active, remote_revision)
+INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_system, is_active, remote_revision)
 VALUES 
-    ('00000000-0000-0000-0000-000000000001', NULL, NULL, 'SYSTEM', true, 1),
-    ('00000000-0000-0000-0000-000000000002', NULL, NULL, 'SYSTEM', true, 1),
-    ('00000000-0000-0000-0000-000000000003', NULL, NULL, 'SYSTEM', true, 1)
+    ('00000000-0000-0000-0000-000000000001', NULL, NULL, 'Alimentación', 'SYSTEM', true, true, 1),
+    ('00000000-0000-0000-0000-000000000002', NULL, NULL, 'Transporte', 'SYSTEM', true, true, 1),
+    ('00000000-0000-0000-0000-000000000003', NULL, NULL, 'Servicios', 'SYSTEM', true, true, 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed Initial Merchants
@@ -199,8 +215,8 @@ BEGIN
     END IF;
 
     -- Insert category
-    INSERT INTO public.categories (id, user_id, parent_id, origin, is_active, remote_revision)
-    VALUES (v_category_id, v_user_id, v_parent_id, 'CUSTOM', true, 1);
+    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active, remote_revision)
+    VALUES (v_category_id, v_user_id, v_parent_id, v_name, 'CUSTOM', true, 1);
 
     -- Insert presentation
     INSERT INTO public.category_presentations (category_id, user_id, name, icon, color, remote_revision)
