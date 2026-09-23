@@ -24,14 +24,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class CategoryTab {
-    GASTOS,
-    INGRESOS,
+    TODAS,
+    PERSONALIZADAS,
 }
 
 data class CategoriesUiState(
     val isLoading: Boolean = true,
     val categories: List<CategoryItem> = emptyList(),
-    val selectedTab: CategoryTab = CategoryTab.GASTOS,
+    val selectedTab: CategoryTab = CategoryTab.TODAS,
     val activeCustomRootsCount: Int = 0,
     val maxCustomRoots: Int = 5,
     val isCreateDialogOpen: Boolean = false,

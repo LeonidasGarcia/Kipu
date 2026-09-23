@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
@@ -162,20 +163,20 @@ fun CategoriesScreen(
                     val expenseCount = rootCount.coerceAtLeast(0)
 
                     FilterChip(
-                        selected = state.selectedTab == CategoryTab.GASTOS,
-                        onClick = { viewModel.onTabSelected(CategoryTab.GASTOS) },
+                        selected = state.selectedTab == CategoryTab.TODAS,
+                        onClick = { viewModel.onTabSelected(CategoryTab.TODAS) },
                         label = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Gastos")
+                                Text("Todas")
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
                                     shape = CircleShape,
-                                    color = if (state.selectedTab == CategoryTab.GASTOS) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    color = if (state.selectedTab == CategoryTab.TODAS) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                                 ) {
                                     Text(
-                                        text = "$expenseCount",
+                                        text = "$rootCount",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         fontSize = 11.sp,
                                     )
@@ -191,20 +192,20 @@ fun CategoriesScreen(
                     )
 
                     FilterChip(
-                        selected = state.selectedTab == CategoryTab.INGRESOS,
-                        onClick = { viewModel.onTabSelected(CategoryTab.INGRESOS) },
+                        selected = state.selectedTab == CategoryTab.PERSONALIZADAS,
+                        onClick = { viewModel.onTabSelected(CategoryTab.PERSONALIZADAS) },
                         label = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Ingresos")
+                                Text("Personalizadas")
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
                                     shape = CircleShape,
-                                    color = if (state.selectedTab == CategoryTab.INGRESOS) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    color = if (state.selectedTab == CategoryTab.PERSONALIZADAS) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                                 ) {
                                     Text(
-                                        text = "0",
+                                        text = "${state.activeCustomRootsCount}",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         fontSize = 11.sp,
                                     )
@@ -237,12 +238,20 @@ fun CategoriesScreen(
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
+                val displayCategories = remember(state.categories, state.selectedTab) {
+                    if (state.selectedTab == CategoryTab.PERSONALIZADAS) {
+                        state.categories.filter { it.category.isCustom }
+                    } else {
+                        state.categories
+                    }
+                }
+
                 // Lista de Categorías
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(state.categories, key = { it.category.id.value }) { rootItem ->
+                    items(displayCategories, key = { it.category.id.value }) { rootItem ->
                         val isExpanded = expandedStates[rootItem.category.id.value] ?: true
 
                         CategoryRootCard(
@@ -255,6 +264,7 @@ fun CategoriesScreen(
                             onDelete = { viewModel.requestDeleteCategory(rootItem) },
                             onEditSubcategory = { subItem -> viewModel.openEditDialog(subItem) },
                             onDeleteSubcategory = { subItem -> viewModel.requestDeleteCategory(subItem) },
+                            onAddSubcategory = { viewModel.openCreateDialog(rootItem.category.id) },
                         )
                     }
 
@@ -545,7 +555,7 @@ fun CategoryRootCard(
             }
 
             // Subcategorías colapsables
-            AnimatedVisibility(visible = isExpanded && item.subcategories.isNotEmpty()) {
+            AnimatedVisibility(visible = isExpanded) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -598,6 +608,17 @@ fun CategoryRootCard(
                                     modifier = Modifier.size(16.dp),
                                 )
                             }
+                        }
+                    }
+
+                    if (onAddSubcategory != null) {
+                        TextButton(
+                            onClick = onAddSubcategory,
+                            modifier = Modifier.padding(top = 4.dp),
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Añadir subcategoría", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
