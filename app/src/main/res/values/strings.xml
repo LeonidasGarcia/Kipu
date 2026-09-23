@@ -16,7 +16,7 @@
     <string name="plan_trial_title">Prueba Premium Gratis por 7 días</string>
     <string name="plan_trial_badge">Completo</string>
     <string name="plan_trial_summary">Periodo de prueba voluntario sin cobro inmediato</string>
-    <string name="plan_trial_info">La prueba está sujeta a elegibilidad y confirmación al contratar. Elegir una opción aquí no inicia la prueba ni realiza un cobro.</string>
+    <string name="plan_trial_info">7 días de acceso completo sin costo. El cobro de S/ 29.99 se realizará al término del periodo de prueba. Cancelación directa desde la configuración de cuenta en cualquier momento sin penalización.</string>
     <string name="plan_trial_info_content_description">Información del periodo de prueba</string>
     <string name="plan_annual_info">Opción anual: el precio indicado es S/ 29.99 por año. Esta selección guarda una preferencia; no inicia una prueba ni realiza un cobro.</string>
     <string name="plan_monthly_info">Opción mensual: el precio indicado es S/ 4.99 por mes. Esta selección guarda una preferencia; no inicia una prueba ni realiza un cobro.</string>

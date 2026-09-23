@@ -10,6 +10,14 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.core.database.MIGRATION_1_2
+import com.kipu.app.core.database.MIGRATION_2_3
+import com.kipu.app.core.database.MIGRATION_3_4
+import com.kipu.app.core.database.MIGRATION_4_5
+import com.kipu.app.core.database.MIGRATION_5_6
+import com.kipu.app.core.database.MIGRATION_6_7
+import com.kipu.app.core.database.MIGRATION_7_8
+import com.kipu.app.core.database.MIGRATION_8_9
 import java.io.IOException
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -84,8 +92,17 @@ class KipuDatabaseSchemaTest {
             )
         }
 
-        helper.runMigrationsAndValidate(DATABASE_NAME, 1, true).close()
-        val database = Room.databaseBuilder(context, KipuDatabase::class.java, DATABASE_NAME).build()
+        helper.runMigrationsAndValidate(
+            DATABASE_NAME, 9, true,
+            MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+        ).close()
+        val database = Room.databaseBuilder(context, KipuDatabase::class.java, DATABASE_NAME)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+            )
+            .build()
         try {
             database.openHelper.readableDatabase.query(
                 "SELECT p.selection, s.last_issued_revision, o.operation_id " +
@@ -104,7 +121,7 @@ class KipuDatabaseSchemaTest {
     fun newerUnknownSchemaFailsSafelyWithoutDeletingRepresentativeData() {
         val configuration = SupportSQLiteOpenHelper.Configuration.builder(context)
             .name(DATABASE_NAME)
-            .callback(object : SupportSQLiteOpenHelper.Callback(2) {
+            .callback(object : SupportSQLiteOpenHelper.Callback(10) {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     db.execSQL("CREATE TABLE migration_sentinel (value TEXT NOT NULL)")
                     db.execSQL("INSERT INTO migration_sentinel VALUES ('preserve-me')")
