@@ -52,6 +52,8 @@ import com.kipu.app.ui.theme.KipuTheme
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -122,10 +124,11 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(Unit) {
                 val restoreResult = authRepository.restoreSession()
                 val restored = restoreResult.getOrNull() as? AuthResult.Success
-                if (restored != null && pendingDeepLink == null &&
-                    navController.currentDestination?.route == AUTH_LOGIN_ROUTE
-                ) {
+                if (restored != null && pendingDeepLink == null) {
                     postAuthDestination(restored.userId)?.let { destination ->
+                        navController.currentBackStackEntryFlow
+                            .filter { it.destination.route == AUTH_LOGIN_ROUTE }
+                            .first()
                         navController.navigate(destination) {
                             popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
                             launchSingleTop = true
