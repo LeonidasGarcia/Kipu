@@ -400,3 +400,59 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * Migration 5 -> 6: preserve posted account movements in the local ledger.
+ * Card-only liability rows remain in financial_movements until the card model is migrated.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.query(
+            """SELECT COUNT(*) FROM financial_movements
+               WHERE account_id IS NOT NULL AND status = 'POSTED'
+                 AND (amount_minor_units < -99999999999999 OR amount_minor_units > 99999999999999)"""
+        ).use { cursor ->
+            check(cursor.moveToFirst() && cursor.getLong(0) == 0L) {
+                "Cannot migrate account movements outside the supported monetary range"
+            }
+        }
+
+        db.execSQL("ALTER TABLE transactions ADD COLUMN legacy_kind TEXT")
+        db.execSQL(
+            """INSERT INTO transactions (
+                   id, user_id, type, amount_minor, currency_code, source_account_id,
+                   destination_account_id, category_id, merchant_id, legacy_kind,
+                   occurred_at, note, status, sync_status, created_at, updated_at
+               )
+               SELECT 'legacy:' || id, user_id,
+                   CASE WHEN amount_minor_units < 0 THEN 'EXPENSE' ELSE 'INCOME' END,
+                   ABS(amount_minor_units), currency, account_id, NULL,
+                   category_id, merchant_id, kind,
+                   effective_at / 1000, NULL, 'ACTIVE', 'MIGRATED_LOCAL',
+                   created_at / 1000, created_at / 1000
+               FROM financial_movements
+               WHERE account_id IS NOT NULL AND status = 'POSTED' AND amount_minor_units <> 0"""
+        )
+        db.execSQL(
+            """INSERT INTO ledger_entries (
+                   id, user_id, transaction_id, account_id, role,
+                   signed_amount_minor, currency_code, created_at
+               )
+               SELECT 'legacy:' || id, user_id, 'legacy:' || id, account_id,
+                   CASE WHEN amount_minor_units < 0 THEN 'SOURCE' ELSE 'DESTINATION' END,
+                   amount_minor_units, currency, created_at / 1000
+               FROM financial_movements
+               WHERE account_id IS NOT NULL AND status = 'POSTED' AND amount_minor_units <> 0"""
+        )
+        db.execSQL(
+            """INSERT OR REPLACE INTO balance_projections (
+                   user_id, account_id, balance_minor, currency_code, last_transaction_at, updated_at
+               )
+               SELECT a.user_id, a.id, COALESCE(SUM(le.signed_amount_minor), 0),
+                   a.currency, MAX(le.created_at), CAST(strftime('%s', 'now') AS INTEGER) * 1000
+               FROM accounts a
+               LEFT JOIN ledger_entries le ON le.user_id = a.user_id AND le.account_id = a.id
+               GROUP BY a.user_id, a.id, a.currency"""
+        )
+    }
+}
+

@@ -258,6 +258,7 @@ class MovementLocalDataSource @Inject constructor(
         destinationAccountId = destinationAccountId,
         categoryId = categoryId,
         merchantId = merchantId,
+        legacyKind = legacyKind,
         occurredAt = occurredAt,
         note = note,
         status = TransactionStatus.fromString(status),

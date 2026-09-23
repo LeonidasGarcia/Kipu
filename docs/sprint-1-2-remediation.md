@@ -54,4 +54,11 @@
 - `supabase db reset --local` reconstruye la cadena completa hasta EP-MOV después de adaptar EP-CCO a las columnas creadas por el baseline financiero.
 - pgTAP local: `movements_register_transaction_test.sql` 8/8, `financial_accounts.test.sql` 8/8 y `financial_cards.test.sql` 6/6. La suite completa aún falla en rate buckets, categorías/comercios, pagos/compras de tarjeta y una prueba de planes; esos fallos siguen abiertos.
 - `connectedLabAndroidTest` ejecutó cuatro pruebas Room de `MovementLocalDataSourceTest` en un dispositivo físico con paquete `com.kipu.app.lab`. La app instalada `com.kipu.app` no se actualizó. La variante lab desactiva la URL y la clave remotas.
-- La prueba instrumentada confirma proyección igual a suma del ledger para gasto y transferencia, reintento idempotente, rechazo de cuenta ajena/moneda distinta y ausencia de segundo efecto con recibo huérfano. Aún faltan prueba de migración Room v4/v5 y reconciliación entre dos dispositivos.
+- La prueba instrumentada confirma proyección igual a suma del ledger para gasto y transferencia, reintento idempotente, rechazo de cuenta ajena/moneda distinta y ausencia de segundo efecto con recibo huérfano. Aún falta reconciliación entre dos dispositivos.
+
+### Migración local del ledger
+
+- Room v6 conserva los movimientos POSTED de cuenta de v4/v5 como transacciones históricas con identificador `legacy:<movement_id>` y asiento del mismo signo. Las aperturas de importe cero no generan asiento; se crea su proyección en cero. La deuda que sólo afecta a una tarjeta permanece en `financial_movements`.
+- Las operaciones nuevas de EP-CTA que afectan a una cuenta insertan el movimiento heredado, la transacción y el asiento dentro de una transacción Room. Los movimientos de deuda de tarjeta siguen su flujo previo. El saldo mostrado y la comprobación de fondos de pago de tarjeta consultan `balance_projections`, reconstruida desde `ledger_entries`.
+- `MovementRoomMigrationTest`: 2/2 en el dispositivo físico, con esquemas históricos v4 y v5; incluye apertura, ajuste, reversión, pago de tarjeta, asiento manual previo y deuda separada. `MovementLocalDataSourceTest`: 5/5, incluido apertura heredada más gasto manual. La variante lab mantiene `com.kipu.app` intacta.
+- Esto resuelve la coherencia **local** de saldo e historial. No demuestra reconciliación remota ni sustituye la revisión pendiente del esquema conectado, RPC y RLS.

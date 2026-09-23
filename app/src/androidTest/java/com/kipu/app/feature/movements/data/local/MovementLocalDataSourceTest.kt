@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kipu.app.core.database.KipuDatabase
 import com.kipu.app.feature.accounts.data.local.AccountEntity
+import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
@@ -54,6 +55,36 @@ class MovementLocalDataSourceTest {
         assertEquals(1, dao.getLedgerEntriesForTransaction(userId, first.transaction.id).size)
         assertEquals(-1_250L, dao.calculateLedgerSumForAccount(userId, "source"))
         assertEquals(-1_250L, dao.getBalanceProjection(userId, "source")?.balanceMinor)
+    }
+
+    @Test
+    fun legacyOpeningAndManualExpenseShareOneBalance() = runTest {
+        seedAccount("source")
+        val movementDao = database.financialMovementDao()
+        movementDao.insert(
+            FinancialMovementEntity(
+                id = "opening",
+                operationId = "opening-operation",
+                operationSequence = 0,
+                userId = userId,
+                kind = "OPENING",
+                amountMinorUnits = 10_000L,
+                currency = "PEN",
+                accountId = "source",
+                openingAccountId = "source",
+                effectiveAt = 1_000_000L,
+                createdAt = 1_000_000L,
+            )
+        )
+
+        assertTrue(source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 2_000L), "expense-hash"
+        ) is RegisterTransactionResult.Success)
+
+        assertEquals(8_000L, movementDao.getAccountBalance(userId, "source"))
+        assertEquals(8_000L, dao.calculateLedgerSumForAccount(userId, "source"))
+        assertEquals(8_000L, dao.getBalanceProjection(userId, "source")?.balanceMinor)
+        assertEquals("OPENING", dao.getTransactionById(userId, "legacy:opening")?.legacyKind)
     }
 
     @Test

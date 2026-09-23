@@ -334,7 +334,14 @@ fun TransactionRow(
     var showMenu by remember { mutableStateOf(false) }
     val tx = item.transaction
 
-    val title = item.merchantName?.takeIf { it.isNotBlank() }
+    val legacyTitle = when (tx.legacyKind) {
+        "OPENING" -> "Saldo inicial"
+        "ADJUSTMENT" -> "Ajuste de saldo"
+        "REVERSAL" -> "Reversión de apertura"
+        "CARD_PAYMENT_CASH" -> "Pago de tarjeta"
+        else -> null
+    }
+    val title = legacyTitle ?: item.merchantName?.takeIf { it.isNotBlank() }
         ?: item.categoryName?.takeIf { it.isNotBlank() }
         ?: when (tx.type) {
             MovementType.EXPENSE -> "Gasto"
@@ -488,10 +495,14 @@ fun SyncStatusIcon(
     modifier: Modifier = Modifier,
 ) {
     when (status) {
-        MovementSyncStatus.SYNCED -> {
+        MovementSyncStatus.SYNCED, MovementSyncStatus.MIGRATED_LOCAL -> {
             Icon(
                 imageVector = Icons.Default.CheckCircle,
-                contentDescription = stringResource(R.string.movements_sync_synced),
+                contentDescription = if (status == MovementSyncStatus.MIGRATED_LOCAL) {
+                    "Movimiento histórico conservado localmente"
+                } else {
+                    stringResource(R.string.movements_sync_synced)
+                },
                 tint = Color(0xFF94A3B8),
                 modifier = modifier.size(14.dp)
             )

@@ -24,6 +24,7 @@ enum class MovementSyncStatus {
     PENDING,
     IN_FLIGHT,
     SYNCED,
+    MIGRATED_LOCAL,
     CONFLICT,
     FAILED_PERMANENT;
 
@@ -32,6 +33,7 @@ enum class MovementSyncStatus {
             "PENDING" -> PENDING
             "IN_FLIGHT" -> IN_FLIGHT
             "SYNCED" -> SYNCED
+            "MIGRATED_LOCAL" -> MIGRATED_LOCAL
             "CONFLICT" -> CONFLICT
             "FAILED_PERMANENT" -> FAILED_PERMANENT
             else -> PENDING
@@ -60,6 +62,7 @@ data class Transaction(
     val destinationAccountId: String? = null,
     val categoryId: String? = null,
     val merchantId: String? = null,
+    val legacyKind: String? = null,
     val occurredAt: Long,
     val note: String? = null,
     val status: TransactionStatus = TransactionStatus.ACTIVE,
@@ -73,7 +76,7 @@ data class Transaction(
         when (type) {
             MovementType.EXPENSE -> {
                 require(!sourceAccountId.isNullOrBlank()) { "Expense requires a source account" }
-                require(!categoryId.isNullOrBlank()) { "Expense requires a category" }
+                require(legacyKind != null || !categoryId.isNullOrBlank()) { "Expense requires a category" }
             }
             MovementType.INCOME -> {
                 require(!sourceAccountId.isNullOrBlank()) { "Income requires a destination/source account" }
