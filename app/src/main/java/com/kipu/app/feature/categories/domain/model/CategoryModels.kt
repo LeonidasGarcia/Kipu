@@ -45,7 +45,8 @@ data class Category(
     val parentId: CategoryId?,
     val origin: CategoryOrigin,
     val isActive: Boolean,
-    val revision: Long = 1L
+    val revision: Long = 1L,
+    val isPlanLocked: Boolean = false,
 ) {
     val isRoot: Boolean get() = parentId == null
     val isSubcategory: Boolean get() = parentId != null

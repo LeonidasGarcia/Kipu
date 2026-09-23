@@ -26,6 +26,7 @@ object CoreModule {
                 com.kipu.app.core.database.MIGRATION_5_6,
                 com.kipu.app.core.database.MIGRATION_6_7,
                 com.kipu.app.core.database.MIGRATION_7_8,
+                com.kipu.app.core.database.MIGRATION_8_9,
             )
             .build()
 
@@ -36,6 +37,8 @@ object CoreModule {
         }
 
     @Provides fun dao(database: KipuDatabase): PlanPreferencesDao = database.planPreferencesDao()
+    @Provides fun planQuotaSelectionDao(database: KipuDatabase): com.kipu.app.feature.plans.data.local.PlanQuotaSelectionDao = database.planQuotaSelectionDao()
+    @Provides fun featureAccessCacheDao(database: KipuDatabase): com.kipu.app.feature.plans.data.local.FeatureAccessCacheDao = database.featureAccessCacheDao()
     @Provides fun profileDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.ProfilePreferencesDao = database.profilePreferencesDao()
     @Provides fun permissionConsentDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.PermissionConsentDao = database.permissionConsentDao()
     @Provides fun deviceAccountSettingsDao(database: KipuDatabase): com.kipu.app.feature.settings.data.local.DeviceAccountSettingsDao = database.deviceAccountSettingsDao()

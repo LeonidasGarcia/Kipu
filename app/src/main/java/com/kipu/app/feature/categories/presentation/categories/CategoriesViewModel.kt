@@ -10,6 +10,8 @@ import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
+import com.kipu.app.feature.categories.domain.usecase.ObserveSelectedFreeCategoryRoots
+import com.kipu.app.feature.categories.domain.usecase.SaveSelectedFreeCategoryRoots
 import com.kipu.app.feature.categories.domain.usecase.SetCategoryActive
 import com.kipu.app.feature.categories.domain.usecase.UpdateCategoryPresentation
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -43,6 +45,9 @@ data class CategoriesUiState(
     val categoryToDelete: CategoryItem? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null,
+    val selectedFreeCategoryRootIds: Set<CategoryId> = emptySet(),
+    val quotaSelectionDraft: Set<CategoryId> = emptySet(),
+    val isQuotaSelectionOpen: Boolean = false,
 ) {
     val isFreeLimitReached: Boolean get() = activeCustomRootsCount >= maxCustomRoots
     val isEditing: Boolean get() = editingCategoryId != null
@@ -54,6 +59,8 @@ class CategoriesViewModel @Inject constructor(
     private val createCategory: CreateCategory,
     private val setCategoryActive: SetCategoryActive,
     private val updateCategoryPresentation: UpdateCategoryPresentation,
+    private val observeSelectedFreeCategoryRoots: ObserveSelectedFreeCategoryRoots,
+    private val saveSelectedFreeCategoryRoots: SaveSelectedFreeCategoryRoots,
     private val sessionCoordinator: SessionCoordinator,
 ) : ViewModel() {
 
@@ -82,16 +89,72 @@ class CategoriesViewModel @Inject constructor(
 
     private fun observeUserCategories(userId: UserId) {
         viewModelScope.launch {
-            observeCategories(userId).collectLatest { items ->
+            kotlinx.coroutines.flow.combine(
+                observeCategories(userId),
+                observeSelectedFreeCategoryRoots(userId),
+            ) { items, selected -> items to selected }.collectLatest { (items, selected) ->
                 val activeCustomRoots = items.count { it.category.isRoot && it.category.isCustom && it.category.isActive }
                 _uiState.update { current ->
                     current.copy(
                         isLoading = false,
                         categories = items,
                         activeCustomRootsCount = activeCustomRoots,
+                        selectedFreeCategoryRootIds = selected,
                     )
                 }
             }
+        }
+    }
+
+    fun openQuotaSelection() {
+        val state = _uiState.value
+        val activeRoots = state.categories.filter { it.category.isRoot && it.category.isCustom && it.category.isActive }
+            .map { it.category.id }.toSet()
+        _uiState.update {
+            it.copy(
+                isQuotaSelectionOpen = true,
+                quotaSelectionDraft = it.selectedFreeCategoryRootIds.intersect(activeRoots),
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun dismissQuotaSelection() {
+        _uiState.update { it.copy(isQuotaSelectionOpen = false, quotaSelectionDraft = emptySet()) }
+    }
+
+    fun toggleQuotaSelection(categoryId: CategoryId) {
+        _uiState.update { state ->
+            if (categoryId in state.quotaSelectionDraft) {
+                state.copy(quotaSelectionDraft = state.quotaSelectionDraft - categoryId)
+            } else if (state.quotaSelectionDraft.size < state.maxCustomRoots) {
+                state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
+            } else {
+                state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRoots} categorías raíz")
+            }
+        }
+    }
+
+    fun saveQuotaSelection() {
+        val userId = currentUserId ?: return
+        val selected = _uiState.value.quotaSelectionDraft
+        if (selected.size > _uiState.value.maxCustomRoots) return
+        viewModelScope.launch {
+            saveSelectedFreeCategoryRoots(userId, selected).fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(
+                            isQuotaSelectionOpen = false,
+                            selectedFreeCategoryRootIds = selected,
+                            quotaSelectionDraft = emptySet(),
+                            successMessage = "Selección del plan guardada en este dispositivo",
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(errorMessage = error.message ?: "No se pudo guardar la selección") }
+                },
+            )
         }
     }
 

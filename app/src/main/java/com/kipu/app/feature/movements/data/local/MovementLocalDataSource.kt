@@ -10,6 +10,9 @@ import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
 import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionStatus
+import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
+import com.kipu.app.feature.plans.domain.model.FreePlanLimits
+import com.kipu.app.feature.plans.domain.model.QuotaGroup
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
@@ -20,6 +23,7 @@ class MovementLocalDataSource @Inject constructor(
     private val database: KipuDatabase,
     private val movementDao: MovementDao,
     private val balanceProjectionStore: BalanceProjectionStore,
+    private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
 ) {
     fun observeTransactions(userId: String): Flow<List<TransactionEntity>> {
         return movementDao.observeTransactions(userId)
@@ -122,6 +126,11 @@ class MovementLocalDataSource @Inject constructor(
                             "category", "La categoría principal está inactiva"
                         )
                     }
+                }
+                if (isPlanLockedCategory(command.userId, category)) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "La categoría está bloqueada por la selección del plan Free"
+                    )
                 }
             }
             if (command.merchantId != null) {
@@ -298,4 +307,27 @@ class MovementLocalDataSource @Inject constructor(
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
+
+    private suspend fun isPlanLockedCategory(
+        userId: String,
+        category: com.kipu.app.feature.categories.data.local.CategoryEntity,
+    ): Boolean {
+        val root = category.parentId?.let { database.categoryDao().getCategoryById(it) } ?: category
+        if (root.parentId != null || root.origin != "CUSTOM" || root.userId != userId) return false
+        val activeRoots = database.categoryDao().getCategoriesForUser(userId)
+            .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+        val selected = database.planQuotaSelectionDao()
+            .getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
+        val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        val quota = quotaPolicy.evaluate(
+            group = QuotaGroup.CUSTOM_CATEGORIES,
+            activeResourceIds = activeRoots.map { it.id },
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        )
+        return root.id in quota.planLockedResourceIds
+    }
 }

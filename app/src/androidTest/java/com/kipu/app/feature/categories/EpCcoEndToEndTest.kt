@@ -26,6 +26,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryOrigin
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
+import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -83,6 +84,9 @@ class EpCcoEndToEndTest {
             merchantDao = merchantDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
+            quotaSelectionDao = database.planQuotaSelectionDao(),
+            featureAccessCacheDao = database.featureAccessCacheDao(),
+            quotaPolicy = PlanQuotaPolicy(),
         )
     }
 

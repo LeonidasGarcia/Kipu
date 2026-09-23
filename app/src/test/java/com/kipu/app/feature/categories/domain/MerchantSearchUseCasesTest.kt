@@ -6,11 +6,14 @@ import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.feature.categories.data.FakeCategoryDao
+import com.kipu.app.feature.categories.data.FakeQuotaSelectionDao
+import com.kipu.app.feature.categories.data.FakeFeatureAccessCacheDao
 import com.kipu.app.feature.categories.data.FakeCategorySyncScheduler
 import com.kipu.app.feature.categories.data.FakeMerchantCatalogDao
 import com.kipu.app.feature.categories.data.FakeSessionCoordinator
 import com.kipu.app.feature.categories.data.OfflineFirstCategoriesRepository
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
+import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.usecase.SearchMerchantCatalog
@@ -37,6 +40,10 @@ class MerchantSearchUseCasesTest {
 
     private val testUserId = UserId.generate()
 
+    private suspend fun seedActiveRoot(categoryId: CategoryId) {
+        categoryDao.insertCategory(CategoryEntity(categoryId.value, testUserId.value, null, "CUSTOM", true, 1L, 1L, 1L))
+    }
+
     @Before
     fun setup() = runTest {
         categoryDao = FakeCategoryDao()
@@ -56,6 +63,9 @@ class MerchantSearchUseCasesTest {
             merchantDao = merchantDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
+            quotaSelectionDao = FakeQuotaSelectionDao(),
+            featureAccessCacheDao = FakeFeatureAccessCacheDao(),
+            quotaPolicy = com.kipu.app.feature.plans.domain.PlanQuotaPolicy(),
         )
 
         searchMerchantCatalog = SearchMerchantCatalog(repository)
@@ -118,6 +128,7 @@ class MerchantSearchUseCasesTest {
         val movementId = MovementId.generate()
         val categoryId = CategoryId.generate()
         val merchantId = MerchantId("m1")
+        seedActiveRoot(categoryId)
 
         val result = updateMovementClassification.assignClassification(
             movementId = movementId,
@@ -138,6 +149,7 @@ class MerchantSearchUseCasesTest {
     fun `assignClassification with provisional text succeeds when no merchant is selected`() = runTest {
         val movementId = MovementId.generate()
         val categoryId = CategoryId.generate()
+        seedActiveRoot(categoryId)
 
         val result = updateMovementClassification.assignClassification(
             movementId = movementId,
@@ -174,6 +186,7 @@ class MerchantSearchUseCasesTest {
         val movementId = MovementId.generate()
         val categoryId = CategoryId.generate()
         val merchantId = MerchantId("m1")
+        seedActiveRoot(categoryId)
 
         updateMovementClassification.assignClassification(
             movementId = movementId,
@@ -195,6 +208,7 @@ class MerchantSearchUseCasesTest {
         val movementId = MovementId.generate()
         val categoryId = CategoryId.generate()
         val merchantId = MerchantId("m1")
+        seedActiveRoot(categoryId)
 
         updateMovementClassification.assignClassification(
             movementId = movementId,

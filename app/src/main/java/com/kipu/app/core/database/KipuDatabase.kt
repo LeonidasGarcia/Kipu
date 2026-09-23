@@ -26,8 +26,12 @@ import com.kipu.app.feature.movements.data.local.MovementOutboxEntity
 import com.kipu.app.feature.movements.data.local.MovementSyncCheckpointEntity
 import com.kipu.app.feature.movements.data.local.TransactionEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity
+import com.kipu.app.feature.plans.data.local.FeatureAccessCacheDao
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.plans.data.local.PlanPreferencesEntity
+import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionDao
+import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionEntity
+import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionItemEntity
 import com.kipu.app.feature.plans.data.local.PlanSelectionSyncStateEntity
 import com.kipu.app.feature.plans.data.local.SyncOutboxEntity
 import com.kipu.app.feature.settings.data.local.AccountSourceConsentEntity
@@ -40,6 +44,8 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
     entities = [
         PlanPreferencesEntity::class,
         PlanSelectionSyncStateEntity::class,
+        PlanQuotaSelectionEntity::class,
+        PlanQuotaSelectionItemEntity::class,
         SyncOutboxEntity::class,
         FeatureAccessCacheEntity::class,
         UserProfileCacheEntity::class,
@@ -63,12 +69,14 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         BalanceProjectionEntity::class,
         MovementSyncCheckpointEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
 abstract class KipuDatabase : RoomDatabase() {
     abstract fun planPreferencesDao(): PlanPreferencesDao
+    abstract fun featureAccessCacheDao(): FeatureAccessCacheDao
+    abstract fun planQuotaSelectionDao(): PlanQuotaSelectionDao
     abstract fun profilePreferencesDao(): com.kipu.app.feature.settings.data.local.ProfilePreferencesDao
     abstract fun permissionConsentDao(): com.kipu.app.feature.settings.data.local.PermissionConsentDao
     abstract fun deviceAccountSettingsDao(): com.kipu.app.feature.settings.data.local.DeviceAccountSettingsDao

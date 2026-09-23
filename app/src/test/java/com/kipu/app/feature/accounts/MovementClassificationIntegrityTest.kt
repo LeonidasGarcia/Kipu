@@ -7,10 +7,13 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.categories.data.FakeCategoryDao
+import com.kipu.app.feature.categories.data.FakeQuotaSelectionDao
+import com.kipu.app.feature.categories.data.FakeFeatureAccessCacheDao
 import com.kipu.app.feature.categories.data.FakeCategorySyncScheduler
 import com.kipu.app.feature.categories.data.FakeMerchantCatalogDao
 import com.kipu.app.feature.categories.data.FakeSessionCoordinator
 import com.kipu.app.feature.categories.data.OfflineFirstCategoriesRepository
+import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
@@ -52,6 +55,9 @@ class MovementClassificationIntegrityTest {
             merchantDao = merchantDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
+            quotaSelectionDao = FakeQuotaSelectionDao(),
+            featureAccessCacheDao = FakeFeatureAccessCacheDao(),
+            quotaPolicy = com.kipu.app.feature.plans.domain.PlanQuotaPolicy(),
         )
 
         updateMovementClassification = UpdateMovementClassification(repository)
@@ -62,6 +68,7 @@ class MovementClassificationIntegrityTest {
         val movementId = MovementId.generate()
         val categoryId = CategoryId.generate()
         val merchantId = MerchantId("merchant-123")
+        categoryDao.insertCategory(CategoryEntity(categoryId.value, testUserId.value, null, "CUSTOM", true, 1L, 1L, 1L))
 
         val originalMovement = FinancialMovementEntity(
             id = movementId.value,
@@ -110,6 +117,7 @@ class MovementClassificationIntegrityTest {
     fun `clearing merchant classification leaves category and ledger intact`() = runTest {
         val movementId = MovementId.generate()
         val categoryId = CategoryId.generate()
+        categoryDao.insertCategory(CategoryEntity(categoryId.value, testUserId.value, null, "CUSTOM", true, 1L, 1L, 1L))
 
         updateMovementClassification.assignClassification(
             movementId = movementId,

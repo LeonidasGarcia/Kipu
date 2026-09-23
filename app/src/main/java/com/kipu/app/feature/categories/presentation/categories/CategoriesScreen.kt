@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -228,6 +229,11 @@ fun CategoriesScreen(
                         maxCount = state.maxCustomRoots,
                         isLimitReached = state.isFreeLimitReached,
                     )
+                    if (state.activeCustomRootsCount > state.maxCustomRoots) {
+                        TextButton(onClick = viewModel::openQuotaSelection) {
+                            Text("Elegir categorías del plan Free")
+                        }
+                    }
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
@@ -278,6 +284,46 @@ fun CategoriesScreen(
         )
     }
 
+    if (state.isQuotaSelectionOpen) {
+        val selectableRoots = state.categories.filter {
+            it.category.isRoot && it.category.isCustom && it.category.isActive
+        }
+        AlertDialog(
+            onDismissRequest = viewModel::dismissQuotaSelection,
+            title = { Text("Elegir categorías para Plan Free") },
+            text = {
+                Column {
+                    Text("Elige hasta ${state.maxCustomRoots}. Las demás conservarán su historial y quedarán bloqueadas por el plan; su estado activo no cambia.")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyColumn(modifier = Modifier.height(320.dp)) {
+                        items(selectableRoots, key = { it.category.id.value }) { item ->
+                            val checked = item.category.id in state.quotaSelectionDraft
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.toggleQuotaSelection(item.category.id) }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = checked, onCheckedChange = { viewModel.toggleQuotaSelection(item.category.id) })
+                                Text(item.displayName)
+                            }
+                        }
+                    }
+                    Text("${state.quotaSelectionDraft.size} / ${state.maxCustomRoots} seleccionadas")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::saveQuotaSelection) {
+                    Text("Guardar selección")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissQuotaSelection) { Text("Cancelar") }
+            },
+        )
+    }
+
     // Diálogo de Límite Superado
     if (state.showQuotaExceededDialog) {
         AlertDialog(
@@ -290,7 +336,7 @@ fun CategoriesScreen(
             },
             text = {
                 Text(
-                    text = "Has alcanzado el límite de 5 categorías personalizadas en tu plan gratuito. Desactiva o congela una categoría personalizada activa desde Ajustes para poder añadir esta nueva.",
+                    text = "Has alcanzado el límite de 5 categorías personalizadas en tu plan gratuito. Conserva el historial y elige cuáles quieres seguir usando o inactiva una para crear otra.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -364,7 +410,7 @@ fun QuotaBanner(
                 )
                 if (isLimitReached) {
                     Text(
-                        text = "Límite del plan Gratuito alcanzado. Desactiva una categoría para activar otra.",
+                        text = "Hay categorías conservadas por encima del cupo. Selecciona cuáles quieres usar.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
@@ -480,6 +526,21 @@ fun CategoryRootCard(
                                 .rotate(rotationAngle),
                         )
                     }
+                }
+            }
+
+            if (item.category.isPlanLocked) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    Text(
+                        "Bloqueada por el plan Free",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
 

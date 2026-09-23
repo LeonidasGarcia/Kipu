@@ -474,3 +474,36 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS plan_selections (
+                user_id TEXT NOT NULL,
+                feature_key TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, feature_key)
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS index_plan_selections_user_id_updated_at
+            ON plan_selections(user_id, updated_at)
+        """.trimIndent())
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS plan_selection_items (
+                user_id TEXT NOT NULL,
+                feature_key TEXT NOT NULL,
+                resource_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, feature_key, resource_id),
+                FOREIGN KEY(user_id, feature_key) REFERENCES plan_selections(user_id, feature_key) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS index_plan_selection_items_user_id_feature_key_resource_type
+            ON plan_selection_items(user_id, feature_key, resource_type)
+        """.trimIndent())
+    }
+}
+

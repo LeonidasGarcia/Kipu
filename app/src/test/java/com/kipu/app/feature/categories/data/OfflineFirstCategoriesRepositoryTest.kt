@@ -26,6 +26,7 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -229,6 +230,9 @@ class OfflineFirstCategoriesRepositoryTest {
             merchantDao = merchantDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
+            quotaSelectionDao = FakeQuotaSelectionDao(),
+            featureAccessCacheDao = FakeFeatureAccessCacheDao(),
+            quotaPolicy = com.kipu.app.feature.plans.domain.PlanQuotaPolicy(),
         )
     }
 
@@ -381,10 +385,12 @@ class OfflineFirstCategoriesRepositoryTest {
     @Test
     fun `updateMovementClassification updates classification and schedules sync`() = runTest {
         sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
+        val categoryId = CategoryId.generate()
+        categoryDao.insertCategory(CategoryEntity(categoryId.value, testUserId.value, null, "CUSTOM", true, 1L, 1L, 1L))
 
         val classification = MovementClassification(
             movementId = MovementId.generate(),
-            categoryId = CategoryId.generate(),
+            categoryId = categoryId,
             merchantId = MerchantId("merchant-1"),
             merchantProvisionalText = null,
         )
@@ -396,5 +402,28 @@ class OfflineFirstCategoriesRepositoryTest {
             categoryDao.movements[classification.movementId.value]?.merchant_id
         )
         assertTrue(syncScheduler.scheduledUsers.contains(testUserId.value))
+    }
+
+    @Test
+    fun `free selection locks unselected roots without deactivating them or assigning them`() = runTest {
+        sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
+        val ids = (1..6).map { CategoryId.generate() }
+        ids.forEachIndexed { index, id ->
+            categoryDao.insertCategory(
+                CategoryEntity(id.value, testUserId.value, null, "CUSTOM", true, 1L, index.toLong(), index.toLong())
+            )
+        }
+
+        repository.saveSelectedFreeCategoryRoots(testUserId, ids.take(5).toSet()).getOrThrow()
+        val observed = com.kipu.app.feature.categories.domain.usecase.ObserveCategories(repository)(testUserId).first()
+        val locked = observed.single { it.category.id == ids.last() }
+
+        assertTrue(locked.category.isPlanLocked)
+        assertTrue(categoryDao.getCategoryById(ids.last().value)?.isActive == true)
+        val result = repository.updateMovementClassification(
+            MovementClassification(MovementId.generate(), categoryId = ids.last())
+        )
+        assertTrue(result.isFailure)
+        assertTrue(categoryDao.movements.isEmpty())
     }
 }

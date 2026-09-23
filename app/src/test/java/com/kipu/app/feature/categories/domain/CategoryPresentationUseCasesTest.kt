@@ -5,6 +5,8 @@ import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.feature.categories.data.FakeCategoryDao
+import com.kipu.app.feature.categories.data.FakeQuotaSelectionDao
+import com.kipu.app.feature.categories.data.FakeFeatureAccessCacheDao
 import com.kipu.app.feature.categories.data.FakeCategorySyncScheduler
 import com.kipu.app.feature.categories.data.FakeMerchantCatalogDao
 import com.kipu.app.feature.categories.data.FakeSessionCoordinator
@@ -58,6 +60,9 @@ class CategoryPresentationUseCasesTest {
             merchantDao = merchantDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
+            quotaSelectionDao = FakeQuotaSelectionDao(),
+            featureAccessCacheDao = FakeFeatureAccessCacheDao(),
+            quotaPolicy = com.kipu.app.feature.plans.domain.PlanQuotaPolicy(),
         )
 
         updateCategoryPresentation = UpdateCategoryPresentation(repository)

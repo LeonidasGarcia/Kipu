@@ -194,6 +194,43 @@ class MovementLocalDataSourceTest {
     }
 
     @Test
+    fun freePlanSelectionLocksOnlyUnselectedCustomRootsWithoutArchivingThem() = runTest {
+        seedAccount("source")
+        val roots = (1..6).map { index ->
+            val id = "custom-root-$index"
+            database.categoryDao().insertCategory(
+                CategoryEntity(id, userId, null, "CUSTOM", isActive = true, createdAt = index.toLong(), updatedAt = index.toLong())
+            )
+            id
+        }
+        database.planQuotaSelectionDao().replaceSelection(
+            userId = userId,
+            featureKey = "CUSTOM_CATEGORIES",
+            resourceType = "CATEGORY_ROOT",
+            resourceIds = roots.take(5),
+            now = 100L,
+        )
+
+        val selected = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 100L).copy(categoryId = roots[0]),
+            "selected-category",
+        )
+        val locked = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 100L).copy(categoryId = roots[5]),
+            "locked-category",
+        )
+        val freeCore = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, "source", amount = 100L),
+            "system-category-after-category-overflow",
+        )
+
+        assertTrue(selected is RegisterTransactionResult.Success)
+        assertTrue(locked is RegisterTransactionResult.ValidationError)
+        assertTrue(freeCore is RegisterTransactionResult.Success)
+        assertEquals(1L, database.categoryDao().getCategoryById(roots[5])?.isActive?.let { if (it) 1L else 0L })
+    }
+
+    @Test
     fun orphanedReceiptDoesNotPostASecondTransaction() = runTest {
         seedAccount("source")
         val command = command(MovementType.INCOME, "source", amount = 100L)
