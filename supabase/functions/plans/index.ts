@@ -67,6 +67,51 @@ function validSelection(value: unknown): value is Record<string, unknown> {
     !Number.isNaN(Date.parse(selection.selected_at));
 }
 
+const quotaLimits: Record<string, number> = {
+  INSTRUMENTS: 4,
+  CUSTOM_CATEGORIES: 5,
+  DEBTS: 2,
+  GOALS: 2,
+  BUDGETS: 2,
+};
+
+const quotaResourceTypes: Record<string, string> = {
+  INSTRUMENTS: "ACCOUNT|CARD",
+  CUSTOM_CATEGORIES: "CATEGORY_ROOT",
+  DEBTS: "DEBT",
+  GOALS: "GOAL",
+  BUDGETS: "BUDGET",
+};
+
+function validQuotaSelection(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const selection = value as Record<string, unknown>;
+  if (Object.keys(selection).sort().join(",") !==
+    "contract_version,feature_key,items,operation_id,selection_revision") return false;
+  if (selection.contract_version !== 1 ||
+    typeof selection.operation_id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selection.operation_id) ||
+    typeof selection.selection_revision !== "string" ||
+    !/^[1-9][0-9]*$/.test(selection.selection_revision) ||
+    typeof selection.feature_key !== "string" ||
+    !(selection.feature_key in quotaLimits) ||
+    !Array.isArray(selection.items) || selection.items.length > quotaLimits[selection.feature_key]) return false;
+
+  const ids = new Set<string>();
+  return selection.items.every((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const row = item as Record<string, unknown>;
+    if (Object.keys(row).sort().join(",") !== "resource_id,resource_type" ||
+      typeof row.resource_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.resource_id) ||
+      typeof row.resource_type !== "string" ||
+      !quotaResourceTypes[selection.feature_key as string].split("|").includes(row.resource_type) ||
+      ids.has(row.resource_id)) return false;
+    ids.add(row.resource_id);
+    return true;
+  });
+}
+
 export function createPlansHandler(deps: Dependencies) {
   return async (request: Request): Promise<Response> => {
     const authorization = authenticated(request);
@@ -105,6 +150,25 @@ export function createPlansHandler(deps: Dependencies) {
       }
 
       name = "apply_plan_selection";
+      args = body;
+    } else if (path === "quota-selection") {
+      if (request.method !== "POST") return new Response(null, { status: 405 });
+      if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+        return new Response(null, { status: 415 });
+      }
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ code: "INVALID_REQUEST", retryable: false }, 400);
+      }
+      if ((body as Record<string, unknown>)?.contract_version !== 1) {
+        return json({ code: "UNSUPPORTED_VERSION", retryable: false }, 400);
+      }
+      if (!validQuotaSelection(body)) {
+        return json({ code: "INVALID_REQUEST", retryable: false }, 400);
+      }
+      name = "apply_plan_quota_selection";
       args = body;
     } else {
       return new Response(null, { status: 404 });
@@ -146,7 +210,7 @@ function createSupabaseRpc(): Dependencies["rpc"] {
       return { error: { code: "UNAVAILABLE", status: 503 } };
     }
 
-    const rpcArgs = name === "apply_plan_selection"
+    const rpcArgs = name === "apply_plan_selection" || name === "apply_plan_quota_selection"
       ? Object.fromEntries(
         Object.entries(args).map(([key, value]) => [`p_${key}`, value]),
       )
@@ -182,7 +246,7 @@ function createSupabaseRpc(): Dependencies["rpc"] {
 
     const data = await response.json();
     return {
-      data: name === "apply_plan_selection" && Array.isArray(data)
+      data: (name === "apply_plan_selection" || name === "apply_plan_quota_selection") && Array.isArray(data)
         ? data[0]
         : data,
     };

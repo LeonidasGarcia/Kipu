@@ -56,6 +56,8 @@ import java.util.UUID
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+private val NON_COMPUTABLE_ACCOUNT_TYPES = setOf("CASH", "GOALS_VIRTUAL", "CREDIT_LIABILITY")
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
@@ -891,6 +893,9 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         )
     }
 
+    private fun AccountEntity.isVisibleInDomain(): Boolean =
+        runCatching { AccountType.valueOf(type) }.isSuccess
+
     private fun CardEntity.toDomain(isPlanLocked: Boolean = false): Card {
         val curr = Currency.fromCode(currency)
         return if (type == "DEBIT") {
@@ -943,7 +948,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 is LocalAccess.Available -> {
                     val flow = if (activeOnly) accountDao.observeActive(access.userId) else accountDao.observeAll(access.userId)
                     combine(flow, observePlanLockedInstrumentIds(access.userId)) { list, locked ->
-                        list.map { it.toDomain(it.id in locked) }
+                        list.filter { it.isVisibleInDomain() }.map { it.toDomain(it.id in locked) }
                     }
                 }
                 else -> flowOf(emptyList())
@@ -957,7 +962,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 is LocalAccess.Available -> combine(
                     accountDao.observeById(access.userId, accountId.value),
                     observePlanLockedInstrumentIds(access.userId),
-                ) { account, locked -> account?.toDomain(accountId.value in locked) }
+                ) { account, locked -> account?.takeIf { it.isVisibleInDomain() }?.toDomain(accountId.value in locked) }
                 else -> flowOf(null)
             }
         }.distinctUntilChanged()
@@ -1015,7 +1020,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         database.planQuotaSelectionDao().observeSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name),
         database.featureAccessCacheDao().observe(UUID.fromString(userId)),
     ) { accounts, cards, selected, cache ->
-        val activeIds = accounts.filter { it.type != "CASH" }.map { it.id } + cards.map { it.id }
+        val activeIds = accounts.filter { it.type !in NON_COMPUTABLE_ACCOUNT_TYPES }.map { it.id } + cards.map { it.id }
         val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
             (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
         quotaPolicy.evaluate(
@@ -1056,14 +1061,18 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     override suspend fun saveSelectedFreeInstrumentIds(ids: Set<String>): Result<Unit> = runCatching {
         val userId = currentUserId() ?: error("No active owner session")
         require(ids.size <= FreePlanLimits().instruments) { "Puedes seleccionar hasta ${FreePlanLimits().instruments} instrumentos" }
-        val activeIds = accountDao.getActiveComputable(userId).map { it.id }.toSet() + cardDao.getActive(userId).map { it.id }
+        val accounts = accountDao.getActiveComputable(userId)
+        val cards = cardDao.getActive(userId)
+        val activeIds = accounts.map { it.id }.toSet() + cards.map { it.id }
         require(activeIds.containsAll(ids)) { "La selección contiene instrumentos inactivos o que no pertenecen a esta cuenta" }
+        val resourceTypes = accounts.associate { it.id to "ACCOUNT" } + cards.associate { it.id to "CARD" }
         database.planQuotaSelectionDao().replaceSelection(
             userId = userId,
             featureKey = QuotaGroup.INSTRUMENTS.name,
             resourceType = "INSTRUMENT",
             resourceIds = ids,
             now = System.currentTimeMillis(),
+            resourceTypesById = resourceTypes,
         )
     }
 
@@ -1125,7 +1134,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         accountDao.observeActive(access.userId),
                         cardDao.observeActive(access.userId),
                     ) { accounts, cards ->
-                        val computableAccounts = accounts.count { it.type != "CASH" }
+                        val computableAccounts = accounts.count { it.type !in NON_COMPUTABLE_ACCOUNT_TYPES }
                         computableAccounts + cards.size
                     }
                 }

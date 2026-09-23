@@ -44,6 +44,7 @@ class FakeQuotaSelectionDao : PlanQuotaSelectionDao() {
         resourceType: String,
         resourceIds: Collection<String>,
         now: Long,
+        resourceTypesById: Map<String, String>,
     ): PlanQuotaSelectionEntity {
         val ids = resourceIds.toSortedSet()
         val old = heads[userId to featureKey]

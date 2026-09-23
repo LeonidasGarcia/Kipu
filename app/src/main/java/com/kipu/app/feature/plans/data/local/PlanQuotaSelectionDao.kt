@@ -34,6 +34,7 @@ abstract class PlanQuotaSelectionDao {
         resourceType: String,
         resourceIds: Collection<String>,
         now: Long,
+        resourceTypesById: Map<String, String> = emptyMap(),
     ): PlanQuotaSelectionEntity {
         val normalizedIds = resourceIds.toSortedSet()
         require(normalizedIds.none(String::isBlank)) { "Resource IDs must not be blank" }
@@ -51,7 +52,7 @@ abstract class PlanQuotaSelectionDao {
         clearItems(userId, featureKey)
         if (normalizedIds.isNotEmpty()) {
             insertItems(normalizedIds.map { id ->
-                PlanQuotaSelectionItemEntity(userId, featureKey, id, resourceType, now)
+                PlanQuotaSelectionItemEntity(userId, featureKey, id, resourceTypesById[id] ?: resourceType, now)
             })
         }
         return next
