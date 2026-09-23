@@ -38,7 +38,7 @@ class SyncCategoryCommandsWorkerTest {
 
     @Before
     fun setup() {
-        coEvery { workerParams.inputData } returns workDataOf(
+        io.mockk.every { workerParams.inputData } returns workDataOf(
             SyncCategoryCommandsWorker.KEY_USER_ID to testUserId
         )
     }

@@ -49,18 +49,18 @@ class PermissionsScreenTest {
 
     private class FakeSessionCoordinator(override val currentOwner: LocalOwner?) : SessionCoordinator {
         override val remoteSession = MutableStateFlow(com.kipu.app.core.session.RemoteSession.Absent)
-        override val localAccess = MutableStateFlow(com.kipu.app.core.session.LocalAccess.Unlocked(UUID.randomUUID()))
-        override suspend fun setActiveOwner(userId: UUID) {}
+        override val localAccess = MutableStateFlow<com.kipu.app.core.session.LocalAccess>(
+            com.kipu.app.core.session.LocalAccess.Available(currentOwner!!.verifiedUserId, com.kipu.app.core.session.RemoteSession.Absent)
+        )
+        override suspend fun setActiveOwner(userId: String) {}
         override suspend fun clearActiveOwner(explicit: Boolean) {}
-        override fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
-        override fun setLocalLocked(reason: String) {}
-        override fun setLocalUnlocked() {}
-        override fun notifyUserActivity() {}
+        override suspend fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
+        override suspend fun updateLockState(isLocked: Boolean, reason: String) {}
     }
 
     @Test
     fun screen_displays_guarantee_banner_and_permission_cards() {
-        val viewModel = PermissionsViewModel(FakePermissionDao(), FakeGateway(), FakeSessionCoordinator(LocalOwner(userId, false)))
+        val viewModel = PermissionsViewModel(FakePermissionDao(), FakeGateway(), FakeSessionCoordinator(LocalOwner(userId.toString(), false)))
 
         composeTestRule.setContent {
             PermissionsScreen(
@@ -78,7 +78,7 @@ class PermissionsScreenTest {
 
     @Test
     fun clicking_explanation_opens_rationale_dialog() {
-        val viewModel = PermissionsViewModel(FakePermissionDao(), FakeGateway(), FakeSessionCoordinator(LocalOwner(userId, false)))
+        val viewModel = PermissionsViewModel(FakePermissionDao(), FakeGateway(), FakeSessionCoordinator(LocalOwner(userId.toString(), false)))
 
         composeTestRule.setContent {
             PermissionsScreen(

@@ -20,7 +20,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.mockito.Mockito
+import io.mockk.every
+import io.mockk.mockk
 
 @RunWith(AndroidJUnit4::class)
 class SyncProfilePreferencesWorkerTest {
@@ -30,13 +31,13 @@ class SyncProfilePreferencesWorkerTest {
 
     private class FakeCoordinator(override val currentOwner: LocalOwner?) : SessionCoordinator {
         override val remoteSession = MutableStateFlow(com.kipu.app.core.session.RemoteSession.Absent)
-        override val localAccess = MutableStateFlow(com.kipu.app.core.session.LocalAccess.Unlocked(UUID.randomUUID()))
-        override suspend fun setActiveOwner(userId: UUID) {}
+        override val localAccess = MutableStateFlow<com.kipu.app.core.session.LocalAccess>(
+            com.kipu.app.core.session.LocalAccess.Available(currentOwner!!.verifiedUserId, com.kipu.app.core.session.RemoteSession.Absent)
+        )
+        override suspend fun setActiveOwner(userId: String) {}
         override suspend fun clearActiveOwner(explicit: Boolean) {}
-        override fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
-        override fun setLocalLocked(reason: String) {}
-        override fun setLocalUnlocked() {}
-        override fun notifyUserActivity() {}
+        override suspend fun updateRemoteSession(session: com.kipu.app.core.session.RemoteSession) {}
+        override suspend fun updateLockState(isLocked: Boolean, reason: String) {}
     }
 
     private class FakeRepo : ProfilePreferencesRepository {
@@ -62,12 +63,10 @@ class SyncProfilePreferencesWorkerTest {
     fun doWork_returns_success_when_repository_syncs_successfully() = runBlocking {
         val repo = FakeRepo()
         repo.syncResult = Result.success(Unit)
-        val coordinator = FakeCoordinator(LocalOwner(userId, false))
+        val coordinator = FakeCoordinator(LocalOwner(userId.toString(), false))
 
-        val workerParams = Mockito.mock(WorkerParameters::class.java)
-        Mockito.`when`(workerParams.inputData).thenReturn(
-            workDataOf(SyncProfilePreferencesWorker.KEY_USER_ID to userId.toString())
-        )
+        val workerParams = mockk<WorkerParameters>(relaxed = true)
+        every { workerParams.inputData } returns workDataOf(SyncProfilePreferencesWorker.KEY_USER_ID to userId.toString())
 
         val worker = SyncProfilePreferencesWorker(context, workerParams, repo, coordinator)
         val result = worker.doWork()
@@ -79,12 +78,10 @@ class SyncProfilePreferencesWorkerTest {
     fun doWork_returns_failure_when_conflict_detected() = runBlocking {
         val repo = FakeRepo()
         repo.syncResult = Result.failure(IllegalStateException("Revision conflict detected during sync"))
-        val coordinator = FakeCoordinator(LocalOwner(userId, false))
+        val coordinator = FakeCoordinator(LocalOwner(userId.toString(), false))
 
-        val workerParams = Mockito.mock(WorkerParameters::class.java)
-        Mockito.`when`(workerParams.inputData).thenReturn(
-            workDataOf(SyncProfilePreferencesWorker.KEY_USER_ID to userId.toString())
-        )
+        val workerParams = mockk<WorkerParameters>(relaxed = true)
+        every { workerParams.inputData } returns workDataOf(SyncProfilePreferencesWorker.KEY_USER_ID to userId.toString())
 
         val worker = SyncProfilePreferencesWorker(context, workerParams, repo, coordinator)
         val result = worker.doWork()
@@ -96,12 +93,10 @@ class SyncProfilePreferencesWorkerTest {
     fun doWork_returns_retry_on_network_or_transient_error() = runBlocking {
         val repo = FakeRepo()
         repo.syncResult = Result.failure(Exception("Network timeout"))
-        val coordinator = FakeCoordinator(LocalOwner(userId, false))
+        val coordinator = FakeCoordinator(LocalOwner(userId.toString(), false))
 
-        val workerParams = Mockito.mock(WorkerParameters::class.java)
-        Mockito.`when`(workerParams.inputData).thenReturn(
-            workDataOf(SyncProfilePreferencesWorker.KEY_USER_ID to userId.toString())
-        )
+        val workerParams = mockk<WorkerParameters>(relaxed = true)
+        every { workerParams.inputData } returns workDataOf(SyncProfilePreferencesWorker.KEY_USER_ID to userId.toString())
 
         val worker = SyncProfilePreferencesWorker(context, workerParams, repo, coordinator)
         val result = worker.doWork()

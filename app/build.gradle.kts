@@ -152,6 +152,8 @@ dependencies {
     androidTestImplementation(libs.ktor.client.mock)
     androidTestImplementation(libs.kotlin.test)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.mockk.agent)
     kspAndroidTest(libs.hilt.compiler)
 
     // Debug

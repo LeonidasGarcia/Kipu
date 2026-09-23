@@ -95,7 +95,7 @@ class CategoryDatabaseTest {
         val movementId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
 
-        accountDao.insertAccount(
+        accountDao.insert(
             AccountEntity(
                 id = accountId,
                 userId = user1,
@@ -113,7 +113,7 @@ class CategoryDatabaseTest {
             )
         )
 
-        movementDao.insertMovement(
+        movementDao.insert(
             FinancialMovementEntity(
                 id = movementId,
                 operationId = UUID.randomUUID().toString(),
