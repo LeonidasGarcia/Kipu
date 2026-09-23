@@ -231,6 +231,30 @@ class MovementLocalDataSourceTest {
     }
 
     @Test
+    fun freePlanSelectionLocksOnlyUnselectedAccountsWithoutArchivingOrChangingTheirBalances() = runTest {
+        val accounts = (1..5).map { index -> "account-$index".also { seedAccount(it) } }
+        database.planQuotaSelectionDao().replaceSelection(
+            userId = userId,
+            featureKey = "INSTRUMENTS",
+            resourceType = "INSTRUMENT",
+            resourceIds = accounts.take(4),
+            now = 100L,
+        )
+
+        val selected = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, accounts.first(), amount = 100L), "selected-account",
+        )
+        val locked = source.commitTransactionAtomic(
+            command(MovementType.EXPENSE, accounts.last(), amount = 100L), "locked-account",
+        )
+
+        assertTrue(selected is RegisterTransactionResult.Success)
+        assertTrue(locked is RegisterTransactionResult.ValidationError)
+        assertFalse(database.accountDao().getById(userId, accounts.last())!!.isArchived)
+        assertEquals(null, dao.calculateLedgerSumForAccount(userId, accounts.last()))
+    }
+
+    @Test
     fun orphanedReceiptDoesNotPostASecondTransaction() = runTest {
         seedAccount("source")
         val command = command(MovementType.INCOME, "source", amount = 100L)

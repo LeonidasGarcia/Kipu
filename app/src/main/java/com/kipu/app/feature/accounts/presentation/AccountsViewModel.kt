@@ -51,6 +51,7 @@ data class InstrumentsUiState(
     val archivedCards: List<Card> = emptyList(),
     val activeComputableCount: Int = 0,
     val maxFreeQuota: Int = FinancialInstrumentsRepository.FREE_TIER_MAX_COMPUTABLE_INSTRUMENTS,
+    val selectedFreeInstrumentIds: Set<String> = emptySet(),
     val isMasked: Boolean = false,
 )
 
@@ -73,6 +74,7 @@ class AccountsViewModel @Inject constructor(
     private val checkCardDuplicateUseCase: com.kipu.app.feature.accounts.domain.usecase.CheckCardDuplicate,
     private val checkUtilizationThresholds: com.kipu.app.feature.accounts.domain.usecase.CheckUtilizationThresholds,
     private val payCreditCardUseCase: com.kipu.app.feature.accounts.domain.usecase.PayCreditCard,
+    private val financialInstrumentsRepository: FinancialInstrumentsRepository,
 ) : ViewModel() {
 
     private val _isMasked = MutableStateFlow(false)
@@ -107,8 +109,9 @@ class AccountsViewModel @Inject constructor(
         observeInstruments.observeAccounts(activeOnly = false),
         observeInstruments.observeCards(activeOnly = false),
         observeInstruments.observeActiveComputableCount(),
+        financialInstrumentsRepository.observeSelectedFreeInstrumentIds(),
         _isMasked,
-    ) { accounts, cards, computableCount, masked ->
+    ) { accounts, cards, computableCount, selectedIds, masked ->
         val activeAccounts = accounts.filter { !it.isArchived }
         val archivedAccounts = accounts.filter { it.isArchived }
         val activeCards = cards.filter { !it.isArchived }
@@ -121,6 +124,7 @@ class AccountsViewModel @Inject constructor(
             activeCards = activeCards,
             archivedCards = archivedCards,
             activeComputableCount = computableCount,
+            selectedFreeInstrumentIds = selectedIds,
             isMasked = masked,
         )
     }.stateIn(
@@ -131,6 +135,15 @@ class AccountsViewModel @Inject constructor(
 
     fun toggleMasked() {
         _isMasked.value = !_isMasked.value
+    }
+
+    fun saveFreeInstrumentSelection(ids: Set<String>) {
+        viewModelScope.launch {
+            financialInstrumentsRepository.saveSelectedFreeInstrumentIds(ids).fold(
+                onSuccess = { _eventChannel.send(AccountUiEvent.ShowMessage("Selección de instrumentos guardada")) },
+                onFailure = { error -> _eventChannel.send(AccountUiEvent.Error(error.message ?: "No se pudo guardar la selección")) },
+            )
+        }
     }
 
     fun createAccount(

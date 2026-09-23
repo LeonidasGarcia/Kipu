@@ -32,6 +32,9 @@ interface AccountDao {
     @Query("SELECT * FROM accounts WHERE user_id = :userId AND is_archived = 0 ORDER BY created_at DESC")
     fun observeActive(userId: String): Flow<List<AccountEntity>>
 
+    @Query("SELECT * FROM accounts WHERE user_id = :userId AND is_archived = 0 AND type != 'CASH'")
+    suspend fun getActiveComputable(userId: String): List<AccountEntity>
+
     @Query("SELECT * FROM accounts WHERE user_id = :userId AND is_archived = 1 ORDER BY created_at DESC")
     fun observeArchived(userId: String): Flow<List<AccountEntity>>
 

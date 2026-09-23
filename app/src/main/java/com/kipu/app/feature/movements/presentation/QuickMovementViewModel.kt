@@ -89,7 +89,7 @@ class QuickMovementViewModel @Inject constructor(
                 observeCategories(UserId(ownerId)).collect { items ->
                     val options = items.filter { it.category.isActive }
                         .flatMap { root -> listOf(root) + root.subcategories }
-                        .filter { it.category.isActive }
+                        .filter { it.category.isActive && !it.category.isPlanLocked }
                         .map { CategoryOption(it.category.id.value, it.displayName, it.icon) }
                     _uiState.update { current ->
                         val selection = options.find { it.id == current.selectedCategoryId }

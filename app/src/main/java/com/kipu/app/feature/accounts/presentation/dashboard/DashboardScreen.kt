@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,12 +37,14 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,7 +74,9 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.dashboardUiState.collectAsState()
+    val instruments by viewModel.instrumentsUiState.collectAsState()
     var showAddInstrumentSheet by remember { mutableStateOf(false) }
+    var showQuotaSelection by remember { mutableStateOf(false) }
 
     Scaffold(
             topBar = {
@@ -135,6 +141,11 @@ fun DashboardScreen(
                                 currentCount = data?.activeComputableCount ?: 0,
                                 maxQuota = data?.maxFreeQuota ?: 4,
                             )
+                            if ((data?.activeComputableCount ?: 0) > (data?.maxFreeQuota ?: 4)) {
+                                TextButton(onClick = { showQuotaSelection = true }) {
+                                    Text("Elegir instrumentos disponibles")
+                                }
+                            }
                         }
 
                         item {
@@ -265,6 +276,71 @@ fun DashboardScreen(
             }
         }
     }
+    if (showQuotaSelection) {
+        val accounts = instruments.activeAccounts.filter { it.type != AccountType.CASH }
+        InstrumentQuotaSelectionDialog(
+            accounts = accounts,
+            cards = instruments.activeCards,
+            selectedIds = instruments.selectedFreeInstrumentIds,
+            maxQuota = instruments.maxFreeQuota,
+            onDismiss = { showQuotaSelection = false },
+            onSave = { ids ->
+                viewModel.saveFreeInstrumentSelection(ids)
+                showQuotaSelection = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun InstrumentQuotaSelectionDialog(
+    accounts: List<com.kipu.app.feature.accounts.domain.model.Account>,
+    cards: List<com.kipu.app.feature.accounts.domain.model.Card>,
+    selectedIds: Set<String>,
+    maxQuota: Int,
+    onDismiss: () -> Unit,
+    onSave: (Set<String>) -> Unit,
+) {
+    val allIds = remember(accounts, cards) {
+        (accounts.map { it.id.value } + cards.map { it.id.value }).toSet()
+    }
+    val selected = remember(allIds, selectedIds) {
+        mutableStateListOf<String>().apply {
+            val existing = selectedIds.intersect(allIds)
+            addAll(if (existing.isNotEmpty()) existing else allIds.take(maxQuota))
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Instrumentos disponibles") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Elige hasta $maxQuota. Los demás conservarán su historial y saldos, pero no podrán usarse mientras superes el límite Free.")
+                accounts.forEach { account ->
+                    val id = account.id.value
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = id in selected, onCheckedChange = { checked ->
+                            if (checked && selected.size < maxQuota) selected.add(id)
+                            else if (!checked) selected.remove(id)
+                        })
+                        Text(account.alias, modifier = Modifier.weight(1f))
+                    }
+                }
+                cards.forEach { card ->
+                    val id = card.id.value
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = id in selected, onCheckedChange = { checked ->
+                            if (checked && selected.size < maxQuota) selected.add(id)
+                            else if (!checked) selected.remove(id)
+                        })
+                        Text(card.alias ?: "${card.issuer} •••• ${card.lastFourDigits}", modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(selected.toSet()) }) { Text("Guardar") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
 }
 
 @Composable
@@ -416,6 +492,13 @@ fun LiquidAccountCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (account.isPlanLocked) {
+                            Text(
+                                text = "Bloqueado por el plan Free",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                     }
                 }
 
@@ -449,6 +532,13 @@ fun LiquidAccountCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            if (card.isPlanLocked) {
+                                Text(
+                                    text = "Bloqueada por el plan Free",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
                             MaskedCardReference(
                                 lastFourDigits = card.lastFourDigits,
                                 style = MaterialTheme.typography.bodySmall,

@@ -96,6 +96,11 @@ class MovementLocalDataSource @Inject constructor(
                     "source_account", "La cuenta está archivada o su moneda no coincide"
                 )
             }
+            if (isPlanLockedInstrument(command.userId, sourceId)) {
+                return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta está bloqueada por la selección del plan Free"
+                )
+            }
             if (command.type == MovementType.TRANSFER) {
                 val destinationId = command.destinationAccountId
                     ?: return@withTransaction RegisterTransactionResult.ValidationError(
@@ -108,6 +113,11 @@ class MovementLocalDataSource @Inject constructor(
                 if (destinationId == sourceId || destinationAccount.isArchived || destinationAccount.currency != command.currency) {
                     return@withTransaction RegisterTransactionResult.ValidationError(
                         "destination_account", "La cuenta de destino es inválida para esta transferencia"
+                    )
+                }
+                if (isPlanLockedInstrument(command.userId, destinationId)) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta está bloqueada por la selección del plan Free"
                     )
                 }
             }
@@ -329,5 +339,24 @@ class MovementLocalDataSource @Inject constructor(
             premiumVerified = premiumVerified,
         )
         return root.id in quota.planLockedResourceIds
+    }
+
+    private suspend fun isPlanLockedInstrument(userId: String, accountId: String): Boolean {
+        val account = database.accountDao().getById(userId, accountId) ?: return false
+        if (account.type == "CASH") return false
+        val activeIds = database.accountDao().getActiveComputable(userId).map { it.id } +
+            database.cardDao().getActive(userId).map { it.id }
+        val selected = database.planQuotaSelectionDao()
+            .getSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name)
+        val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        return accountId in quotaPolicy.evaluate(
+            group = QuotaGroup.INSTRUMENTS,
+            activeResourceIds = activeIds,
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        ).planLockedResourceIds
     }
 }

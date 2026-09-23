@@ -28,6 +28,9 @@ interface CardDao {
     @Query("SELECT * FROM cards WHERE user_id = :userId AND is_archived = 0 ORDER BY created_at DESC")
     fun observeActive(userId: String): Flow<List<CardEntity>>
 
+    @Query("SELECT * FROM cards WHERE user_id = :userId AND is_archived = 0")
+    suspend fun getActive(userId: String): List<CardEntity>
+
     @Query("SELECT * FROM cards WHERE user_id = :userId AND account_id = :accountId AND is_archived = 0")
     fun observeActiveDebitCardsForAccount(userId: String, accountId: String): Flow<List<CardEntity>>
 
