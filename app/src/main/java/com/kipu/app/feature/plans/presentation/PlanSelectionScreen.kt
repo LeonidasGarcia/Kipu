@@ -114,7 +114,7 @@ fun PlanSelectionScreen(
             )
         }
 
-        CommercialInfoNote()
+        CommercialInfoNote(state.selectedOption)
 
         state.errorMessage?.let {
             Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
@@ -257,8 +257,14 @@ private fun PremiumOptionCard(
 }
 
 @Composable
-private fun CommercialInfoNote() {
+private fun CommercialInfoNote(option: CommercialOption) {
     val description = stringResource(R.string.plan_trial_info_content_description)
+    val terms = when (option) {
+        CommercialOption.FREE -> R.string.plan_scope_note
+        CommercialOption.ANNUAL -> R.string.plan_annual_info
+        CommercialOption.MONTHLY -> R.string.plan_monthly_info
+        CommercialOption.LIFETIME -> R.string.plan_lifetime_info
+    }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -272,7 +278,7 @@ private fun CommercialInfoNote() {
                 Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                stringResource(R.string.plan_trial_info),
+                stringResource(terms),
                 modifier = Modifier.weight(1f).padding(top = 4.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodyMedium,
