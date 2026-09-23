@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(15);
+SELECT plan(17);
 
 -- Test 1: Function register_transaction_v1 exists
 SELECT has_function('public', 'register_transaction_v1', ARRAY['jsonb'], 'register_transaction_v1 exists');
@@ -144,6 +144,18 @@ SELECT is(
             'source_account_id', 'a3333333-0000-0000-0000-000000000001',
             'category_id', '00000000-0000-0000-0000-000000000001'
         )))->'error'->>'code'), 'ACCOUNT_NOT_FOUND', 'Account currency mismatch is rejected');
+
+SELECT is(
+    (SELECT COUNT(*)::integer
+     FROM jsonb_array_elements(public.pull_financial_changes_v1(1, 0, 100)->'changes') change
+     WHERE change->>'entity_type' = 'TRANSACTION'),
+    2, 'Registered transactions are appended to the pull stream');
+SELECT ok(
+    EXISTS (
+        SELECT 1 FROM jsonb_array_elements(public.pull_financial_changes_v1(1, 0, 100)->'changes') change
+        WHERE change->>'entity_type' = 'TRANSACTION'
+          AND change->'payload'->>'merchant_provisional_text' = 'Bodega del barrio'
+    ), 'Pull stream contains complete movement payloads');
 
 SET LOCAL "request.jwt.claim.sub" = '44444444-4444-4444-4444-444444444444';
 

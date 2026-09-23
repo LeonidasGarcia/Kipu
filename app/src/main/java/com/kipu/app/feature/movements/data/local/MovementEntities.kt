@@ -166,3 +166,10 @@ data class BalanceProjectionEntity(
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis(),
 )
+
+@Entity(tableName = "movement_sync_checkpoints", primaryKeys = ["user_id"])
+data class MovementSyncCheckpointEntity(
+    @ColumnInfo(name = "user_id") val userId: String,
+    @ColumnInfo(name = "sequence") val sequence: Long = 0L,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
+)

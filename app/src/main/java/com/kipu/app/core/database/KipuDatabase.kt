@@ -23,6 +23,7 @@ import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
 import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
 import com.kipu.app.feature.movements.data.local.MovementDao
 import com.kipu.app.feature.movements.data.local.MovementOutboxEntity
+import com.kipu.app.feature.movements.data.local.MovementSyncCheckpointEntity
 import com.kipu.app.feature.movements.data.local.TransactionEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
@@ -60,8 +61,9 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         LocalCommandReceiptEntity::class,
         MovementOutboxEntity::class,
         BalanceProjectionEntity::class,
+        MovementSyncCheckpointEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

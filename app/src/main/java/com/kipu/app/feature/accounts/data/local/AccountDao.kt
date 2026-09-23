@@ -14,6 +14,9 @@ interface AccountDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(account: AccountEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(account: AccountEntity)
+
     @Update
     suspend fun update(account: AccountEntity)
 
