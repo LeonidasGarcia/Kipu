@@ -153,6 +153,30 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `rapid month start taps persist the latest value`() = runTest(testDispatcher) {
+        Dispatchers.setMain(testDispatcher)
+        try {
+            val repository = FakeProfilePreferencesRepository()
+            repository.profileFlow.value = UserProfile(userId = userId, displayName = "Test", monthStart = 15)
+            val viewModel = SettingsViewModel(
+                repository = repository,
+                sessionCoordinator = FakeSessionCoordinator(LocalOwner(userId.toString(), false)),
+                profileSyncScheduler = FakeProfileSyncScheduler(),
+            )
+            advanceUntilIdle()
+
+            viewModel.stepMonthStart(1)
+            viewModel.stepMonthStart(1)
+            advanceUntilIdle()
+
+            assertEquals(17, viewModel.uiState.value.monthStart)
+            assertEquals(17, repository.lastUpdatedDelta?.monthStart)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun `toggling hide balances updates state immediately`() = runTest(testDispatcher) {
         Dispatchers.setMain(testDispatcher)
         try {

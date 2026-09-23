@@ -46,3 +46,10 @@
 - Recorrido crítico: cuenta S/100 + débito enlazado, gasto S/20 offline, transferencia S/40, reinicio, reintento y segundo dispositivo. Historial, saldos, recibos y cupos deben coincidir al céntimo.
 - Obtener las revisiones cruzadas de `specs/004-ep-mov-movimientos-ledger/review-record.md`. No marcar como cerradas las tareas sin evidencia de ejecución.
 - Desplegar SQL o integrar a `main` sólo después de las puertas anteriores y revisión del diff exacto.
+
+## Avance aislado de Sprint 1
+
+- Login y restauración consultan la selección de plan local del usuario: onboarding cuando falta, historial cuando ya existe. La navegación limpia la pila de autenticación.
+- La sesión cifrada guarda el vencimiento absoluto. Al restaurar una sesión caducada intenta renovar con el refresh token; si no puede, conserva el propietario para operaciones locales pero marca el remoto como `RefreshRequired`. El proveedor de workers rechaza tokens vencidos y verifica el mismo propietario tras renovar. Se desactivó la persistencia paralela del SDK.
+- El día de corte se incrementa desde el estado actual del ViewModel y las escrituras de preferencias se serializan. Una prueba de pulsaciones rápidas confirma que se persiste el último valor.
+- Quedan sin verificar el enlace real de recuperación, el flujo biométrico completo y la sincronización de preferencias entre dispositivos.

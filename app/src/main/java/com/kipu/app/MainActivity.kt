@@ -30,6 +30,7 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.auth.domain.AuthRepository
 import com.kipu.app.feature.auth.domain.model.AuthResult
+import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.settings.data.local.ProfilePreferencesDao
 import com.kipu.app.navigation.AUTH_LOGIN_ROUTE
 import com.kipu.app.navigation.AUTH_RESET_PASSWORD_ROUTE
@@ -74,6 +75,9 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var profileDao: ProfilePreferencesDao
 
+    @Inject
+    lateinit var planPreferencesDao: PlanPreferencesDao
+
     private var pendingDeepLink by mutableStateOf<DeepLinkResult?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -113,9 +117,15 @@ class MainActivity : FragmentActivity() {
 
             LaunchedEffect(Unit) {
                 val restoreResult = authRepository.restoreSession()
-                if (restoreResult.getOrNull() is AuthResult.Success && pendingDeepLink == null) {
-                    navController.navigate(MOVEMENTS_HISTORY_ROUTE) {
-                        popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                val restored = restoreResult.getOrNull() as? AuthResult.Success
+                if (restored != null && pendingDeepLink == null &&
+                    navController.currentDestination?.route == AUTH_LOGIN_ROUTE
+                ) {
+                    postAuthDestination(restored.userId)?.let { destination ->
+                        navController.navigate(destination) {
+                            popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 }
             }
@@ -149,7 +159,14 @@ class MainActivity : FragmentActivity() {
                                 authDestinations(
                                     navController = navController,
                                     onAuthenticated = { userId ->
-                                        navController.navigate(PLAN_SELECTION_ROUTE)
+                                        scope.launch {
+                                            postAuthDestination(userId)?.let { destination ->
+                                                navController.navigate(destination) {
+                                                    popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                        }
                                     },
                                 )
                                 planSelectionDestination(
@@ -201,5 +218,14 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingDeepLink = authDeepLinkHandler.handleDeepLink(intent.data)
+    }
+
+    private suspend fun postAuthDestination(rawUserId: String): String? {
+        val userId = runCatching { UUID.fromString(rawUserId) }.getOrNull() ?: return null
+        return if (planPreferencesDao.findPreference(userId) == null) {
+            PLAN_SELECTION_ROUTE
+        } else {
+            MOVEMENTS_HISTORY_ROUTE
+        }
     }
 }

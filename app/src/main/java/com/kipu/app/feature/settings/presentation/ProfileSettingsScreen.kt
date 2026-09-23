@@ -240,8 +240,7 @@ fun ProfileSettingsScreen(
                             ) {
                                 IconButton(
                                     onClick = {
-                                        viewModel.onMonthStartChanged(state.monthStart - 1)
-                                        viewModel.savePreferences()
+                                        viewModel.stepMonthStart(-1)
                                     },
                                     enabled = state.monthStart > 1,
                                     modifier = Modifier.size(36.dp),
@@ -258,8 +257,7 @@ fun ProfileSettingsScreen(
 
                                 IconButton(
                                     onClick = {
-                                        viewModel.onMonthStartChanged(state.monthStart + 1)
-                                        viewModel.savePreferences()
+                                        viewModel.stepMonthStart(1)
                                     },
                                     enabled = state.monthStart < 28,
                                     modifier = Modifier.size(36.dp),
