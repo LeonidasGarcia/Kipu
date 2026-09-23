@@ -24,6 +24,7 @@ fun String.asBuildConfigString(): String =
 
 android {
     namespace = "com.kipu.app"
+    testBuildType = if (providers.gradleProperty("isolatedAndroidTests").orNull == "true") "lab" else "debug"
     compileSdk {
         version = release(37)
     }
@@ -53,6 +54,13 @@ android {
     }
 
     buildTypes {
+        create("lab") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".lab"
+            matchingFallbacks += listOf("debug")
+            buildConfigField("String", "SUPABASE_URL", "\"\"")
+            buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"\"")
+        }
         release {
             optimization {
                 enable = false

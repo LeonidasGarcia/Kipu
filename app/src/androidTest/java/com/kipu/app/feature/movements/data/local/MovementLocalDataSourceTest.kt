@@ -143,5 +143,6 @@ class MovementLocalDataSourceTest {
         currency = "PEN",
         sourceAccountId = source,
         destinationAccountId = destination,
+        categoryId = if (type == MovementType.EXPENSE) "category-id" else null,
     )
 }
