@@ -239,10 +239,10 @@ fun LoginScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Campo: Correo Electrónico
+                // Campo: Correo electrónico
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Correo Electrónico",
+                        text = "Correo electrónico",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = KipuOnSurfaceVariant,
@@ -520,7 +520,7 @@ fun LoginScreen(
                         CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
                     } else {
                         Text(
-                            text = if (isRegisterMode) "Registrarse" else "Iniciar Sesión",
+                            text = if (isRegisterMode) "Registrarse" else "Ingresar",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = KipuOnPrimary,

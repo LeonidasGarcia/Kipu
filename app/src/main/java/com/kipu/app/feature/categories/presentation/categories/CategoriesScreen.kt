@@ -420,7 +420,7 @@ fun QuotaBanner(
                 )
                 if (isLimitReached) {
                     Text(
-                        text = "Hay categorías conservadas por encima del cupo. Selecciona cuáles quieres usar.",
+                        text = "Límite del plan Gratuito alcanzado. Desactiva una categoría para activar otra.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                     )
@@ -490,11 +490,28 @@ fun CategoryRootCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
-                    Text(
-                        text = "${item.subcategories.size} subcategorías",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "${item.subcategories.size} subcategorías",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (item.category.isCustom) {
+                            Text(
+                                text = "Personalizada",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        Text(
+                            text = if (isRootActive) "Activa" else "Inactiva (bloquea nuevas asignaciones)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isRootActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 // Acciones rápidas: Editar (lápiz), Eliminar (tacho), Expandir (flecha)
@@ -579,11 +596,19 @@ fun CategoryRootCard(
 
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            Text(
-                                text = subItem.displayName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = subItem.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                if (!isRootActive) {
+                                    Text(
+                                        text = "Inactiva por categoría padre",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
 
                             IconButton(
                                 onClick = { onEditSubcategory(subItem) },
@@ -618,7 +643,7 @@ fun CategoryRootCard(
                         ) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Añadir subcategoría", style = MaterialTheme.typography.labelLarge)
+                            Text("Agregar subcategoría", style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
