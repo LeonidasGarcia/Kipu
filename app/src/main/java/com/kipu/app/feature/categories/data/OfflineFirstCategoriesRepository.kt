@@ -62,6 +62,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     private val quotaSelectionDao: PlanQuotaSelectionDao,
     private val featureAccessCacheDao: FeatureAccessCacheDao,
     private val quotaPolicy: PlanQuotaPolicy,
+    private val planQuotaSyncScheduler: com.kipu.app.feature.plans.data.sync.PlanQuotaSyncScheduler? = null,
 ) : CategoriesRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -123,6 +124,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             resourceIds = categoryIds.map { it.value },
             now = System.currentTimeMillis(),
         )
+        planQuotaSyncScheduler?.scheduleSync(userId.value)
     }
 
     override fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>> {

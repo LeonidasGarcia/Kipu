@@ -69,6 +69,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     private val sessionCoordinator: SessionCoordinator,
     private val syncScheduler: InstrumentSyncScheduler,
     private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
+    private val planQuotaSyncScheduler: com.kipu.app.feature.plans.data.sync.PlanQuotaSyncScheduler? = null,
 ) : FinancialInstrumentsRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -1074,6 +1075,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
             now = System.currentTimeMillis(),
             resourceTypesById = resourceTypes,
         )
+        planQuotaSyncScheduler?.scheduleSync(userId)
     }
 
     override fun observeCardDebt(cardId: CardId): Flow<Money> {

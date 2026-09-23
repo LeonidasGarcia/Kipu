@@ -18,6 +18,14 @@ class FakeQuotaSelectionDao : PlanQuotaSelectionDao() {
     override suspend fun getSelectedResourceIds(userId: String, featureKey: String) =
         items[userId to featureKey].orEmpty().sorted()
 
+    override suspend fun getSelectedItems(userId: String, featureKey: String): List<PlanQuotaSelectionItemEntity> =
+        items[userId to featureKey].orEmpty().sorted().map {
+            PlanQuotaSelectionItemEntity(userId, featureKey, it, "RESOURCE", 0L)
+        }
+
+    override suspend fun getAllSelections(userId: String): List<PlanQuotaSelectionEntity> =
+        heads.values.filter { it.userId == userId }
+
     override fun observeSelectedResourceIds(userId: String, featureKey: String): Flow<List<String>> =
         flowOf(getSelectedResourceIdsSync(userId, featureKey))
 

@@ -18,6 +18,12 @@ abstract class PlanQuotaSelectionDao {
     @Query("SELECT resource_id FROM plan_selection_items WHERE user_id = :userId AND feature_key = :featureKey ORDER BY resource_id")
     abstract fun observeSelectedResourceIds(userId: String, featureKey: String): Flow<List<String>>
 
+    @Query("SELECT * FROM plan_selection_items WHERE user_id = :userId AND feature_key = :featureKey ORDER BY resource_id")
+    abstract suspend fun getSelectedItems(userId: String, featureKey: String): List<PlanQuotaSelectionItemEntity>
+
+    @Query("SELECT * FROM plan_selections WHERE user_id = :userId")
+    abstract suspend fun getAllSelections(userId: String): List<PlanQuotaSelectionEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     protected abstract suspend fun putSelection(selection: PlanQuotaSelectionEntity)
 

@@ -14,6 +14,7 @@ sealed interface ApiResult<out T> {
 class PlanSelectionApi(private val client: HttpClient, private val baseUrl: String) {
     suspend fun eligibility(token: String): ApiResult<TrialEligibilityResponseDto> = request(token, "$baseUrl/plans/eligibility", HttpMethod.Get, null)
     suspend fun select(token: String, operation: SyncOutboxEntity): ApiResult<PlanSelectionResponseDto> = request(token, "$baseUrl/plans/selection", HttpMethod.Post, operation.toRequestDto())
+    suspend fun selectQuota(token: String, request: QuotaSelectionRequestDto): ApiResult<QuotaSelectionResponseDto> = request(token, "$baseUrl/plans/quota-selection", HttpMethod.Post, request)
     private suspend inline fun <reified T> request(token: String, url: String, method: HttpMethod, payload: Any?): ApiResult<T> = try {
         val response = client.request(url) {
             this.method = method
