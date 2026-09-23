@@ -52,14 +52,28 @@ class RecoveryViewModel @Inject constructor(
 
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
-            requestPasswordRecovery(email)
-            // Neutral confirmation always displayed (FR-008, SC-002)
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    isRequestAccepted = true,
-                )
-            }
+            requestPasswordRecovery(email).fold(
+                onSuccess = {
+                    // The same confirmation is shown for existing and unknown emails.
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRequestAccepted = true,
+                            errorMessage = null,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRequestAccepted = false,
+                            errorMessage = error.message
+                                ?: "No se pudo solicitar la recuperación. Intenta nuevamente.",
+                        )
+                    }
+                },
+            )
         }
     }
 

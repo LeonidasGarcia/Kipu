@@ -2,6 +2,7 @@ package com.kipu.app.feature.movements.data.local
 
 import androidx.room.withTransaction
 import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.feature.movements.data.MovementOutboxPayloadFactory
 import com.kipu.app.feature.movements.domain.model.LedgerRole
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import com.kipu.app.feature.movements.domain.model.MovementType
@@ -10,8 +11,6 @@ import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
 import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionStatus
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -194,7 +193,11 @@ class MovementLocalDataSource @Inject constructor(
             )
 
             // 6. Insert movement outbox
-            val outboxPayload = buildOutboxPayload(transactionEntity, command.idempotencyKey, requestHash)
+            val outboxPayload = MovementOutboxPayloadFactory.build(
+                transaction = transactionEntity,
+                idempotencyKey = command.idempotencyKey,
+                requestHash = requestHash,
+            )
             movementDao.insertOutbox(
                 MovementOutboxEntity(
                     id = UUID.randomUUID().toString(),
@@ -217,32 +220,6 @@ class MovementLocalDataSource @Inject constructor(
                 isDuplicate = false,
             )
         }
-    }
-
-    private fun buildOutboxPayload(
-        transaction: TransactionEntity,
-        idempotencyKey: String,
-        requestHash: String,
-    ): String {
-        return """
-            {
-                "contract_version": 1,
-                "idempotency_key": "$idempotencyKey",
-                "request_hash": "$requestHash",
-                "transaction": {
-                    "id": "${transaction.id}",
-                    "type": "${transaction.type}",
-                    "amount_minor": ${transaction.amountMinor},
-                    "currency_code": "${transaction.currencyCode}",
-                    "source_account_id": ${transaction.sourceAccountId?.let { "\"$it\"" } ?: "null"},
-                    "destination_account_id": ${transaction.destinationAccountId?.let { "\"$it\"" } ?: "null"},
-                    "category_id": ${transaction.categoryId?.let { "\"$it\"" } ?: "null"},
-                    "merchant_id": ${transaction.merchantId?.let { "\"$it\"" } ?: "null"},
-                    "occurred_at": "${transaction.occurredAt}",
-                    "note": ${transaction.note?.let { "\"$it\"" } ?: "null"}
-                }
-            }
-        """.trimIndent()
     }
 
     fun TransactionEntity.toDomain(): Transaction = Transaction(

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
@@ -433,6 +434,15 @@ fun ProfileSettingsScreen(
                     subtitle = "Lectura de notificaciones y SMS bancarios",
                     onClick = { onNavigateToPermissions?.invoke() },
                 )
+
+                onNavigateToBiometrics?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.Fingerprint,
+                        title = "Bloqueo local",
+                        subtitle = "Configurar huella, rostro o credencial del dispositivo",
+                        onClick = it,
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 

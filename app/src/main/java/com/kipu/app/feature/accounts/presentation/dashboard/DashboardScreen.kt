@@ -19,9 +19,9 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -31,14 +31,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -49,7 +53,6 @@ import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.AccountWithBalance
 import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
-import com.kipu.app.ui.component.LocalBalanceMasked
 import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
 
@@ -67,9 +70,9 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.dashboardUiState.collectAsState()
+    var showAddInstrumentSheet by remember { mutableStateOf(false) }
 
-    CompositionLocalProvider(LocalBalanceMasked provides state.isMasked) {
-        Scaffold(
+    Scaffold(
             topBar = {
                 TopAppBar(
                     title = {
@@ -86,12 +89,6 @@ fun DashboardScreen(
                                 contentDescription = "Historial de Movimientos",
                             )
                         }
-                        IconButton(onClick = { viewModel.toggleMasked() }) {
-                            Icon(
-                                imageVector = if (state.isMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (state.isMasked) "Mostrar saldos" else "Ocultar saldos",
-                            )
-                        }
                         IconButton(onClick = onNavigateToSettings) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
@@ -102,8 +99,8 @@ fun DashboardScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = onNavigateToNewAccount) {
-                    Icon(Icons.Default.Add, contentDescription = "Nueva Cuenta")
+                FloatingActionButton(onClick = { showAddInstrumentSheet = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Añadir instrumento")
                 }
             },
             modifier = modifier,
@@ -226,6 +223,44 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.height(80.dp))
                         }
                     }
+                }
+            }
+        }
+    if (showAddInstrumentSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showAddInstrumentSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Añadir instrumento", style = MaterialTheme.typography.titleLarge)
+                Button(
+                    onClick = {
+                        showAddInstrumentSheet = false
+                        onNavigateToNewAccount()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                ) {
+                    Icon(Icons.Default.AccountBalance, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Nueva cuenta")
+                }
+                Button(
+                    onClick = {
+                        showAddInstrumentSheet = false
+                        onNavigateToNewCard()
+                    },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                ) {
+                    Icon(Icons.Default.CreditCard, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Nueva tarjeta")
                 }
             }
         }

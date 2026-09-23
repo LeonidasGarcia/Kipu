@@ -24,11 +24,12 @@ class RecoveryViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     private val dummyClient: SupabaseClient = createSupabaseClient("https://dummy.supabase.co", "dummy-key") {}
+    private var recoveryResult: Result<Unit> = Result.success(Unit)
 
     private val fakeRequestRecovery = object : RequestPasswordRecovery(
         authApi = com.kipu.app.feature.auth.data.remote.AuthApi(io.ktor.client.HttpClient()),
     ) {
-        override suspend fun invoke(email: String): Result<Unit> = Result.success(Unit)
+        override suspend fun invoke(email: String): Result<Unit> = recoveryResult
     }
 
     private var fakeResetResult: Result<Unit> = Result.success(Unit)
@@ -65,6 +66,20 @@ class RecoveryViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.isRequestAccepted)
+    }
+
+    @Test
+    fun `recovery network failure is visible and can be retried`() = runTest {
+        recoveryResult = Result.failure(IllegalStateException("Se requiere conexión a internet."))
+        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset)
+        viewModel.onEmailChanged("user@example.com")
+
+        viewModel.submitRecoveryRequest()
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.uiState.value.isRequestAccepted)
+        assertEquals("Se requiere conexión a internet.", viewModel.uiState.value.errorMessage)
+        assertEquals(false, viewModel.uiState.value.isLoading)
     }
 
     @Test

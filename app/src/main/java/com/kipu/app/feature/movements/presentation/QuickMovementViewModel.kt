@@ -2,6 +2,7 @@ package com.kipu.app.feature.movements.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.domain.model.Account
@@ -263,8 +264,7 @@ class QuickMovementViewModel @Inject constructor(
     }
 
     private fun parseAmountMinor(amountText: String): Long? {
-        val doubleVal = amountText.toDoubleOrNull() ?: return null
-        return (doubleVal * 100).toLong()
+        return MoneyInputParser.parseMinorUnits(amountText)
     }
 
     private fun getUserId(): String {
