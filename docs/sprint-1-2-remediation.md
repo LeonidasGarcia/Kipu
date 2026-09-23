@@ -48,3 +48,10 @@
 - Recorrido crítico: cuenta S/100 + débito enlazado, gasto S/20 offline, transferencia S/40, reinicio, reintento y segundo dispositivo. Historial, saldos, recibos y cupos deben coincidir al céntimo.
 - Obtener las revisiones cruzadas de `specs/004-ep-mov-movimientos-ledger/review-record.md`. No marcar como cerradas las tareas sin evidencia de ejecución.
 - Desplegar SQL o integrar a `main` sólo después de las puertas anteriores y revisión del diff exacto.
+
+## Evidencia local del 23/09/2026
+
+- `supabase db reset --local` reconstruye la cadena completa hasta EP-MOV después de adaptar EP-CCO a las columnas creadas por el baseline financiero.
+- pgTAP local: `movements_register_transaction_test.sql` 8/8, `financial_accounts.test.sql` 8/8 y `financial_cards.test.sql` 6/6. La suite completa aún falla en rate buckets, categorías/comercios, pagos/compras de tarjeta y una prueba de planes; esos fallos siguen abiertos.
+- `connectedLabAndroidTest` ejecutó cuatro pruebas Room de `MovementLocalDataSourceTest` en un dispositivo físico con paquete `com.kipu.app.lab`. La app instalada `com.kipu.app` no se actualizó. La variante lab desactiva la URL y la clave remotas.
+- La prueba instrumentada confirma proyección igual a suma del ledger para gasto y transferencia, reintento idempotente, rechazo de cuenta ajena/moneda distinta y ausencia de segundo efecto con recibo huérfano. Aún faltan prueba de migración Room v4/v5 y reconciliación entre dos dispositivos.
