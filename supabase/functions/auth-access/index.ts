@@ -452,7 +452,8 @@ export function createDefaultDeps(): Dependencies {
     resetPasswordForEmail: async (email: string) => {
       const baseUrl = getBaseUrl();
       const anonKey = getAnonKey();
-      const res = await fetch(`${baseUrl}/auth/v1/recover`, {
+      const redirectTo = Deno.env.get("KIPU_AUTH_REDIRECT_URL") ?? "https://kipu.app/auth/recovery";
+      const res = await fetch(`${baseUrl}/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`, {
         method: "POST",
         headers: {
           apikey: anonKey,

@@ -12,12 +12,15 @@ import com.kipu.app.feature.settings.domain.model.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
@@ -51,6 +54,8 @@ class SettingsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(SettingsUiState(isLoading = true))
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+    private val saveMutex = Mutex()
+    private var pendingSaveRequests = 0
 
     private val currentUserId: UUID?
         get() = sessionCoordinator.currentOwner?.verifiedUserId?.let {
@@ -101,6 +106,14 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(monthStart = day, monthStartError = error) }
     }
 
+    fun stepMonthStart(delta: Int) {
+        require(delta == -1 || delta == 1)
+        val next = _uiState.value.monthStart + delta
+        if (next !in 1..28) return
+        onMonthStartChanged(next)
+        savePreferences()
+    }
+
     fun onThemeModeChanged(mode: ThemeMode) {
         _uiState.update { it.copy(themeMode = mode) }
     }
@@ -131,24 +144,37 @@ class SettingsViewModel @Inject constructor(
             return
         }
 
+        pendingSaveRequests += 1
         _uiState.update { it.copy(isSaving = true, errorMessage = null, infoMessage = null) }
         viewModelScope.launch {
-            val delta = ProfilePreferenceDelta(
-                displayName = state.displayName,
-                currencyCode = state.currencyCode,
-                monthStart = state.monthStart,
-                themeMode = state.themeMode,
-            )
-            val result = repository.updatePreferences(userId, delta)
-            if (result.isSuccess) {
-                profileSyncScheduler.scheduleSync(userId)
-                _uiState.update { it.copy(isSaving = false, infoMessage = "Preferencias guardadas correctamente") }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        isSaving = false,
-                        errorMessage = result.exceptionOrNull()?.message ?: "Error al guardar preferencias",
-                    )
+            saveMutex.withLock {
+                val latest = _uiState.value
+                val delta = ProfilePreferenceDelta(
+                    displayName = latest.displayName,
+                    currencyCode = latest.currencyCode,
+                    monthStart = latest.monthStart,
+                    themeMode = latest.themeMode,
+                )
+                val result = try {
+                    repository.updatePreferences(userId, delta)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+                pendingSaveRequests -= 1
+                if (result.isSuccess) {
+                    profileSyncScheduler.scheduleSync(userId)
+                    _uiState.update {
+                        it.copy(isSaving = pendingSaveRequests > 0, infoMessage = "Preferencias guardadas correctamente")
+                    }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            isSaving = pendingSaveRequests > 0,
+                            errorMessage = result.exceptionOrNull()?.message ?: "Error al guardar preferencias",
+                        )
+                    }
                 }
             }
         }

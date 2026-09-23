@@ -4,6 +4,8 @@ import com.kipu.app.feature.auth.domain.CompletePasswordReset
 import com.kipu.app.feature.auth.domain.RequestPasswordRecovery
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.createSupabaseClient
+import io.mockk.mockk
+import com.kipu.app.feature.auth.data.RecoverySessionInstaller
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -33,8 +35,10 @@ class RecoveryViewModelTest {
     }
 
     private var fakeResetResult: Result<Unit> = Result.success(Unit)
+    private val fakeInstaller = mockk<RecoverySessionInstaller>(relaxed = true)
     private val fakeCompleteReset = object : CompletePasswordReset(
         supabaseClient = dummyClient,
+        recoverySessionInstaller = fakeInstaller,
     ) {
         override suspend fun invoke(newPassword: String): Result<Unit> = fakeResetResult
     }
@@ -51,7 +55,7 @@ class RecoveryViewModelTest {
 
     @Test
     fun `recovery request with invalid email sets email error`() {
-        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset)
+        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset, fakeInstaller)
         viewModel.onEmailChanged("not-an-email")
         viewModel.submitRecoveryRequest()
 
@@ -60,7 +64,7 @@ class RecoveryViewModelTest {
 
     @Test
     fun `recovery request with valid email sets request accepted neutrally`() = runTest {
-        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset)
+        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset, fakeInstaller)
         viewModel.onEmailChanged("user@example.com")
         viewModel.submitRecoveryRequest()
         advanceUntilIdle()
@@ -71,7 +75,7 @@ class RecoveryViewModelTest {
     @Test
     fun `recovery network failure is visible and can be retried`() = runTest {
         recoveryResult = Result.failure(IllegalStateException("Se requiere conexión a internet."))
-        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset)
+        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset, fakeInstaller)
         viewModel.onEmailChanged("user@example.com")
 
         viewModel.submitRecoveryRequest()
@@ -84,7 +88,7 @@ class RecoveryViewModelTest {
 
     @Test
     fun `new password validation rejects short password`() {
-        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset)
+        val viewModel = RecoveryViewModel(fakeRequestRecovery, fakeCompleteReset, fakeInstaller)
         viewModel.onNewPasswordChanged("Short1")
         viewModel.submitNewPassword()
 

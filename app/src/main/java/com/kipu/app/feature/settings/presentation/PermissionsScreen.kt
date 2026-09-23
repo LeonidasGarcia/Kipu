@@ -191,7 +191,7 @@ fun PermissionsScreen(
                     PermissionCard(
                         item = item,
                         onShowRationale = { viewModel.showRationale(item.source) },
-                        onGrantConsent = { viewModel.grantConsent(item.source) },
+                        onGrantConsent = { viewModel.showRationale(item.source) },
                         onRevokeConsent = { viewModel.revokeConsent(item.source) },
                         onOpenSettings = { onOpenSettingsIntent(item.source) },
                     )

@@ -80,3 +80,11 @@
 
 - El commit local rechaza cuentas ajenas, archivadas o de otra moneda; categorías inexistentes, inactivas o de otro usuario; hijas con raíz inactiva; y comercios ausentes o inactivos. Una transferencia sólo ofrece cuentas de la misma moneda. El formulario toma PEN/USD de la cuenta de origen, y al cambiar de tipo limpia campos que ya no corresponden.
 - El RPC `register_transaction_v1` en una nueva migración valida cuenta activa con moneda coincidente, categoría activa del usuario y comercio activo antes de escribir. Fija `search_path` y revoca `EXECUTE` a `anon`. pgTAP local cubre categoría/comercio desconocido, moneda distinta y privilegios; `movements_register_transaction_test.sql` pasa 15/15. La suite general mantiene los dos fallos previos de EP-CTA. `MovementLocalDataSourceTest` pasa 9/9 en la variante lab.
+
+## Avance aislado de Sprint 1
+
+- Login y restauración consultan la selección de plan local del usuario: onboarding cuando falta, historial cuando ya existe. La navegación limpia la pila de autenticación.
+- La sesión cifrada guarda el vencimiento absoluto. Al restaurar una sesión caducada intenta renovar con el refresh token; si no puede, conserva el propietario para operaciones locales pero marca el remoto como `RefreshRequired`. El proveedor de workers rechaza tokens vencidos y verifica el mismo propietario tras renovar. Se desactivó la persistencia paralela del SDK.
+- El día de corte se incrementa desde el estado actual del ViewModel y las escrituras de preferencias se serializan. Una prueba de pulsaciones rápidas confirma que se persiste el último valor.
+- El callback de recuperación sólo acepta `https://kipu.app/auth/recovery` con una sesión implícita de tipo `recovery` o un código de intercambio. Antes de cambiar la contraseña se recupera el usuario desde Auth y se instala una sesión temporal; un callback inválido no habilita el cambio. La Edge Function solicita redirección a esa URL.
+- La URL `https://kipu.app/auth/recovery` debe figurar en los Redirect URLs del proyecto Supabase conectado. Quedan sin verificar el correo/enlace real válido y vencido, el flujo biométrico completo y la sincronización de preferencias entre dispositivos. No se desplegó la Edge Function.
