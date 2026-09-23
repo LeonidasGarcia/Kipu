@@ -21,6 +21,8 @@
 
 1. Inventariar datos y esquema real de Room 1–5 y remoto; comparar con migraciones versionadas. El remoto conectado tiene `public.accounts`, `public.cards`, `public.transactions` e `internal.ledger_entries`, pero no `public.financial_movements` ni las RPC S2 esperadas. No ejecutar las migraciones locales antiguas directamente sobre ese proyecto.
 2. Definir el mapeo de aperturas, ajustes y movimientos heredados hacia `transactions`/`ledger_entries`, con identidad estable y sin duplicar efectos. Conservar los movimientos de crédito EP-CTA que ya existen. Registrar política de backfill, proyección y recuperación ante fallos.
+   - `OPENING`, `ADJUSTMENT` y `REVERSAL` afectan saldo de cuenta; `CARD_PAYMENT_CASH` también lo afecta aunque venga del avance EP-CTA. `CREDIT_PURCHASE` y `CARD_PAYMENT_LIABILITY` afectan deuda de tarjeta. El backfill no puede limitarse a los tres primeros tipos ni sumar la deuda de tarjeta al saldo de cuenta.
+   - `payCreditCard` consulta hoy `financial_movements` para validar fondos. Cambiar sólo la pantalla de saldo dejaría esa comprobación desalineada; la misma versión de migración debe cambiar ambas lecturas.
 3. Crear migración Room **forward-only** desde v5, backfill verificable y camino único de escritura/lectura de saldo. La prueba debe abrir una base v4/v5 con datos representativos y comparar saldo por cuenta antes/después.
 4. Reconstruir cadena SQL en una base de ensayo limpia y luego sobre copia representativa; agregar RPC versionadas y migración compatible con el esquema remoto real. Probar rollback, idempotencia, RLS para dos usuarios y ausencia de acceso `anon`.
 5. Añadir pull, checkpoint y reconciliación para dos dispositivos; demostrar que reintentos y reinicio producen un solo efecto.
