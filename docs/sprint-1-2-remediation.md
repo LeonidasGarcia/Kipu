@@ -81,6 +81,14 @@
 - El commit local rechaza cuentas ajenas, archivadas o de otra moneda; categorías inexistentes, inactivas o de otro usuario; hijas con raíz inactiva; y comercios ausentes o inactivos. Una transferencia sólo ofrece cuentas de la misma moneda. El formulario toma PEN/USD de la cuenta de origen, y al cambiar de tipo limpia campos que ya no corresponden.
 - El RPC `register_transaction_v1` en una nueva migración valida cuenta activa con moneda coincidente, categoría activa del usuario y comercio activo antes de escribir. Fija `search_path` y revoca `EXECUTE` a `anon`. pgTAP local cubre categoría/comercio desconocido, moneda distinta y privilegios; `movements_register_transaction_test.sql` pasa 15/15. La suite general mantiene los dos fallos previos de EP-CTA. `MovementLocalDataSourceTest` pasa 9/9 en la variante lab.
 
+### Pull de movimientos S2
+
+- `SyncMovementsWorker` ahora consume `pull_financial_changes_v1` aunque no haya comandos locales pendientes. Room v8 guarda un cursor por usuario; el worker procesa las páginas en orden de secuencia, incorpora cuentas antes de transacciones y persiste movimientos/asientos remotos sin duplicarlos al reintentar.
+- `register_transaction_v1` añade cada nueva transacción al flujo de cambios, y una migración agrega las transacciones históricas compatibles que todavía no tenían evento. El payload incluye comercio provisional y asientos. No se desplegó esta migración al Supabase conectado.
+- `movements_register_transaction_test.sql` pasa 17/17. La batería completa ejecutó 190 pruebas; solo fallan los dos archivos existentes de pago/compra EP-CTA porque sus RPC consultan `public.command_receipts` en vez de `internal.command_receipts`.
+- En el teléfono, `SyncMovementsWorkerTest` confirma que una cuenta remota con apertura de 1000 y un gasto de 50 producen una proyección y ledger de 950, preservan el comercio provisional y guardan el cursor 2. El conjunto aislado Room/movimientos/sync pasó 12/12 con `com.kipu.app.lab`; la app personal `com.kipu.app` no se actualizó.
+- Esto cubre el pull local de cuentas y transacciones; falta validar dos dispositivos conectados a un backend de ensayo, preferencias y catálogos remotos, y revisar los eventos de tarjetas/eliminación antes de certificar reconciliación completa.
+
 ## Avance aislado de Sprint 1
 
 - Login y restauración consultan la selección de plan local del usuario: onboarding cuando falta, historial cuando ya existe. La navegación limpia la pila de autenticación.

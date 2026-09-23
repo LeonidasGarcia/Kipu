@@ -112,4 +112,16 @@ interface MovementDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertBalanceProjection(projection: BalanceProjectionEntity)
+
+    @Query("SELECT * FROM movement_sync_checkpoints WHERE user_id = :userId")
+    suspend fun getSyncCheckpoint(userId: String): MovementSyncCheckpointEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun saveSyncCheckpoint(checkpoint: MovementSyncCheckpointEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPulledTransaction(transaction: TransactionEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertPulledLedgerEntries(entries: List<LedgerEntryEntity>)
 }

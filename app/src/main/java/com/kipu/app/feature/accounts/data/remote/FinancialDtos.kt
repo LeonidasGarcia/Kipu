@@ -2,6 +2,7 @@ package com.kipu.app.feature.accounts.data.remote
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class CreateAccountRequestDto(
@@ -98,7 +99,7 @@ data class SyncChangeItemDto(
     @SerialName("entity_id") val entityId: String,
     @SerialName("revision") val revision: Long,
     @SerialName("operation") val operation: String,
-    @SerialName("payload") val payload: String? = null,
+    @SerialName("payload") val payload: JsonElement? = null,
     @SerialName("created_at") val createdAt: String? = null,
 )
 

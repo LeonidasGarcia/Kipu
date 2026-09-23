@@ -52,7 +52,7 @@ class MovementRoomMigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(name, 7, true, MIGRATION_5_6, MIGRATION_6_7).use { db ->
+        helper.runMigrationsAndValidate(name, 8, true, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).use { db ->
             assertEquals(4L, db.scalarLong("SELECT COUNT(*) FROM transactions WHERE legacy_kind IS NOT NULL"))
             assertEquals(5L, db.scalarLong("SELECT COUNT(*) FROM ledger_entries"))
             assertEquals(6000L, db.scalarLong("SELECT balance_minor FROM balance_projections WHERE account_id = 'account'"))
@@ -67,6 +67,8 @@ class MovementRoomMigrationTest {
                 cursor.moveToFirst()
                 assertEquals("Bodega", cursor.getString(0))
             }
+            db.execSQL("INSERT INTO movement_sync_checkpoints (user_id, sequence, updated_at) VALUES ('user', 4, 1)")
+            assertEquals(4L, db.scalarLong("SELECT sequence FROM movement_sync_checkpoints WHERE user_id = 'user'"))
         }
     }
 
@@ -88,7 +90,7 @@ class MovementRoomMigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(name, 7, true, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).use { db ->
+        helper.runMigrationsAndValidate(name, 8, true, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8).use { db ->
             assertEquals(2500L, db.scalarLong("SELECT balance_minor FROM balance_projections WHERE account_id = 'account'"))
             assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM transactions WHERE legacy_kind = 'OPENING'"))
         }
