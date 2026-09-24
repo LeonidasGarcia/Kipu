@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -108,7 +109,7 @@ fun CategoriesScreen(
             TopAppBar(
                 title = {
                     Text(
-                        text = "Gestión De Categorías",
+                        text = "Categorías",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 18.sp,
                     )
@@ -470,14 +471,10 @@ fun CategoryRootCard(
             .alpha(cardAlpha),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Fila de Categoría Raíz
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onToggleExpand() },
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                // Icono con fondo de color
                 Box(
                     modifier = Modifier
                         .size(44.dp)
@@ -495,89 +492,92 @@ fun CategoryRootCard(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f).clickable { onToggleExpand() }) {
                     Text(
                         text = item.displayName,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = "${item.subcategories.size} subcategorías",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (item.category.isCustom) {
-                            Text(
-                                text = "Personalizada",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        Text(
-                            text = if (isRootActive) "Activa" else "Inactiva (bloquea nuevas asignaciones)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (isRootActive) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-                        )
-                    }
+                    Text(
+                        text = when (item.subcategories.size) {
+                            0 -> "Sin subcategorías"
+                            1 -> "1 subcategoría"
+                            else -> "${item.subcategories.size} subcategorías"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
-                // Acciones rápidas: Editar (lápiz), Eliminar (tacho), Expandir (flecha)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = onEdit,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = "Editar ${item.displayName}",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.DeleteOutline,
-                            contentDescription = "Inactivar ${item.displayName}",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onToggleExpand,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.ExpandMore,
-                            contentDescription = if (isExpanded) "Colapsar" else "Expandir",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier
-                                .size(20.dp)
-                                .rotate(rotationAngle),
-                        )
-                    }
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Colapsar ${item.displayName}" else "Expandir ${item.displayName}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .rotate(rotationAngle),
+                    )
                 }
             }
 
-            if (item.category.isPlanLocked) {
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer,
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.padding(top = 8.dp),
-                ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Bloqueada por el plan Free",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.labelMedium,
+                        text = if (item.category.isCustom) "Personalizada" else "Predeterminada",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (item.category.isCustom) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = when {
+                            item.category.isPlanLocked -> "Bloqueada por el plan Free"
+                            isRootActive -> "Activa"
+                            else -> "Inactiva · Bloquea nuevas asignaciones"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (item.category.isPlanLocked || !isRootActive) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(
+                    onClick = onEdit,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Editar ${item.displayName}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = "Inactivar ${item.displayName}",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -601,21 +601,22 @@ fun CategoryRootCard(
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
                         ) {
-                            // Viñeta punto
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(parseHexColor(item.color)),
-                            )
-
-                            Spacer(modifier = Modifier.width(12.dp))
-
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = subItem.displayName,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(parseHexColor(item.color)),
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = subItem.displayName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                                 if (!isRootActive) {
                                     Text(
                                         text = "Inactiva por categoría padre",
@@ -623,30 +624,33 @@ fun CategoryRootCard(
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                 }
-                            }
-
-                            IconButton(
-                                onClick = { onEditSubcategory(subItem) },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Editar ${subItem.displayName}",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-
-                            IconButton(
-                                onClick = { onDeleteSubcategory(subItem) },
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.DeleteOutline,
-                                    contentDescription = "Inactivar ${subItem.displayName}",
-                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                    modifier = Modifier.size(16.dp),
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End,
+                                ) {
+                                    IconButton(
+                                        onClick = { onEditSubcategory(subItem) },
+                                        modifier = Modifier.size(48.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Edit,
+                                            contentDescription = "Editar ${subItem.displayName}",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { onDeleteSubcategory(subItem) },
+                                        modifier = Modifier.size(48.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Default.DeleteOutline,
+                                            contentDescription = "Inactivar ${subItem.displayName}",
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

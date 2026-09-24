@@ -149,7 +149,7 @@ class CategoriesScreenTest {
         }
 
         composeTestRule.onNodeWithText("Categoría Inactiva").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Inactiva (bloquea nuevas asignaciones)").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Inactiva · Bloquea nuevas asignaciones").assertIsDisplayed()
         composeTestRule.onNodeWithText("Inactiva por categoría padre").assertIsDisplayed()
     }
 
