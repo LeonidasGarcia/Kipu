@@ -1,5 +1,7 @@
 package com.kipu.app.feature.accounts.presentation.instruments
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,6 +47,8 @@ import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
+import com.kipu.app.feature.accounts.presentation.components.InstrumentCardPreview
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 fun parseAmountToMinorUnits(input: String): Long? {
     if (input.isBlank()) return 0L
@@ -56,6 +60,7 @@ fun parseAmountToMinorUnits(input: String): Long? {
 fun AccountFormScreen(
     viewModel: AccountsViewModel,
     onNavigateBack: () -> Unit,
+    onSaveSuccess: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostStateState() }
@@ -73,8 +78,12 @@ fun AccountFormScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is AccountUiEvent.ShowMessage -> {
-                    snackbarHostState.showSnackbar(event.message)
-                    onNavigateBack()
+                    if (onSaveSuccess != null) {
+                        onSaveSuccess(event.message)
+                    } else {
+                        snackbarHostState.showSnackbar(event.message)
+                        onNavigateBack()
+                    }
                 }
                 is AccountUiEvent.Error -> {
                     isSubmitting = false
@@ -103,6 +112,7 @@ fun AccountFormScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
+                .animateContentSize(animationSpec = tween(KipuMotionTokens.EnterMillis))
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -110,6 +120,17 @@ fun AccountFormScreen(
                 text = "Información General",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary,
+            )
+
+            InstrumentCardPreview(
+                title = alias.ifBlank { selectedPreset?.defaultName ?: "Mi cuenta" },
+                instrumentType = when (selectedType) {
+                    AccountType.CASH -> "Efectivo"
+                    AccountType.SAVINGS -> "Ahorros"
+                    AccountType.BANK -> "Corriente"
+                    AccountType.DIGITAL_WALLET -> "Billetera"
+                },
+                subtitle = "${selectedPreset?.defaultName ?: "Cuenta genérica"} · ${selectedCurrency.name}",
             )
 
             OutlinedTextField(
@@ -123,6 +144,7 @@ fun AccountFormScreen(
                 isError = aliasError != null,
                 supportingText = aliasError?.let { { Text(it) } },
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -212,11 +234,13 @@ fun AccountFormScreen(
                 supportingText = initialBalanceError?.let { { Text(it) } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
             if (selectedType != AccountType.CASH) {
                 Card(
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     modifier = Modifier.fillMaxWidth(),
                 ) {

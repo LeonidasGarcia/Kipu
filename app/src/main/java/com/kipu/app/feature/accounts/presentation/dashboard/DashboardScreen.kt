@@ -35,6 +35,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +45,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -70,15 +73,27 @@ fun DashboardScreen(
     onNavigateToNewCard: () -> Unit,
     onNavigateToMovements: () -> Unit = {},
     onAccountClick: (String) -> Unit = {},
+    onCardClick: (String) -> Unit = onAccountClick,
     onNavigateToSettings: () -> Unit = {},
+    feedbackMessage: String? = null,
+    onFeedbackConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.dashboardUiState.collectAsState()
     val instruments by viewModel.instrumentsUiState.collectAsState()
     var showAddInstrumentSheet by remember { mutableStateOf(false) }
     var showQuotaSelection by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(feedbackMessage) {
+        feedbackMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            onFeedbackConsumed()
+        }
+    }
 
     Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = {
@@ -193,7 +208,7 @@ fun DashboardScreen(
                             items(data.liquidAccounts, key = { it.account.id.value }) { item ->
                                 LiquidAccountCard(
                                     accountWithBalance = item,
-                                    onClick = { onAccountClick(item.account.id.value) }
+                                    onClick = { onAccountClick(item.account.id.value) },
                                 )
                             }
                         }
@@ -208,6 +223,7 @@ fun DashboardScreen(
                                     color = MaterialTheme.colorScheme.primary,
                                 )
                                 Card(
+                                    shape = MaterialTheme.shapes.large,
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -225,7 +241,36 @@ fun DashboardScreen(
                             items(data.creditCards, key = { it.card.id.value }) { creditItem ->
                                 com.kipu.app.feature.accounts.presentation.components.CreditCardSummaryCard(
                                     creditCardWithSummary = creditItem,
-                                    onClick = { onAccountClick(creditItem.card.id.value) },
+                                    onClick = { onCardClick(creditItem.card.id.value) },
+                                )
+                            }
+                        }
+
+                        val archivedCardsNotInDebtSummary = instruments.archivedCards.filter { card ->
+                            data?.creditCards?.none { it.card.id == card.id } ?: true
+                        }
+                        if (instruments.archivedAccounts.isNotEmpty() || archivedCardsNotInDebtSummary.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Instrumentos archivados",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            items(instruments.archivedAccounts, key = { "archived-account-${it.id.value}" }) { account ->
+                                ArchivedInstrumentCard(
+                                    title = account.alias,
+                                    subtitle = "${account.type.toDashboardLabel()} • ${account.currency.name}",
+                                    onClick = { onAccountClick(account.id.value) },
+                                )
+                            }
+                            items(archivedCardsNotInDebtSummary, key = { "archived-card-${it.id.value}" }) { card ->
+                                ArchivedInstrumentCard(
+                                    title = card.alias ?: "${card.issuer} ${card.network}",
+                                    subtitle = "${card.issuer} • ${card.network} •••• ${card.lastFourDigits}",
+                                    onClick = { onCardClick(card.id.value) },
                                 )
                             }
                         }
@@ -277,10 +322,11 @@ fun DashboardScreen(
         }
     }
     if (showQuotaSelection) {
-        val accounts = instruments.activeAccounts.filter { it.type != AccountType.CASH }
+        val accounts = instruments.activeAccounts.filter { it.isComputableForQuota }
+        val cards = instruments.activeCards.filter { it.isComputableForQuota }
         InstrumentQuotaSelectionDialog(
             accounts = accounts,
-            cards = instruments.activeCards,
+            cards = cards,
             selectedIds = instruments.selectedFreeInstrumentIds,
             maxQuota = instruments.maxFreeQuota,
             onDismiss = { showQuotaSelection = false },
@@ -290,6 +336,52 @@ fun DashboardScreen(
             },
         )
     }
+}
+
+@Composable
+private fun ArchivedInstrumentCard(
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    Card(
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text("Archivado", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+            }
+            Text(
+                text = "El historial se conserva. Toca para ver o reactivar.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+    }
+}
+
+private fun AccountType.toDashboardLabel(): String = when (this) {
+    AccountType.CASH -> "Efectivo"
+    AccountType.SAVINGS -> "Ahorros"
+    AccountType.BANK -> "Corriente"
+    AccountType.DIGITAL_WALLET -> "Billetera"
 }
 
 @Composable
@@ -350,6 +442,7 @@ fun QuotaCard(
     modifier: Modifier = Modifier,
 ) {
     Card(
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
         ),
@@ -388,6 +481,7 @@ fun RealMoneyTotalsCard(
     modifier: Modifier = Modifier,
 ) {
     Card(
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
         ),
@@ -449,6 +543,7 @@ fun LiquidAccountCard(
 ) {
     val account = accountWithBalance.account
     Card(
+        shape = MaterialTheme.shapes.large,
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
