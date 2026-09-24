@@ -36,6 +36,10 @@ class FakeQuotaSelectionDao : PlanQuotaSelectionDao() {
         heads[selection.userId to selection.featureKey] = selection
     }
 
+    override suspend fun updateSelection(selection: PlanQuotaSelectionEntity) {
+        heads[selection.userId to selection.featureKey] = selection
+    }
+
     override suspend fun clearItems(userId: String, featureKey: String) {
         items.remove(userId to featureKey)
     }

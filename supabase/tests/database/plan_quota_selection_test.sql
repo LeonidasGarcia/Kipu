@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(33);
+SELECT plan(44);
 
 SELECT has_table('private', 'plan_quota_selection_heads', 'quota heads exist');
 SELECT has_table('private', 'plan_quota_selection_items', 'selected resources exist');
@@ -79,15 +79,60 @@ SELECT throws_ok($$SELECT * FROM public.apply_plan_quota_selection(
 
 SET LOCAL "request.jwt.claim.sub" = '51000000-0000-4000-8000-000000000002';
 SELECT is((SELECT result FROM public.apply_plan_quota_selection(
-  1,'53000000-0000-4000-8000-000000000006','INSTRUMENTS',1,'[]'::jsonb
-)), 'APPLIED', 'revision is isolated per user');
+  1,'53000000-0000-4000-8000-000000000006','INSTRUMENTS',2,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+ )), 'APPLIED', 'a coalesced revision-2 snapshot advances from an empty remote head');
 RESET ROLE;
 SELECT is((SELECT count(*)::integer FROM private.plan_quota_selection_heads WHERE user_id='51000000-0000-4000-8000-000000000002'), 1, 'second user has independent quota head');
-SELECT is((SELECT accepted_revision FROM private.plan_quota_selection_heads WHERE user_id='51000000-0000-4000-8000-000000000002'), 1::bigint, 'second user revision starts independently');
+SELECT is((SELECT accepted_revision FROM private.plan_quota_selection_heads WHERE user_id='51000000-0000-4000-8000-000000000002'), 2::bigint, 'second user revision advances independently across a gap');
 SET LOCAL ROLE authenticated;
 SELECT is((SELECT result FROM public.apply_plan_quota_selection(
-  1,'53000000-0000-4000-8000-000000000007','INSTRUMENTS',3,'[]'::jsonb
-)), 'CONFLICT', 'revision gap cannot overwrite canonical selection');
+  1,'53000000-0000-4000-8000-000000000007','INSTRUMENTS',4,'[]'::jsonb
+)), 'APPLIED', 'later coalesced offline snapshot may also advance by a gap');
+SELECT is((SELECT accepted_revision FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000007','INSTRUMENTS',4,'[]'::jsonb
+)), '4', 'skipped snapshot revision becomes the accepted head');
+RESET ROLE;
+SELECT is((SELECT count(*)::integer FROM private.plan_quota_selection_items
+  WHERE user_id='51000000-0000-4000-8000-000000000002' AND feature_key='INSTRUMENTS'), 0,
+  'coalesced empty snapshot replaces the earlier device snapshot');
+SET LOCAL ROLE authenticated;
+SELECT is((SELECT result FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000015','INSTRUMENTS',4,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+)), 'STALE', 'a distinct operation at the accepted revision is stale');
+SELECT is((SELECT result FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000013','INSTRUMENTS',3,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+)), 'STALE', 'delayed older second-device snapshot is stale');
+SELECT is((SELECT accepted_revision FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000013','INSTRUMENTS',3,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+)), '4', 'delayed stale response carries the newer accepted revision for rebasing');
+SELECT is((SELECT current_items FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000013','INSTRUMENTS',3,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+)), '[]'::jsonb, 'delayed stale response returns the current remote snapshot');
+RESET ROLE;
+SELECT is((SELECT accepted_revision FROM private.plan_quota_selection_heads
+  WHERE user_id='51000000-0000-4000-8000-000000000002' AND feature_key='INSTRUMENTS'), 4::bigint,
+  'delayed stale second-device request cannot move the accepted head');
+SET LOCAL ROLE authenticated;
+SELECT is((SELECT result FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000014','INSTRUMENTS',5,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+)), 'APPLIED', 'rebased latest local snapshot advances beyond the accepted revision');
+SELECT is((SELECT result FROM public.apply_plan_quota_selection(
+  1,'53000000-0000-4000-8000-000000000014','INSTRUMENTS',5,
+  '[{"resource_id":"52000000-0000-4000-8000-000000000003","resource_type":"ACCOUNT"}]'::jsonb
+)), 'DUPLICATE', 'replaying a rebased snapshot operation remains idempotent');
+RESET ROLE;
+SELECT is((SELECT accepted_revision FROM private.plan_quota_selection_heads
+  WHERE user_id='51000000-0000-4000-8000-000000000002' AND feature_key='INSTRUMENTS'), 5::bigint,
+  'rebased snapshot advances the head monotonically');
+SELECT is((SELECT resource_id::text FROM private.plan_quota_selection_items
+  WHERE user_id='51000000-0000-4000-8000-000000000002' AND feature_key='INSTRUMENTS'),
+  '52000000-0000-4000-8000-000000000003', 'rebased latest local snapshot replaces remote items');
 
 SET LOCAL "request.jwt.claim.sub" = '51000000-0000-4000-8000-000000000001';
 SELECT is((SELECT result FROM public.apply_plan_quota_selection(

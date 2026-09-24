@@ -55,4 +55,42 @@ class PlanQuotaSelectionDaoTest {
             assertEquals(emptyList<String>(), dao.getSelectedResourceIds("user-2", "CUSTOM_CATEGORIES"))
         }
     }
+
+    @Test
+    fun rebaseUsesTheGreaterLocalOrAcceptedRevisionAndPreservesLatestItems() {
+        kotlinx.coroutines.runBlocking {
+            listOf(0L to 3L, 5L to 6L).forEach { (acceptedRevision, expectedRevision) ->
+                database.clearAllTables()
+                dao.replaceSelection(
+                    userId = "user-1",
+                    featureKey = "CUSTOM_CATEGORIES",
+                    resourceType = "CATEGORY_ROOT",
+                    resourceIds = listOf("local-2", "local-1"),
+                    now = 100L,
+                    resourceTypesById = mapOf("local-1" to "CATEGORY_ROOT", "local-2" to "CATEGORY_CHILD"),
+                )
+                val locallyUpdated = dao.replaceSelection(
+                    userId = "user-1",
+                    featureKey = "CUSTOM_CATEGORIES",
+                    resourceType = "CATEGORY_ROOT",
+                    resourceIds = listOf("latest-local"),
+                    now = 200L,
+                    resourceTypesById = mapOf("latest-local" to "CATEGORY_CHILD"),
+                )
+
+                val rebased = dao.rebaseSelection(
+                    userId = "user-1",
+                    featureKey = "CUSTOM_CATEGORIES",
+                    acceptedRevision = acceptedRevision,
+                    now = 300L,
+                )
+
+                assertEquals(2L, locallyUpdated.revision)
+                assertEquals(expectedRevision, rebased?.revision)
+                assertEquals(300L, rebased?.updatedAt)
+                assertEquals(listOf("latest-local"), dao.getSelectedResourceIds("user-1", "CUSTOM_CATEGORIES"))
+                assertEquals("CATEGORY_CHILD", dao.getSelectedItems("user-1", "CUSTOM_CATEGORIES").single().resourceType)
+            }
+        }
+    }
 }

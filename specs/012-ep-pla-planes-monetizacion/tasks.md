@@ -254,3 +254,14 @@ Task T060: Automated, accessibility and security revalidation
 - `TRIAL_INTENT` and `PREMIUM_INTENT` remain commercial preferences and must never write `feature_access_cache` or authorize Premium.
 - Completed outbox rows may be compacted only after accepted-revision persistence; unresolved conflict/error rows remain diagnosable without sensitive data.
 - Commit after each task or cohesive task group; do not combine unrelated setup, backend, and UI changes in one commit.
+
+## Sprint 2 extension — HU-57 Cupos, selección y downgrade
+
+These tasks add the S2 HU-57 increment without changing the HU-52 S1 story boundary above.
+
+- [x] T061 [HU-57] Persist per-user/group selection snapshots atomically and rebase stale full snapshots while preserving latest local items in `app/src/main/java/com/kipu/app/feature/plans/data/local/PlanQuotaSelectionDao.kt` and `app/src/androidTest/java/com/kipu/app/feature/plans/data/local/PlanQuotaSelectionDaoTest.kt`.
+- [x] T062 [HU-57] Implement owner-checked WorkManager sync, deterministic operation identity, transient retry, and stale/conflict reconciliation in `app/src/main/java/com/kipu/app/feature/plans/data/sync/SyncPlanQuotaWorker.kt` and `app/src/androidTest/java/com/kipu/app/feature/plans/data/sync/SyncPlanQuotaWorkerTest.kt`.
+- [x] T063 [HU-57] Implement authenticated Edge route, resource/group validation, full-snapshot revision semantics, owner RLS, and idempotent receipts in `supabase/functions/plans/index.ts`, `supabase/migrations/20260923130000_plan_quota_selections.sql`, and `supabase/migrations/20260923160000_plan_quota_forward_snapshot_revisions.sql`.
+- [x] T064 [HU-57] Verify snapshot gaps, delayed stale devices, payload conflicts, Free resource exclusions, owner isolation, and guards on transaction/accounting writes in `supabase/tests/database/plan_quota_selection_test.sql` and `supabase/functions/plans/index_test.ts`.
+- [ ] T065 [HU-57] Execute the offline/two-device conflict and remote reconciliation acceptance. The isolated one-device suite passed 111 tests, but does not prove two-device behavior; the subsequent 112-test rerun lost the device before completion.
+- [ ] T066 [HU-57] Reconcile/deploy the tested migration and Edge Function set to the intended remote environment after the remote schema drift is resolved and explicitly approved. The Kipu MCP production database was inspected read-only and was not changed.

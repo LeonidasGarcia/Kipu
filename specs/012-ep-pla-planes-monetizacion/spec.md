@@ -386,6 +386,32 @@ La aprobación de esta especificación autoriza los invariantes funcionales y t�
 - Otro integrante del equipo aprueba la revisión cruzada de código.
 - El flujo operativo se demuestra en la Review de Sprint 1.
 
+## Sprint 2 Addendum: HU-57 — cupos, selección y downgrade
+
+Este addendum amplía EP-PLA para el Sprint 2 sin cambiar el alcance comercial de HU-52 ni tratar `FREE`, `TRIAL_INTENT` o `PREMIUM_INTENT` como un entitlement.
+
+### Invariantes de HU-57
+
+- Límites Free: 4 instrumentos computables, 5 raíces personalizadas, 2 deudas, 2 metas y 2 presupuestos activos.
+- Efectivo, cuenta virtual de metas y cuenta interna de pasivo de crédito no consumen un cupo de instrumento adicional.
+- Una selección es una **instantánea completa por usuario y grupo**. Cada revisión representa el estado local vigente y puede saltar revisiones intermedias coalescidas offline; el servidor solo acepta revisiones estrictamente mayores que la cabecera aceptada. Reintentar la misma identidad/payload devuelve el recibo previo; revisiones iguales o anteriores se reconcilian como `STALE`.
+- La aceptación, el downgrade y los conflictos nunca eliminan ni alteran movimientos, historial, categorías, instrumentos o saldos. Solo cambia qué recursos pueden usarse para nuevas operaciones bajo Free.
+- Premium retira `LOCKED_BY_PLAN` únicamente con entitlement verificado por una autoridad confiable; una intención del cliente nunca concede acceso.
+- En S2, la UI de selección cubre grupos ya implementados (instrumentos y categorías); los demás grupos conservan la política/domain contract y se integran al llegar sus épicas. Sus pantallas no se adelantan.
+
+### Aceptación técnica del addendum
+
+1. Un usuario excedido puede elegir qué categorías raíz e instrumentos mantiene disponibles; los excedentes siguen en sus listas/historial con estado de plan distinto de archivo/inactividad.
+2. Efectivo y los recursos de otros grupos dentro de límite siguen disponibles aunque un grupo esté excedido.
+3. Cambios locales rápidos/offline se sincronizan como la última instantánea con una identidad determinista; un timeout ambiguo no crea otra operación.
+4. `STALE`/`CONFLICT` conservan la instantánea local vigente, avanzan a una revisión válida con backoff y no marcan el trabajo como sincronizado por error.
+5. El worker comprueba que el token corresponde al propietario de la cola antes de enviar y no incluye propietario en el payload confiado por el servidor.
+6. Pruebas SQL cubren revisiones omitidas, stale, duplicate, conflicto de idempotency key, propiedad, tipo de recurso y conservación de datos.
+
+### Gate de integración remota
+
+La verificación local de migrations/pgTAP no demuestra compatibilidad del proyecto Supabase remoto. El estado actual y los errores de catálogo están registrados en [`docs/s1-s2-remote-backend-readiness.md`](../../docs/s1-s2-remote-backend-readiness.md). No se declara habilitada la sincronización remota hasta que un despliegue ordenado y validado en un entorno desechable/staging confirme el contrato y RLS; ninguna intención de plan habilita Premium.
+
 ## Artefactos Derivados
 
 - `plan.md`
