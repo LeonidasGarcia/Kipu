@@ -46,7 +46,7 @@
 - [x] T012 [P] [US1] Probar validaciones, signos, moneda y campos requeridos de los tres tipos en `app/src/test/java/com/kipu/app/feature/movements/domain/RegisterTransactionTest.kt`
 - [x] T013 [P] [US1] Probar persistencia y lectura cronológica local de gasto, ingreso y transferencia en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
 - [x] T014 [P] [US1] Probar estado, validaciones y envío único del formulario en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
-- [x] T015 [P] [US1] Probar tabs, campos condicionales y accesibilidad básica en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
+- [ ] T015 [P] [US1] Probar tabs, campos condicionales y accesibilidad básica en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/QuickMovementScreenTest.kt`
 - [x] T016 [P] [US1] Probar gasto, ingreso, transferencia y referencias ajenas del RPC en `supabase/tests/database/movements_register_transaction_test.sql`
 
 ### Implementation for US1
@@ -58,8 +58,8 @@
 - [x] T021 [US1] Implementar el cliente autenticado del RPC en `app/src/main/java/com/kipu/app/feature/movements/data/remote/MovementApi.kt`
 - [x] T022 [US1] Crear el esquema canónico, validaciones de pertenencia y `register_transaction_v1` en `supabase/migrations/20260922090000_ep_mov_ledger.sql`
 - [x] T023 [P] [US1] Implementar estado y eventos del formulario en `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModel.kt`
-- [x] T024 [US1] Implementar la Pantalla 11 (Modal de Registro en Bottom Sheet) con tabs Gasto/Ingreso/Transferencia, selector de cuentas, categoría, comercio, financiamiento TC, teclado numérico y números tabulares tnum según Stich Prompts.md y docs/stitch-design-system.md en `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementScreen.kt`
-- [x] T025 [P] [US1] Implementar la Pantalla 10 (Historial/Ledger) con TopBar, buscador, chips de filtro rápido, lista cronológica con avatares/logos, badges de sincronización y números tabulares tnum según Stich Prompts.md y docs/stitch-design-system.md en `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreen.kt`
+- [x] T024 [US1] Implementar la Pantalla 11 (Modal de Registro en Bottom Sheet) con tabs Gasto/Ingreso/Transferencia, referencias tipadas por categoría, selectores, DatePicker, teclado numérico, números tabulares y feedback de guardado local/pendiente según Stich Prompts.md y docs/stitch-design-system.md en `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementScreen.kt`
+- [x] T025 [P] [US1] Implementar la Pantalla 10 (Historial/Ledger) con TopBar, buscador, chips de filtro rápido, lista cronológica, badges de sincronización, colores por tokens y números tabulares según Stich Prompts.md y docs/stitch-design-system.md en `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreen.kt`
 - [x] T026 [US1] Conectar acción rápida e historial al grafo en `app/src/main/java/com/kipu/app/navigation/MovementsNavigation.kt` y `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt`
 
 **Checkpoint**: HU18 funciona offline para los tres tipos y su resultado es visible sin esperar al servidor.
@@ -102,7 +102,7 @@
 - [x] T036 [P] [US3] Probar representación canónica, hash, repetición y conflicto en `app/src/test/java/com/kipu/app/feature/movements/domain/TransactionIdempotencyTest.kt`
 - [x] T037 [P] [US3] Probar consulta de similitud, recibos y ausencia de efectos al cancelar en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
 - [x] T038 [P] [US3] Probar clave/hash iguales, clave/hash distintos y concurrencia en `supabase/tests/database/movements_register_transaction_test.sql`
-- [x] T039 [P] [US3] Probar advertencia, cancelación y confirmación con identidad nueva en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
+- [ ] T039 [P] [US3] Probar el diálogo de advertencia, cancelación y confirmación con identidad nueva en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/DuplicateWarningDialogTest.kt`
 
 ### Implementation for US3
 
@@ -122,17 +122,17 @@
 
 - [x] T045 [P] Agregar prueba de migración desde la versión Room anterior y verificar saldos existentes en `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt`
 - [x] T046 [P] Agregar pruebas RLS para referencias propias y de otro espacio en `supabase/tests/database/movements_register_transaction_test.sql`
-- [x] T047 [P] Medir y paginar historial de 10 000 filas sin bloquear UI en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
+- [ ] T047 [P] Medir y paginar historial de 10 000 filas sin bloquear UI en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryPerformanceTest.kt`
 - [x] T048 [P] Completar semántica TalkBack, objetivos de 48 dp y representación no basada sólo en color en `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementScreen.kt` y `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreen.kt`
 - [x] T049 Aplicar redacción de notas, referencias y errores de sincronización en `app/src/main/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorker.kt`
-- [x] T050 Ejecutar y documentar todos los escenarios de `specs/004-ep-mov-movimientos-ledger/quickstart.md`
+- [ ] T050 Ejecutar y documentar todos los escenarios de `specs/004-ep-mov-movimientos-ledger/quickstart.md`, incluidos cierre/reapertura, reintento y segundo dispositivo. La base remota actual no es compatible con los RPC del cliente.
 - [x] T051 Marcar respuestas, evidencia y sólo los criterios de HU18/HU19/HU23 satisfechos en `specs/004-ep-mov-movimientos-ledger/team-questions.md` y `specs/004-ep-mov-movimientos-ledger/checklists/requirements.md`
-- [x] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_register_transaction_test.sql`
+- [ ] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_migration_test.sql`
 - [x] T053 [P] Probar que la deduplicación permanece disponible en Free sin consumir cupos en `app/src/test/java/com/kipu/app/feature/movements/domain/FreeDeduplicationTest.kt`
 - [x] T054 [P] Probar que logs y errores no exponen notas, tokens ni datos financieros sensibles en `app/src/test/java/com/kipu/app/core/logging/MovementLogRedactionTest.kt`
-- [x] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_register_transaction_test.sql`
-- [x] T056 [P] Medir la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
-- [x] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md`
+- [ ] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_idempotency_stress_test.sql`
+- [ ] T056 [P] Medir en dispositivo la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/ManualEntryAcceptanceTest.kt`
+- [ ] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md` (revisores y evidencias pendientes).
 
 ---
 

@@ -20,6 +20,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryConflict
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryOrigin
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.MerchantId
@@ -37,10 +38,12 @@ import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -62,6 +65,8 @@ class QuickMovementViewModelTest {
     private val usdAccountId = AccountId.generate()
     private val testUserId = UserId.generate()
     private val testCategoryId = CategoryId.generate()
+    private val testIncomeCategoryId = CategoryId.generate()
+    private val transferAccountId = AccountId.generate()
     private lateinit var fakeMovementRepo: FakeMovementRepo
     private lateinit var fakeInstrumentsRepo: FakeInstrumentsRepo
     private lateinit var fakeSessionCoordinator: FakeSessionCoordinator
@@ -71,7 +76,7 @@ class QuickMovementViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeMovementRepo = FakeMovementRepo()
-        fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, usdAccountId, testUserId)
+        fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, usdAccountId, transferAccountId, testUserId)
         fakeSessionCoordinator = FakeSessionCoordinator(testUserId.value)
 
         val validator = RegisterTransactionValidator()
@@ -81,7 +86,7 @@ class QuickMovementViewModelTest {
         viewModel = QuickMovementViewModel(
             registerTransactionUseCase = registerUseCase,
             observeInstruments = observeInstruments,
-            observeCategories = ObserveCategories(FakeCategoriesRepo(testUserId, testCategoryId)),
+            observeCategories = ObserveCategories(FakeCategoriesRepo(testUserId, testCategoryId, testIncomeCategoryId)),
             categorySyncScheduler = object : CategorySyncScheduler {
                 override fun scheduleSync(userId: String) = Unit
                 override fun cancelSync(userId: String) = Unit
@@ -114,6 +119,30 @@ class QuickMovementViewModelTest {
         viewModel.onTypeSelected(MovementType.INCOME)
         assertEquals(null, viewModel.uiState.value.amountError)
         assertEquals(MovementType.INCOME, viewModel.uiState.value.type)
+    }
+
+    @Test
+    fun `category selector filters by income and hides categories for transfers`() = runTest {
+        advanceUntilIdle()
+        viewModel.onTypeSelected(MovementType.INCOME)
+
+        assertEquals(listOf(testIncomeCategoryId.value), viewModel.uiState.value.availableCategories.map { it.id })
+
+        viewModel.onTypeSelected(MovementType.TRANSFER)
+        assertTrue(viewModel.uiState.value.availableCategories.isEmpty())
+        assertEquals(null, viewModel.uiState.value.selectedCategoryId)
+    }
+
+    @Test
+    fun `transfer command never carries a category`() = runTest {
+        advanceUntilIdle()
+        viewModel.onTypeSelected(MovementType.TRANSFER)
+        viewModel.onAmountChanged("12.00")
+        viewModel.onDestinationAccountSelected(transferAccountId.value)
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(null, fakeMovementRepo.registeredCommands.single().categoryId)
     }
 
     @Test
@@ -194,6 +223,25 @@ class QuickMovementViewModelTest {
     }
 
     @Test
+    fun `selected occurrence date is saved and success reports pending local sync`() = runTest {
+        advanceUntilIdle()
+        val selectedDate = java.time.Instant.parse("2026-09-18T14:30:00Z").toEpochMilli()
+        val event = async { viewModel.events.first() }
+
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onOccurredAtChanged(selectedDate)
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(selectedDate, fakeMovementRepo.registeredCommands.single().occurredAt)
+        assertEquals(
+            QuickMovementUiEvent.TransactionSaved("Guardado en este dispositivo · Pendiente de sincronización"),
+            event.await(),
+        )
+    }
+
+    @Test
     fun `catalog merchant uses its UUID and clears provisional text`() = runTest {
         advanceUntilIdle()
         viewModel.onAmountChanged("25.50")
@@ -209,12 +257,18 @@ class QuickMovementViewModelTest {
         assertEquals(null, command.merchantProvisionalText)
     }
 
-    private class FakeCategoriesRepo(private val userId: UserId, private val categoryId: CategoryId) : CategoriesRepository {
+    private class FakeCategoriesRepo(
+        private val userId: UserId,
+        private val categoryId: CategoryId,
+        private val incomeCategoryId: CategoryId,
+    ) : CategoriesRepository {
         override fun observeCategories(userId: UserId): Flow<List<Category>> = flowOf(listOf(
-            Category(categoryId, null, null, CategoryOrigin.SYSTEM, true),
+            Category(categoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.EXPENSE),
+            Category(incomeCategoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.INCOME),
         ))
         override fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>> = flowOf(listOf(
             CategoryPresentation(categoryId, this.userId, "Alimentación", "restaurant", "#ffffff"),
+            CategoryPresentation(incomeCategoryId, this.userId, "Salario", "work", "#ffffff"),
         ))
         override suspend fun getCategory(categoryId: CategoryId): Category? = null
         override suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category> = Result.failure(UnsupportedOperationException())
@@ -283,7 +337,12 @@ class QuickMovementViewModelTest {
         override fun observeBalance(userId: String, accountId: String): Flow<Long?> = flowOf(0L)
     }
 
-    private class FakeInstrumentsRepo(val accountId: AccountId, val usdAccountId: AccountId, val userId: UserId) : FinancialInstrumentsRepository {
+    private class FakeInstrumentsRepo(
+        val accountId: AccountId,
+        val usdAccountId: AccountId,
+        val transferAccountId: AccountId,
+        val userId: UserId,
+    ) : FinancialInstrumentsRepository {
         val accounts = listOf(
             Account(
                 id = accountId,
@@ -301,6 +360,15 @@ class QuickMovementViewModelTest {
                 type = AccountType.SAVINGS,
                 currency = Currency.USD,
                 initialBalance = Money(100000L, Currency.USD),
+                openedAt = java.time.Instant.now(),
+            ),
+            Account(
+                id = transferAccountId,
+                userId = userId,
+                alias = "Cuenta secundaria",
+                type = AccountType.SAVINGS,
+                currency = Currency.PEN,
+                initialBalance = Money(100000L, Currency.PEN),
                 openedAt = java.time.Instant.now(),
             ),
         )

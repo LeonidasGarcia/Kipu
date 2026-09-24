@@ -1,8 +1,7 @@
 package com.kipu.app.feature.movements.presentation
 
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,18 +18,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -48,14 +44,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -63,7 +56,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.R
@@ -72,26 +65,30 @@ import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.TransactionItem
 import com.kipu.app.ui.component.MoneyText
 import com.kipu.app.ui.component.formatMinorUnits
-import kotlinx.coroutines.launch
-
-private val PrimaryTeal = Color(0xFF0F766E)
-private val IncomeGreen = Color(0xFF16A34A)
-private val ExpenseRed = Color(0xFFE85D5D)
-private val BackgroundGray = Color(0xFFF8FAFC)
+import com.kipu.app.ui.theme.KipuExpense
+import com.kipu.app.ui.theme.KipuIncome
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MovementHistoryRoute(
     onNavigateToSettings: () -> Unit = {},
-    onNavigateToNotifications: () -> Unit = {},
     viewModel: MovementHistoryViewModel = hiltViewModel(),
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val colorScheme = MaterialTheme.colorScheme
+    val searchDescription = stringResource(R.string.movements_search_placeholder)
+    val filterChipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = colorScheme.primaryContainer,
+        selectedLabelColor = colorScheme.onPrimaryContainer,
+        containerColor = colorScheme.surfaceContainerLow,
+        labelColor = colorScheme.onSurfaceVariant,
+    )
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -99,24 +96,11 @@ fun MovementHistoryRoute(
                         text = stringResource(R.string.movements_title),
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 20.sp,
                         ),
-                        color = Color(0xFF0F172A),
+                        color = colorScheme.onSurface,
                     )
                 },
                 actions = {
-                    IconButton(
-                        onClick = onNavigateToNotifications,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .semantics { contentDescription = "Notificaciones" }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Notifications,
-                            contentDescription = null,
-                            tint = Color(0xFF475569)
-                        )
-                    }
                     IconButton(
                         onClick = onNavigateToSettings,
                         modifier = Modifier
@@ -126,18 +110,18 @@ fun MovementHistoryRoute(
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = null,
-                            tint = Color(0xFF475569)
+                            tint = colorScheme.onSurfaceVariant,
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.surface),
             )
         },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = viewModel::onOpenRegisterSheet,
-                containerColor = PrimaryTeal,
-                contentColor = Color.White,
+                containerColor = colorScheme.primaryContainer,
+                contentColor = colorScheme.onPrimaryContainer,
                 shape = CircleShape,
                 modifier = Modifier
                     .size(56.dp)
@@ -151,8 +135,7 @@ fun MovementHistoryRoute(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        containerColor = BackgroundGray,
+        containerColor = colorScheme.background,
         modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
         Column(
@@ -167,7 +150,7 @@ fun MovementHistoryRoute(
                 placeholder = {
                     Text(
                         stringResource(R.string.movements_search_placeholder),
-                        color = Color(0xFF94A3B8),
+                        color = colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 },
@@ -175,20 +158,23 @@ fun MovementHistoryRoute(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = null,
-                        tint = Color(0xFF64748B)
+                        tint = colorScheme.onSurfaceVariant,
                     )
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = MaterialTheme.shapes.medium,
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    focusedBorderColor = PrimaryTeal,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedContainerColor = colorScheme.surfaceContainerLowest,
+                    unfocusedContainerColor = colorScheme.surfaceContainerLowest,
+                    focusedBorderColor = colorScheme.primary,
+                    unfocusedBorderColor = colorScheme.outlineVariant,
+                    cursorColor = colorScheme.primary,
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 56.dp)
                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .semantics { contentDescription = searchDescription }
                     .testTag("input_search_movements"),
             )
 
@@ -204,14 +190,11 @@ fun MovementHistoryRoute(
                         selected = uiState.selectedFilterType == null,
                         onClick = { viewModel.onFilterTypeSelected(null) },
                         label = { Text("Todos") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryTeal,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
-                            labelColor = Color(0xFF475569),
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.testTag("chip_filter_all"),
+                        colors = filterChipColors,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("chip_filter_all"),
                     )
                 }
                 item {
@@ -219,14 +202,11 @@ fun MovementHistoryRoute(
                         selected = uiState.selectedFilterType == MovementType.EXPENSE,
                         onClick = { viewModel.onFilterTypeSelected(MovementType.EXPENSE) },
                         label = { Text(stringResource(R.string.movement_type_expense)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryTeal,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
-                            labelColor = Color(0xFF475569),
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.testTag("chip_filter_expense"),
+                        colors = filterChipColors,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("chip_filter_expense"),
                     )
                 }
                 item {
@@ -234,14 +214,11 @@ fun MovementHistoryRoute(
                         selected = uiState.selectedFilterType == MovementType.INCOME,
                         onClick = { viewModel.onFilterTypeSelected(MovementType.INCOME) },
                         label = { Text(stringResource(R.string.movement_type_income)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryTeal,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
-                            labelColor = Color(0xFF475569),
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.testTag("chip_filter_income"),
+                        colors = filterChipColors,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("chip_filter_income"),
                     )
                 }
                 item {
@@ -249,14 +226,11 @@ fun MovementHistoryRoute(
                         selected = uiState.selectedFilterType == MovementType.TRANSFER,
                         onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
                         label = { Text(stringResource(R.string.movement_type_transfer)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PrimaryTeal,
-                            selectedLabelColor = Color.White,
-                            containerColor = Color.White,
-                            labelColor = Color(0xFF475569),
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.testTag("chip_filter_transfer"),
+                        colors = filterChipColors,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("chip_filter_transfer"),
                     )
                 }
             }
@@ -266,7 +240,7 @@ fun MovementHistoryRoute(
             // Transaction List or Empty State
             if (uiState.isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = PrimaryTeal)
+                    CircularProgressIndicator(color = colorScheme.primary)
                 }
             } else if (uiState.filteredTransactions.isEmpty()) {
                 EmptyMovementsState(
@@ -286,11 +260,11 @@ fun MovementHistoryRoute(
                                 text = dateHeader,
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF64748B)
+                                    color = colorScheme.onSurfaceVariant,
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(BackgroundGray)
+                                    .background(colorScheme.background)
                                     .padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                         }
@@ -298,11 +272,6 @@ fun MovementHistoryRoute(
                         items(items, key = { it.transaction.id }) { item ->
                             TransactionRow(
                                 item = item,
-                                onActionClicked = { action ->
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar("Acción $action diferida a próximos sprints.")
-                                    }
-                                },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -320,19 +289,20 @@ fun MovementHistoryRoute(
     if (uiState.showRegisterSheet) {
         QuickMovementBottomSheet(
             onDismissRequest = viewModel::onCloseRegisterSheet,
+            onMessage = { message ->
+                scope.launch { snackbarHostState.showSnackbar(message) }
+            },
         )
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TransactionRow(
     item: TransactionItem,
-    onActionClicked: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var showMenu by remember { mutableStateOf(false) }
     val tx = item.transaction
+    val colorScheme = MaterialTheme.colorScheme
 
     val legacyTitle = when (tx.legacyKind) {
         "OPENING" -> "Saldo inicial"
@@ -355,9 +325,9 @@ fun TransactionRow(
     }
 
     val amountColor = when (tx.type) {
-        MovementType.INCOME -> IncomeGreen
-        MovementType.EXPENSE -> Color(0xFF0F172A)
-        MovementType.TRANSFER -> PrimaryTeal
+        MovementType.INCOME -> KipuIncome
+        MovementType.EXPENSE -> colorScheme.onSurface
+        MovementType.TRANSFER -> colorScheme.primary
     }
 
     val amountPrefix = when (tx.type) {
@@ -369,14 +339,10 @@ fun TransactionRow(
     val currencySymbol = if (tx.currency == "PEN") "S/" else "$"
 
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = Color.White,
-        shadowElevation = 0.5.dp,
+        shape = MaterialTheme.shapes.large,
+        color = colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, colorScheme.outlineVariant),
         modifier = modifier
-            .combinedClickable(
-                onClick = {},
-                onLongClick = { showMenu = true },
-            )
             .testTag("tx_row_${tx.id}"),
     ) {
         Row(
@@ -391,9 +357,9 @@ fun TransactionRow(
                     .clip(CircleShape)
                     .background(
                         when (tx.type) {
-                            MovementType.INCOME -> IncomeGreen.copy(alpha = 0.12f)
-                            MovementType.EXPENSE -> ExpenseRed.copy(alpha = 0.12f)
-                            MovementType.TRANSFER -> PrimaryTeal.copy(alpha = 0.12f)
+                            MovementType.INCOME -> KipuIncome.copy(alpha = 0.12f)
+                            MovementType.EXPENSE -> KipuExpense.copy(alpha = 0.12f)
+                            MovementType.TRANSFER -> colorScheme.primary.copy(alpha = 0.12f)
                         }
                     )
             ) {
@@ -402,9 +368,9 @@ fun TransactionRow(
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         color = when (tx.type) {
-                            MovementType.INCOME -> IncomeGreen
-                            MovementType.EXPENSE -> ExpenseRed
-                            MovementType.TRANSFER -> PrimaryTeal
+                            MovementType.INCOME -> KipuIncome
+                            MovementType.EXPENSE -> KipuExpense
+                            MovementType.TRANSFER -> colorScheme.primary
                         }
                     )
                 )
@@ -417,7 +383,7 @@ fun TransactionRow(
                 Text(
                     text = title,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                    color = Color(0xFF0F172A),
+                    color = colorScheme.onSurface,
                     maxLines = 1,
                 )
                 Spacer(modifier = Modifier.height(2.dp))
@@ -425,7 +391,7 @@ fun TransactionRow(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF64748B),
+                        color = colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -450,41 +416,6 @@ fun TransactionRow(
                     modifier = Modifier.testTag("tx_amount_${tx.id}"),
                 )
             }
-
-            // Context Menu (Deferred S4/S7)
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.movement_action_edit)) },
-                    onClick = {
-                        showMenu = false
-                        onActionClicked("Editar")
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.movement_action_void)) },
-                    onClick = {
-                        showMenu = false
-                        onActionClicked("Anular")
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.movement_action_delete)) },
-                    onClick = {
-                        showMenu = false
-                        onActionClicked("Eliminar")
-                    }
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.movement_action_refund)) },
-                    onClick = {
-                        showMenu = false
-                        onActionClicked("Reembolso")
-                    }
-                )
-            }
         }
     }
 }
@@ -503,7 +434,7 @@ fun SyncStatusIcon(
                 } else {
                     stringResource(R.string.movements_sync_synced)
                 },
-                tint = Color(0xFF94A3B8),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = modifier.size(14.dp)
             )
         }
@@ -511,7 +442,7 @@ fun SyncStatusIcon(
             Icon(
                 imageVector = Icons.Default.Sync,
                 contentDescription = stringResource(R.string.movements_sync_pending),
-                tint = Color(0xFF38BDF8),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = modifier.size(14.dp)
             )
         }
@@ -519,7 +450,7 @@ fun SyncStatusIcon(
             Icon(
                 imageVector = Icons.Default.ErrorOutline,
                 contentDescription = stringResource(R.string.movements_sync_error),
-                tint = ExpenseRed,
+                tint = KipuExpense,
                 modifier = modifier.size(14.dp)
             )
         }
@@ -540,12 +471,12 @@ fun EmptyMovementsState(
             modifier = Modifier
                 .size(72.dp)
                 .clip(CircleShape)
-                .background(Color(0xFFE2E8F0))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
-                tint = Color(0xFF64748B),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(36.dp)
             )
         }
@@ -553,14 +484,14 @@ fun EmptyMovementsState(
         Text(
             text = stringResource(R.string.movements_empty_title),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = Color(0xFF0F172A),
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = stringResource(R.string.movements_empty_desc),
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFF64748B),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
     }

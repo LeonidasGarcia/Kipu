@@ -9,9 +9,11 @@ import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.movements.domain.RegisterTransaction
+import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
@@ -33,6 +35,7 @@ data class CategoryOption(
     val id: String,
     val name: String,
     val icon: String,
+    val categoryType: CategoryType = CategoryType.GENERAL,
 )
 
 data class QuickMovementUiState(
@@ -63,7 +66,7 @@ data class QuickMovementUiState(
 )
 
 sealed interface QuickMovementUiEvent {
-    data object TransactionSaved : QuickMovementUiEvent
+    data class TransactionSaved(val message: String) : QuickMovementUiEvent
     data class ShowMessage(val message: String) : QuickMovementUiEvent
 }
 
@@ -79,6 +82,8 @@ class QuickMovementViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(QuickMovementUiState())
     val uiState: StateFlow<QuickMovementUiState> = _uiState.asStateFlow()
 
+    private var allCategoryOptions: List<CategoryOption> = emptyList()
+
     private val _events = Channel<QuickMovementUiEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
@@ -87,11 +92,19 @@ class QuickMovementViewModel @Inject constructor(
             categorySyncScheduler.scheduleSync(ownerId)
             viewModelScope.launch {
                 observeCategories(UserId(ownerId)).collect { items ->
-                    val options = items.filter { it.category.isActive }
+                    allCategoryOptions = items.filter { it.category.isActive }
                         .flatMap { root -> listOf(root) + root.subcategories }
                         .filter { it.category.isActive && !it.category.isPlanLocked }
-                        .map { CategoryOption(it.category.id.value, it.displayName, it.icon) }
+                        .map {
+                            CategoryOption(
+                                id = it.category.id.value,
+                                name = it.displayName,
+                                icon = it.icon,
+                                categoryType = it.category.categoryType,
+                            )
+                        }
                     _uiState.update { current ->
+                        val options = categoriesFor(current.type)
                         val selection = options.find { it.id == current.selectedCategoryId }
                         current.copy(
                             availableCategories = options,
@@ -122,11 +135,18 @@ class QuickMovementViewModel @Inject constructor(
 
     fun onTypeSelected(type: MovementType) {
         _uiState.update { current ->
+            val options = categoriesFor(type)
+            val selection = if (current.type == type) {
+                options.find { it.id == current.selectedCategoryId }
+            } else {
+                null
+            }
             current.copy(
                 type = type,
-                selectedCategoryId = if (type == MovementType.EXPENSE) current.selectedCategoryId else null,
-                selectedCategoryName = if (type == MovementType.EXPENSE) current.selectedCategoryName else null,
-                selectedCategoryIcon = if (type == MovementType.EXPENSE) current.selectedCategoryIcon else null,
+                availableCategories = options,
+                selectedCategoryId = selection?.id,
+                selectedCategoryName = selection?.name,
+                selectedCategoryIcon = selection?.icon,
                 merchantName = if (type == MovementType.EXPENSE) current.merchantName else "",
                 selectedMerchantId = if (type == MovementType.EXPENSE) current.selectedMerchantId else null,
                 merchantProvisionalText = if (type == MovementType.EXPENSE) current.merchantProvisionalText else null,
@@ -165,6 +185,7 @@ class QuickMovementViewModel @Inject constructor(
     }
 
     fun onCategorySelected(category: CategoryOption) {
+        if (category !in _uiState.value.availableCategories || _uiState.value.type == MovementType.TRANSFER) return
         _uiState.update {
             it.copy(
                 selectedCategoryId = category.id,
@@ -249,7 +270,7 @@ class QuickMovementViewModel @Inject constructor(
             currency = state.currency,
             sourceAccountId = state.selectedSourceAccountId,
             destinationAccountId = if (state.type == MovementType.TRANSFER) state.selectedDestinationAccountId else null,
-            categoryId = state.selectedCategoryId,
+            categoryId = state.selectedCategoryId.takeUnless { state.type == MovementType.TRANSFER },
             merchantId = state.selectedMerchantId,
             merchantProvisionalText = state.merchantProvisionalText,
             occurredAt = state.occurredAt,
@@ -281,7 +302,15 @@ class QuickMovementViewModel @Inject constructor(
             when (val result = registerTransactionUseCase(command)) {
                 is RegisterTransactionResult.Success -> {
                     _uiState.update { it.copy(isSaving = false) }
-                    _events.send(QuickMovementUiEvent.TransactionSaved)
+                    val message = when (result.transaction.syncStatus) {
+                        MovementSyncStatus.SYNCED, MovementSyncStatus.MIGRATED_LOCAL ->
+                            "Movimiento guardado y sincronizado"
+                        MovementSyncStatus.CONFLICT, MovementSyncStatus.FAILED_PERMANENT ->
+                            "Guardado en este dispositivo · Revisión de sincronización pendiente"
+                        MovementSyncStatus.PENDING, MovementSyncStatus.IN_FLIGHT ->
+                            "Guardado en este dispositivo · Pendiente de sincronización"
+                    }
+                    _events.send(QuickMovementUiEvent.TransactionSaved(message))
                     resetForm()
                 }
                 is RegisterTransactionResult.SimilarTransactionWarning -> {
@@ -320,13 +349,24 @@ class QuickMovementViewModel @Inject constructor(
                 availableAccounts = current.availableAccounts,
                 selectedSourceAccountId = current.availableAccounts.firstOrNull()?.id?.value,
                 currency = current.availableAccounts.firstOrNull()?.currency?.name ?: current.currency,
-                availableCategories = current.availableCategories,
+                availableCategories = categoriesFor(MovementType.EXPENSE),
             )
         }
     }
 
     private fun parseAmountMinor(amountText: String): Long? {
         return MoneyInputParser.parseMinorUnits(amountText)
+    }
+
+    private fun categoriesFor(type: MovementType): List<CategoryOption> {
+        val expectedType = when (type) {
+            MovementType.EXPENSE -> CategoryType.EXPENSE
+            MovementType.INCOME -> CategoryType.INCOME
+            MovementType.TRANSFER -> return emptyList()
+        }
+        return allCategoryOptions.filter {
+            it.categoryType == expectedType || it.categoryType == CategoryType.GENERAL
+        }
     }
 
     private fun getUserId(): String? {

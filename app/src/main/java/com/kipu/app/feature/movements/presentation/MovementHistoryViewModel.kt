@@ -13,8 +13,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -30,6 +35,7 @@ data class MovementHistoryUiState(
 )
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class MovementHistoryViewModel @Inject constructor(
     private val movementRepository: MovementRepository,
     private val sessionCoordinator: SessionCoordinator,
@@ -39,13 +45,19 @@ class MovementHistoryViewModel @Inject constructor(
     private val _selectedFilterType = MutableStateFlow<MovementType?>(null)
     private val _showRegisterSheet = MutableStateFlow(false)
 
-    private val userId: String
-        get() = sessionCoordinator.currentOwner?.verifiedUserId
-            ?: (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId
-            ?: "local_user"
+    private val ownerTransactions = sessionCoordinator.localAccess
+        .map { access -> (access as? LocalAccess.Available)?.userId }
+        .distinctUntilChanged()
+        .flatMapLatest { userId ->
+            if (userId == null) {
+                flowOf(emptyList<TransactionItem>())
+            } else {
+                movementRepository.observeTransactions(userId)
+            }
+        }
 
     val uiState: StateFlow<MovementHistoryUiState> = combine(
-        movementRepository.observeTransactions(userId),
+        ownerTransactions,
         _searchQuery,
         _selectedFilterType,
         _showRegisterSheet,
@@ -69,7 +81,7 @@ class MovementHistoryViewModel @Inject constructor(
             selectedFilterType = filterType,
             allTransactions = items,
             filteredTransactions = grouped,
-            showRegisterSheet = showSheet,
+            showRegisterSheet = showSheet && (sessionCoordinator.localAccess.value is LocalAccess.Available),
         )
     }.stateIn(
         scope = viewModelScope,
@@ -96,7 +108,7 @@ class MovementHistoryViewModel @Inject constructor(
     private fun groupTransactionsByDate(items: List<TransactionItem>): Map<String, List<TransactionItem>> {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         val yesterdayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(System.currentTimeMillis() - 86_400_000L))
-        val headerFormat = SimpleDateFormat("d 'de' MMMM", Locale("es", "PE"))
+        val headerFormat = SimpleDateFormat("d 'de' MMMM", Locale.forLanguageTag("es-PE"))
 
         return items.groupBy { item ->
             val itemDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(item.transaction.occurredAt))
