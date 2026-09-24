@@ -16,6 +16,10 @@
 - Q: ¿Qué debe pasar si el mismo usuario edita una categoría en dos dispositivos sin conexión y ambos cambios se sincronizan después? → A: Conservar ambas versiones detectadas y pedir al usuario elegir una antes de finalizar la sincronización.
 - Q: ¿Qué tipo de coincidencia debe bastar para mostrar un comercio en una búsqueda normalizada? → A: Permitir coincidencias parciales dentro de una palabra, como "star" para "Starbucks".
 
+### Session 2026-09-23
+
+- Aprobación: Las pestañas Gastos e Ingresos filtran categorías por tipo y ambas incluyen las categorías `GENERAL`. Las categorías existentes se migran como `GENERAL` sin inferir su tipo ni cambiar la clasificación histórica. Las raíces nuevas usan el tipo seleccionado; las subcategorías heredan y deben coincidir con su raíz. Las transferencias no llevan categoría.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Organizar categorías en dos niveles (Priority: P1)
@@ -69,6 +73,21 @@ Como usuario, busco un comercio del catálogo general y lo asigno a un movimient
 
 ---
 
+### User Story 4 - Separar categorías de gastos e ingresos (Priority: P1)
+
+Como usuario, organizo categorías de gastos y de ingresos en pestañas separadas, manteniendo disponibles en ambas las categorías históricas cuyo tipo no puede determinarse.
+
+**Independent Test**: Se crean raíces de gastos e ingresos, se verifica el filtro de cada pestaña, se conserva una categoría `GENERAL` en ambas y se comprueba que las subcategorías hereden el tipo raíz.
+
+**Acceptance Scenarios**:
+
+1. **Given** categorías `EXPENSE`, `INCOME` y `GENERAL`, **When** el usuario abre Gastos o Ingresos, **Then** cada pestaña muestra su tipo y las categorías `GENERAL`, sin mostrar el tipo contrario.
+2. **Given** una pestaña seleccionada, **When** el usuario crea una raíz, **Then** la categoría queda persistida con el tipo seleccionado.
+3. **Given** una raíz tipada, **When** el usuario crea una subcategoría, **Then** esta hereda el tipo raíz y una solicitud con tipo incompatible se rechaza.
+4. **Given** una transferencia, **When** el usuario la registra, **Then** no se asigna categoría.
+
+---
+
 ### Edge Cases
 
 - Una categoría raíz no puede ser su propia subcategoría, directa ni indirectamente.
@@ -106,6 +125,10 @@ Como usuario, busco un comercio del catálogo general y lo asigno a un movimient
 - **FR-019**: El sistema DEBE considerar como evidencia válida una coincidencia parcial del texto normalizado dentro del nombre normalizado de un comercio, pero NO DEBE usar alias ni equivalencias semánticas para generar resultados.
 - **FR-020**: El sistema DEBE obtener un catálogo inicial de comercios, conservar la última versión disponible para búsquedas sin conexión y actualizarlo cuando la conectividad se restablezca; DEBE comunicar si los resultados proceden de una versión potencialmente desactualizada o si no hay catálogo disponible.
 - **FR-021**: El formulario de creación o edición de un movimiento DEBE incluir selectores independientes de categoría y comercio, además del texto provisional de comercio cuando no se seleccione una coincidencia del catálogo.
+- **FR-022**: El sistema DEBE persistir para cada categoría uno de los tipos `EXPENSE`, `INCOME` o `GENERAL`; las categorías existentes sin evidencia de tipo DEBEN migrar a `GENERAL` sin inferir por el historial.
+- **FR-023**: Las pestañas Gastos e Ingresos DEBEN mostrar su tipo y las categorías `GENERAL`; una raíz nueva DEBE tomar el tipo seleccionado.
+- **FR-024**: Una subcategoría DEBE heredar el tipo de su raíz y el sistema DEBE rechazar una subcategoría con tipo incompatible.
+- **FR-025**: Las transacciones nuevas de tipo Transferencia NO DEBEN tener categoría; las categorías `GENERAL` pueden clasificar tanto gastos como ingresos.
 
 ### Key Entities
 

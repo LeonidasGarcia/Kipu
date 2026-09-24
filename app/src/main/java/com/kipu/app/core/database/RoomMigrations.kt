@@ -507,3 +507,12 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+/** Legacy categories remain untyped and therefore visible in both category tabs. */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `categories` ADD COLUMN `category_type` TEXT NOT NULL DEFAULT 'GENERAL'",
+        )
+    }
+}
+

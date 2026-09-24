@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.presentation.CATEGORY_ICON_SECTIONS
 import com.kipu.app.feature.categories.presentation.CATEGORY_PALETTE
@@ -71,6 +72,7 @@ import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
 @Composable
 fun CategoryFormDialog(
     isEditing: Boolean,
+    categoryType: CategoryType = CategoryType.GENERAL,
     name: String,
     icon: String,
     color: String,
@@ -101,7 +103,7 @@ fun CategoryFormDialog(
                 TopAppBar(
                     title = {
                         Text(
-                            text = if (isEditing) "Crear O Editar Categoría" else "Crear O Editar Categoría",
+                            text = if (isEditing) "Editar Categoría" else "Nueva Categoría",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 18.sp,
                         )
@@ -169,7 +171,17 @@ fun CategoryFormDialog(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = if (isSubcategory) "Subcategoría" else "Categoría Principal",
+                                text = buildString {
+                                    append(if (isSubcategory) "Subcategoría" else "Categoría Principal")
+                                    append(" • ")
+                                    append(
+                                        when (categoryType) {
+                                            CategoryType.EXPENSE -> "Gastos"
+                                            CategoryType.INCOME -> "Ingresos"
+                                            CategoryType.GENERAL -> "General"
+                                        }
+                                    )
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

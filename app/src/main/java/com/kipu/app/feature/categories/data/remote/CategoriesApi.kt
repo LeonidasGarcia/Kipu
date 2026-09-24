@@ -72,7 +72,7 @@ class CategoriesApi @Inject constructor(
         val auth = getAuthHeader() ?: return CategoryApiResponse.Error(401, "No active session")
         val response = httpClient.get("rest/v1/categories") {
             header(HttpHeaders.Authorization, auth)
-            url { parameters.append("select", "id,name,icon_key,user_id,parent_id,origin,is_active,remote_revision,created_at,updated_at") }
+            url { parameters.append("select", "id,name,icon_key,user_id,parent_id,origin,category_type,is_active,remote_revision,created_at,updated_at") }
         }
         CategoryApiResponse.Success(response.body())
     } catch (e: Exception) {
@@ -99,7 +99,7 @@ class CategoriesApi @Inject constructor(
             val response = httpClient.post("rest/v1/rpc/$rpcName") {
                 contentType(ContentType.Application.Json)
                 header(HttpHeaders.Authorization, auth)
-                setBody(body)
+                setBody(CategoryRpcPayload(body))
             }
             CategoryApiResponse.Success(response.body())
         } catch (e: Exception) {

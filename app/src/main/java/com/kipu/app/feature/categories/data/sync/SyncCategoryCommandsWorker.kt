@@ -90,7 +90,7 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                     categoryDao.insertCategoriesIfAbsent(visible.map { dto ->
                         CategoryEntity(
                             id = dto.id, userId = dto.userId, parentId = dto.parentId,
-                            origin = dto.origin, isActive = dto.isActive,
+                            origin = dto.origin, categoryType = dto.categoryType, isActive = dto.isActive,
                             remoteRevision = dto.remoteRevision,
                             createdAt = Instant.parse(dto.createdAt).toEpochMilli(),
                             updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),

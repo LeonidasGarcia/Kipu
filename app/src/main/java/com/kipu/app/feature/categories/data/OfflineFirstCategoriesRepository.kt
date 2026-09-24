@@ -29,6 +29,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryConflictType
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryOrigin
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.MerchantId
@@ -100,6 +101,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     isActive = entity.isActive,
                     revision = entity.remoteRevision,
                     isPlanLocked = rootId in lockedRoots,
+                    categoryType = CategoryType.fromStorage(entity.categoryType),
                 )
             }
         }
@@ -151,6 +153,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                 origin = CategoryOrigin.valueOf(entity.origin),
                 isActive = entity.isActive,
                 revision = entity.remoteRevision,
+                categoryType = CategoryType.fromStorage(entity.categoryType),
             )
         }
     }
@@ -171,12 +174,17 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                 parentId = it.parentId?.let { pid -> CategoryId(pid) },
                 origin = CategoryOrigin.valueOf(it.origin),
                 isActive = it.isActive,
-                revision = it.remoteRevision
+                revision = it.remoteRevision,
+                categoryType = CategoryType.fromStorage(it.categoryType),
             )
         }
         val hierarchyCheck = CategoryRules.validateHierarchy(category.id, category.parentId, existing)
         if (hierarchyCheck.isFailure) {
             return Result.failure(hierarchyCheck.exceptionOrNull()!!)
+        }
+        val typeCheck = CategoryRules.validateCategoryType(category.categoryType, category.parentId, existing)
+        if (typeCheck.isFailure) {
+            return Result.failure(typeCheck.exceptionOrNull()!!)
         }
 
         // Validate Free quota if custom root
@@ -199,10 +207,11 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             operationId = operationId,
             categoryId = category.id.value,
             parentId = category.parentId?.value,
+            categoryType = category.categoryType.name,
             name = presentation.name,
             icon = presentation.icon,
             color = presentation.color,
-            payloadHash = sha256("$operationId:${category.id.value}:${presentation.name}")
+            payloadHash = sha256("$operationId:${category.id.value}:${category.categoryType.name}:${presentation.name}")
         )
         val payloadJson = json.encodeToString(payloadDto)
 
@@ -213,6 +222,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     userId = userId,
                     parentId = category.parentId?.value,
                     origin = category.origin.name,
+                    categoryType = category.categoryType.name,
                     isActive = category.isActive,
                     remoteRevision = 1L,
                     createdAt = now,

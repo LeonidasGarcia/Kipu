@@ -87,6 +87,24 @@ class CategoryDatabaseTest {
         assertTrue(user1Categories.any { it.id == "cat-1" })
         assertTrue(user1Categories.any { it.id == "cat-system" })
         assertTrue(user1Categories.none { it.id == "cat-2" })
+        assertEquals("GENERAL", user1Categories.first { it.id == "cat-system" }.categoryType)
+    }
+
+    @Test
+    fun categoryTypePersistsForTypedCategories() = runTest {
+        categoryDao.insertCategory(
+            CategoryEntity(
+                id = "income-root",
+                userId = user1,
+                parentId = null,
+                origin = "CUSTOM",
+                categoryType = "INCOME",
+                createdAt = 1000L,
+                updatedAt = 1000L,
+            ),
+        )
+
+        assertEquals("INCOME", categoryDao.getCategoryById("income-root")?.categoryType)
     }
 
     @Test

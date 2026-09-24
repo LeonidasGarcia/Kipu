@@ -7,6 +7,8 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.Category
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
@@ -24,14 +26,26 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class CategoryTab {
-    TODAS,
-    PERSONALIZADAS,
+    EXPENSE,
+    INCOME;
+
+    val categoryType: CategoryType
+        get() = when (this) {
+            EXPENSE -> CategoryType.EXPENSE
+            INCOME -> CategoryType.INCOME
+        }
+
+    fun includes(category: Category): Boolean =
+        category.categoryType == categoryType || category.categoryType == CategoryType.GENERAL
+
+    fun filterCategories(categories: List<CategoryItem>): List<CategoryItem> =
+        categories.filter { includes(it.category) }
 }
 
 data class CategoriesUiState(
     val isLoading: Boolean = true,
     val categories: List<CategoryItem> = emptyList(),
-    val selectedTab: CategoryTab = CategoryTab.TODAS,
+    val selectedTab: CategoryTab = CategoryTab.EXPENSE,
     val activeCustomRootsCount: Int = 0,
     val maxCustomRoots: Int = 5,
     val isCreateDialogOpen: Boolean = false,
@@ -41,6 +55,7 @@ data class CategoriesUiState(
     val createCategoryName: String = "",
     val createCategoryIcon: String = "restaurant",
     val createCategoryColor: String = "#0F766E",
+    val createCategoryType: CategoryType = CategoryType.EXPENSE,
     val showQuotaExceededDialog: Boolean = false,
     val categoryToDelete: CategoryItem? = null,
     val errorMessage: String? = null,
@@ -169,6 +184,13 @@ class CategoriesViewModel @Inject constructor(
             _uiState.update { it.copy(showQuotaExceededDialog = true) }
             return
         }
+        val parentCategoryType = parentId?.let { requestedParentId ->
+            state.categories.asSequence()
+                .flatMap { root -> sequenceOf(root) + root.subcategories.asSequence() }
+                .firstOrNull { it.category.id == requestedParentId }
+                ?.category
+                ?.categoryType
+        }
         _uiState.update {
             it.copy(
                 isCreateDialogOpen = true,
@@ -177,6 +199,7 @@ class CategoriesViewModel @Inject constructor(
                 createCategoryName = "",
                 createCategoryIcon = if (parentId == null) "restaurant" else "shopping_cart",
                 createCategoryColor = "#0F766E",
+                createCategoryType = parentCategoryType ?: state.selectedTab.categoryType,
                 errorMessage = null,
             )
         }
@@ -192,6 +215,7 @@ class CategoriesViewModel @Inject constructor(
                 createCategoryName = item.displayName,
                 createCategoryIcon = item.icon,
                 createCategoryColor = item.color,
+                createCategoryType = item.category.categoryType,
                 errorMessage = null,
             )
         }
@@ -204,6 +228,7 @@ class CategoriesViewModel @Inject constructor(
                 editingCategoryId = null,
                 createParentId = null,
                 createCategoryName = "",
+                createCategoryType = it.selectedTab.categoryType,
                 errorMessage = null,
             )
         }
@@ -260,7 +285,19 @@ class CategoriesViewModel @Inject constructor(
     }
 
     fun onParentIdChanged(parentId: CategoryId?) {
-        _uiState.update { it.copy(createParentId = parentId) }
+        _uiState.update { state ->
+            val parentType = parentId?.let { requestedParentId ->
+                state.categories.asSequence()
+                    .flatMap { root -> sequenceOf(root) + root.subcategories.asSequence() }
+                    .firstOrNull { it.category.id == requestedParentId }
+                    ?.category
+                    ?.categoryType
+            }
+            state.copy(
+                createParentId = parentId,
+                createCategoryType = parentType ?: state.selectedTab.categoryType,
+            )
+        }
     }
 
     fun submitCreateCategory() {
@@ -310,6 +347,7 @@ class CategoriesViewModel @Inject constructor(
                     icon = state.createCategoryIcon,
                     color = state.createCategoryColor,
                     parentId = state.createParentId,
+                    categoryType = state.createCategoryType,
                 )
 
                 result.fold(

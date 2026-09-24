@@ -2,6 +2,11 @@ package com.kipu.app.feature.categories.presentation.categories
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,7 +29,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
@@ -69,6 +73,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.presentation.parseHexColor
 import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,24 +164,24 @@ fun CategoriesScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    val rootCount = state.categories.count { it.category.isRoot }
-                    val expenseCount = rootCount.coerceAtLeast(0)
+                    val expenseCount = CategoryTab.EXPENSE.filterCategories(state.categories).count { it.category.isRoot }
+                    val incomeCount = CategoryTab.INCOME.filterCategories(state.categories).count { it.category.isRoot }
 
                     FilterChip(
-                        selected = state.selectedTab == CategoryTab.TODAS,
-                        onClick = { viewModel.onTabSelected(CategoryTab.TODAS) },
+                        selected = state.selectedTab == CategoryTab.EXPENSE,
+                        onClick = { viewModel.onTabSelected(CategoryTab.EXPENSE) },
                         label = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Todas")
+                                Text("Gastos")
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
                                     shape = CircleShape,
-                                    color = if (state.selectedTab == CategoryTab.TODAS) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    color = if (state.selectedTab == CategoryTab.EXPENSE) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                                 ) {
                                     Text(
-                                        text = "$rootCount",
+                                        text = "$expenseCount",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         fontSize = 11.sp,
                                     )
@@ -192,20 +197,20 @@ fun CategoriesScreen(
                     )
 
                     FilterChip(
-                        selected = state.selectedTab == CategoryTab.PERSONALIZADAS,
-                        onClick = { viewModel.onTabSelected(CategoryTab.PERSONALIZADAS) },
+                        selected = state.selectedTab == CategoryTab.INCOME,
+                        onClick = { viewModel.onTabSelected(CategoryTab.INCOME) },
                         label = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Personalizadas")
+                                Text("Ingresos")
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Surface(
                                     shape = CircleShape,
-                                    color = if (state.selectedTab == CategoryTab.PERSONALIZADAS) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                                    color = if (state.selectedTab == CategoryTab.INCOME) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
                                 ) {
                                     Text(
-                                        text = "${state.activeCustomRootsCount}",
+                                        text = "$incomeCount",
                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                         fontSize = 11.sp,
                                     )
@@ -239,11 +244,7 @@ fun CategoriesScreen(
                 }
 
                 val displayCategories = remember(state.categories, state.selectedTab) {
-                    if (state.selectedTab == CategoryTab.PERSONALIZADAS) {
-                        state.categories.filter { it.category.isCustom }
-                    } else {
-                        state.categories
-                    }
+                    state.selectedTab.filterCategories(state.categories)
                 }
 
                 // Lista de Categorías
@@ -280,11 +281,17 @@ fun CategoriesScreen(
     if (state.isCreateDialogOpen) {
         CategoryFormDialog(
             isEditing = state.isEditing,
+            categoryType = state.createCategoryType,
             name = state.createCategoryName,
             icon = state.createCategoryIcon,
             color = state.createCategoryColor,
             parentId = state.createParentId,
-            availableRoots = state.categories.filter { it.category.isRoot },
+            availableRoots = state.categories.filter {
+                it.category.isRoot &&
+                    (it.category.categoryType == state.createCategoryType ||
+                        (state.createCategoryType != com.kipu.app.feature.categories.domain.model.CategoryType.GENERAL &&
+                            it.category.categoryType == com.kipu.app.feature.categories.domain.model.CategoryType.GENERAL))
+            },
             onNameChange = viewModel::onNameChanged,
             onIconChange = viewModel::onIconChanged,
             onColorChange = viewModel::onColorChanged,
@@ -446,7 +453,11 @@ fun CategoryRootCard(
 ) {
     val isRootActive = item.category.isActive
     val cardAlpha = if (isRootActive) 1f else 0.5f
-    val rotationAngle by animateFloatAsState(targetValue = if (isExpanded) 180f else 0f, label = "expand_rotation")
+    val rotationAngle by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(KipuMotionTokens.EnterMillis),
+        label = "expand_rotation",
+    )
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -518,7 +529,7 @@ fun CategoryRootCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
                         onClick = onEdit,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
                             Icons.Default.Edit,
@@ -530,7 +541,7 @@ fun CategoryRootCard(
 
                     IconButton(
                         onClick = onDelete,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
                             Icons.Default.DeleteOutline,
@@ -542,7 +553,7 @@ fun CategoryRootCard(
 
                     IconButton(
                         onClick = onToggleExpand,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
                             Icons.Default.ExpandMore,
@@ -572,7 +583,11 @@ fun CategoryRootCard(
             }
 
             // Subcategorías colapsables
-            AnimatedVisibility(visible = isExpanded) {
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = fadeIn(tween(KipuMotionTokens.EnterMillis)) + expandVertically(tween(KipuMotionTokens.EnterMillis)),
+                exit = fadeOut(tween(KipuMotionTokens.ExitMillis)) + shrinkVertically(tween(KipuMotionTokens.ExitMillis)),
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -612,7 +627,7 @@ fun CategoryRootCard(
 
                             IconButton(
                                 onClick = { onEditSubcategory(subItem) },
-                                modifier = Modifier.size(32.dp),
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     Icons.Default.Edit,
@@ -624,7 +639,7 @@ fun CategoryRootCard(
 
                             IconButton(
                                 onClick = { onDeleteSubcategory(subItem) },
-                                modifier = Modifier.size(32.dp),
+                                modifier = Modifier.size(48.dp),
                             ) {
                                 Icon(
                                     Icons.Default.DeleteOutline,

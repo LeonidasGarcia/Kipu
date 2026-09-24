@@ -18,6 +18,7 @@ import com.kipu.app.core.database.MIGRATION_5_6
 import com.kipu.app.core.database.MIGRATION_6_7
 import com.kipu.app.core.database.MIGRATION_7_8
 import com.kipu.app.core.database.MIGRATION_8_9
+import com.kipu.app.core.database.MIGRATION_9_10
 import java.io.IOException
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -93,14 +94,14 @@ class KipuDatabaseSchemaTest {
         }
 
         helper.runMigrationsAndValidate(
-            DATABASE_NAME, 9, true,
+            DATABASE_NAME, 10, true,
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+            MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
         ).close()
         val database = Room.databaseBuilder(context, KipuDatabase::class.java, DATABASE_NAME)
             .addMigrations(
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+                MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
             )
             .build()
         try {
@@ -121,7 +122,7 @@ class KipuDatabaseSchemaTest {
     fun newerUnknownSchemaFailsSafelyWithoutDeletingRepresentativeData() {
         val configuration = SupportSQLiteOpenHelper.Configuration.builder(context)
             .name(DATABASE_NAME)
-            .callback(object : SupportSQLiteOpenHelper.Callback(10) {
+            .callback(object : SupportSQLiteOpenHelper.Callback(11) {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     db.execSQL("CREATE TABLE migration_sentinel (value TEXT NOT NULL)")
                     db.execSQL("INSERT INTO migration_sentinel VALUES ('preserve-me')")

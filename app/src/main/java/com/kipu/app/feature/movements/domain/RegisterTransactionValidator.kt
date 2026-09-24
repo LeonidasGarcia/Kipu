@@ -38,6 +38,9 @@ class RegisterTransactionValidator {
                 // Category is optional for income in Sprint 2
             }
             MovementType.TRANSFER -> {
+                if (command.categoryId != null) {
+                    return ValidationResult.Invalid("category", "Las transferencias no admiten categoría")
+                }
                 if (command.destinationAccountId.isNullOrBlank()) {
                     return ValidationResult.Invalid("destination_account", "La cuenta de destino es obligatoria para una transferencia")
                 }

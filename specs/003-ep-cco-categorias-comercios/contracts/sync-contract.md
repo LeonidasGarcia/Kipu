@@ -8,11 +8,17 @@ Cada comando persistido antes de sincronizar contiene `operationId`, `ownerId`, 
 
 | Command | Aggregate | Required remote checks |
 |---------|-----------|------------------------|
-| `CREATE_CUSTOM_CATEGORY` | Categoría | Owner, raíz/subcategoría, jerarquía, cupo de raíces activas. |
-| `UPDATE_CATEGORY_PRESENTATION` | Presentación | Owner, revisión esperada y conflicto explícito. |
+| `CREATE_CATEGORY` | Categoría | Owner, raíz/subcategoría, jerarquía, cupo de raíces activas y tipo raíz/heredado. |
+| `UPDATE_PRESENTATION` | Presentación | Owner, revisión esperada y conflicto explícito. |
 | `SET_CATEGORY_ACTIVE` | Categoría | Owner, estado del padre, cupo si reactiva raíz personalizada y revisión esperada para conflicto explícito. |
-| `ASSIGN_MOVEMENT_CLASSIFICATION` | Movimiento | Owner del movimiento, categoría elegible, comercio activo y exclusividad comercio/texto. |
-| `RESOLVE_CATEGORY_CONFLICT` | Conflicto | Owner, conflicto abierto y operación de resolución única. |
+| `UPDATE_MOVEMENT_CLASSIFICATION` | Movimiento | Owner del movimiento, categoría elegible, comercio activo y exclusividad comercio/texto. |
+| `RESOLVE_CONFLICT` | Conflicto | Owner, conflicto abierto y operación de resolución única. |
+
+La creación usa el RPC local `create_category_v1(p_payload jsonb)` con el cuerpo PostgREST `{ "p_payload": { ... } }`. `p_payload.category_type` acepta `EXPENSE`, `INCOME` o `GENERAL`: la raíz nueva recibe el tipo seleccionado; una subcategoría hereda el tipo de su raíz y un tipo explícito incompatible se rechaza. Los clientes anteriores que omiten el tipo crean una raíz `GENERAL`.
+
+El DTO del catálogo remoto expone `category_type`. La migración local y Room conservan el modelo vigente (`origin`, `remote_revision`) y asignan `GENERAL` a toda categoría preexistente, sin inferir el tipo ni reescribir referencias históricas.
+
+Las transacciones nuevas admiten categorías `GENERAL` en gastos e ingresos, y categorías tipadas solo en el tipo coincidente. Una transferencia no admite categoría.
 
 ## Results
 

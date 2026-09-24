@@ -69,7 +69,7 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         BalanceProjectionEntity::class,
         MovementSyncCheckpointEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

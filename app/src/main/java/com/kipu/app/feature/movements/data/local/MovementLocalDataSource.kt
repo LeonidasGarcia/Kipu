@@ -13,6 +13,7 @@ import com.kipu.app.feature.movements.domain.model.TransactionStatus
 import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
 import com.kipu.app.feature.plans.domain.model.FreePlanLimits
 import com.kipu.app.feature.plans.domain.model.QuotaGroup
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
@@ -102,6 +103,11 @@ class MovementLocalDataSource @Inject constructor(
                 )
             }
             if (command.type == MovementType.TRANSFER) {
+                if (command.categoryId != null) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "Las transferencias no admiten categoría"
+                    )
+                }
                 val destinationId = command.destinationAccountId
                     ?: return@withTransaction RegisterTransactionResult.ValidationError(
                         "destination_account", "La cuenta de destino es obligatoria"
@@ -131,11 +137,21 @@ class MovementLocalDataSource @Inject constructor(
                 }
                 if (category.parentId != null) {
                     val parent = database.categoryDao().getCategoryById(category.parentId)
-                    if (parent == null || !parent.isActive) {
+                    if (parent == null || !parent.isActive || parent.categoryType != category.categoryType) {
                         return@withTransaction RegisterTransactionResult.ValidationError(
-                            "category", "La categoría principal está inactiva"
+                            "category", "La categoría principal está inactiva o tiene un tipo incompatible"
                         )
                     }
+                }
+                val expectedCategoryType = when (command.type) {
+                    MovementType.EXPENSE -> CategoryType.EXPENSE
+                    MovementType.INCOME -> CategoryType.INCOME
+                    MovementType.TRANSFER -> null
+                }
+                if (category.categoryType != "GENERAL" && category.categoryType != expectedCategoryType?.name) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "La categoría no corresponde al tipo de movimiento"
+                    )
                 }
                 if (isPlanLockedCategory(command.userId, category)) {
                     return@withTransaction RegisterTransactionResult.ValidationError(
