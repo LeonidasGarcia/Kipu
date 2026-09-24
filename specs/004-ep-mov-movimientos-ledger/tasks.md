@@ -131,7 +131,7 @@
 - [x] T053 [P] Probar que la deduplicación permanece disponible en Free sin consumir cupos en `app/src/test/java/com/kipu/app/feature/movements/domain/FreeDeduplicationTest.kt`
 - [x] T054 [P] Probar que logs y errores no exponen notas, tokens ni datos financieros sensibles en `app/src/test/java/com/kipu/app/core/logging/MovementLogRedactionTest.kt`
 - [x] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_idempotency_stress_test.sql`
-- [ ] T056 [P] Medir en dispositivo la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/ManualEntryAcceptanceTest.kt`
+- [x] T056 [P] Medir en dispositivo la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/ManualEntryAcceptanceTest.kt`
 - [ ] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md` (revisores y evidencias pendientes).
 
 ---

@@ -22,16 +22,18 @@
 | `testDebugUnitTest compileDebugAndroidTestKotlin --no-parallel` after category layout correction | **BUILD SUCCESSFUL** |
 | `connectedLabAndroidTest -PisolatedAndroidTests=true --no-parallel` after category alignment and movement-dialog tests | **117 tests passed on Samsung SM-S926B / Android 16**, using isolated package `com.kipu.app.lab`; includes geometry checks for category icons, Gastos/Ingresos fields, and duplicate warning actions. |
 | `testDebugUnitTest compileDebugAndroidTestKotlin --no-parallel` after adding the 10,000-row history test | **BUILD SUCCESSFUL** |
+| `ManualEntryAcceptanceTest.preparedExpenseCanBeEnteredAndAcceptedWithinTenSeconds` | **PASS on Samsung SM-S926B / Android 16** with prepared account/category data. |
+| `connectedLabAndroidTest -PisolatedAndroidTests=true --no-parallel` after manual-entry acceptance test | **119 tests passed on Samsung SM-S926B / Android 16**, using isolated package `com.kipu.app.lab`; includes the 10,000-row lazy-history and category-action alignment checks. |
 | `git diff --check` | No whitespace errors. |
 
 ## Acceptance still open
 
-- The 117-test isolated suite passed on the Samsung SM-S926B, but does not verify a full authenticated offline→remote-sync→second-device walkthrough or TalkBack acceptance. A later 118-test rerun was blocked because the device's secure keyguard left no Compose hierarchy available; unlock the device before rerunning.
-- T047 now has a 10,000-row lazy-history test, but its performance assertion has not run on an unlocked device, and database-level pagination remains unverified.
-- T052 PostgreSQL historical backfill, T050 full offline/restart/second-device walkthrough, T056 sub-10-second manual-entry acceptance, and T057 named cross-review remain open. T055's 100-retry pgTAP stress test passes locally.
+- The 119-test isolated suite passes on the Samsung SM-S926B, but does not verify a full authenticated offline→remote-sync→second-device walkthrough or TalkBack acceptance.
+- T047's 10,000-row lazy-history performance assertion now runs successfully; database-level pagination remains unverified because the current repository observes the full transaction list.
+- T052 PostgreSQL historical backfill, T050 full offline/restart/second-device walkthrough, and T057 named cross-review remain open. T055's 100-retry pgTAP stress test passes locally; T056's prepared manual-entry acceptance passes on device.
 - No live sign-in with supplied credentials was performed: the remote backend currently has missing current-branch migrations/RPCs and catalog-column mismatches. Credentials were not stored in source or test fixtures.
-- `specs/004-ep-mov-movimientos-ledger/review-record.md` still requires named cross-reviewers. The PostgreSQL historical backfill, actual 10,000-row paging benchmark, and sub-10-second user timing tasks remain unchecked in `specs/004/tasks.md`.
+- `specs/004-ep-mov-movimientos-ledger/review-record.md` still requires named cross-reviewers. The PostgreSQL historical backfill and database-level history pagination remain unchecked in `specs/004/tasks.md`.
 - The remote Kipu database and `plans` Edge Function remain incompatible with this branch and were not modified. See [`s1-s2-remote-backend-readiness.md`](s1-s2-remote-backend-readiness.md) for read-only MCP evidence and release gates.
 - HU-57 categories/instruments have UI; future debt/goal/budget screens remain deferred. A verified Premium authority is still required before the server can remove Free locks.
 
-**Status:** local unit tests and 252 pgTAP assertions are green; the prior 117-test Android suite passed, while the latest instrumented rerun was blocked by the locked device. Sprint 1/2 are not certified closed until the remaining acceptance/device gate, cross-review, and remote migration/function rollout are completed in an approved staging/production process.
+**Status:** local unit tests, 252 pgTAP assertions, and 119 Android instrumented tests are green. Sprint 1/2 are not certified closed until the historical backfill and pagination decisions, full offline/second-device acceptance, cross-review, and remote migration/function rollout are completed in an approved staging/production process.
