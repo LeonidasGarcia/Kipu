@@ -48,6 +48,7 @@ data class Account(
     val remoteRevision: Long = 0L,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now(),
+    val isPlanLocked: Boolean = false,
 ) {
     init {
         require(alias.isNotBlank() && alias.trim().length in 1..80) {

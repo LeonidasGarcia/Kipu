@@ -23,6 +23,9 @@ interface MerchantCatalogDao {
     @Query("SELECT * FROM merchant_catalog_cache WHERE is_active = 1 ORDER BY name ASC")
     fun getAllActiveMerchants(): Flow<List<MerchantCatalogEntity>>
 
+    @Query("SELECT * FROM merchant_catalog_cache")
+    fun observeMerchants(): Flow<List<MerchantCatalogEntity>>
+
     @Query("SELECT * FROM merchant_catalog_cache WHERE id = :id")
     suspend fun getMerchantById(id: String): MerchantCatalogEntity?
 

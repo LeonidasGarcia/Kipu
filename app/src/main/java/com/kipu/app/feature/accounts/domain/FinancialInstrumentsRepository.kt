@@ -14,6 +14,7 @@ import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.DebitCard
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 interface FinancialInstrumentsRepository {
     companion object {
@@ -61,4 +62,8 @@ interface FinancialInstrumentsRepository {
     fun observeActiveComputableCount(): Flow<Int>
     suspend fun getActiveComputableCount(): Int
     suspend fun hasCardWithIdentity(issuer: String, network: CardNetwork, lastFourDigits: String): Boolean
+
+    fun observeSelectedFreeInstrumentIds(): Flow<Set<String>> = flowOf(emptySet())
+    suspend fun saveSelectedFreeInstrumentIds(ids: Set<String>): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Instrument quota selection is unavailable"))
 }

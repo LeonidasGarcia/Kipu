@@ -2,6 +2,7 @@ package com.kipu.app.feature.auth.data
 
 import com.kipu.app.core.logging.SecureLog
 import com.kipu.app.core.security.KeystoreEncryptedSessionStorage
+import com.kipu.app.core.security.StoredAuthSession
 import com.kipu.app.core.session.PendingChangesRepository
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.core.session.SessionCoordinator
@@ -104,14 +105,20 @@ class SupabaseAuthRepository @Inject constructor(
             is ApiResponse.Success -> {
                 val envelope = response.data
                 try {
-                    // Import session into encrypted storage and Supabase client
-                    sessionStorage.save("""{"access_token":"${envelope.accessToken}","refresh_token":"${envelope.refreshToken}","expires_in":${envelope.expiresIn},"token_type":"${envelope.tokenType}","user_id":"${envelope.userId}"}""")
-                    runCatching {
-                        supabaseClient.auth.importAuthToken(envelope.accessToken)
-                    }
+                    val now = Instant.now()
+                    val stored = StoredAuthSession(
+                        accessToken = envelope.accessToken,
+                        refreshToken = envelope.refreshToken,
+                        expiresIn = envelope.expiresIn,
+                        tokenType = envelope.tokenType,
+                        userId = envelope.userId,
+                        expiresAtEpochSeconds = now.plusSeconds(envelope.expiresIn).epochSecond,
+                    )
+                    supabaseClient.auth.importSession(stored.toUserSession(), autoRefresh = false)
+                    sessionStorage.save(StoredAuthSession.encode(stored))
                     sessionCoordinator.setActiveOwner(envelope.userId)
                     sessionCoordinator.updateRemoteSession(
-                        RemoteSession.Valid(envelope.userId, Instant.now().plusSeconds(envelope.expiresIn))
+                        RemoteSession.Valid(envelope.userId, now.plusSeconds(envelope.expiresIn))
                     )
                     _cooldownState.value = CooldownState(0, null)
                     Result.success(AuthResult.Success(envelope.userId))
@@ -168,24 +175,38 @@ class SupabaseAuthRepository @Inject constructor(
                 sessionCoordinator.updateRemoteSession(RemoteSession.Absent)
                 return Result.success(null)
             }
-            val tokenRegex = "\"access_token\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-            val userIdRegex = "\"user_id\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-            val token = tokenRegex.find(sessionJson)?.groupValues?.get(1)
-            val userId = userIdRegex.find(sessionJson)?.groupValues?.get(1)
-
-            if (userId.isNullOrEmpty() || token.isNullOrEmpty()) {
+            val stored = StoredAuthSession.parse(sessionJson)
+            if (stored == null) {
                 sessionCoordinator.updateRemoteSession(RemoteSession.Absent)
                 return Result.success(null)
             }
-
-            runCatching {
-                supabaseClient.auth.importAuthToken(token)
+            val userId = stored.userId
+            sessionCoordinator.setActiveOwner(userId)
+            if (stored.hasValidAccessToken(Instant.now())) {
+                val imported = runCatching { supabaseClient.auth.importSession(stored.toUserSession(), autoRefresh = false) }.isSuccess
+                if (imported) {
+                    sessionCoordinator.updateRemoteSession(
+                        RemoteSession.Valid(userId, Instant.ofEpochSecond(requireNotNull(stored.expiresAtEpochSeconds)))
+                    )
+                    return Result.success(AuthResult.Success(userId))
+                }
             }
 
-            sessionCoordinator.setActiveOwner(userId)
-            sessionCoordinator.updateRemoteSession(
-                RemoteSession.Valid(userId, Instant.now().plusSeconds(3600))
-            )
+            val refreshed = runCatching { supabaseClient.auth.refreshSession(stored.refreshToken) }.getOrNull()
+            if (refreshed != null && refreshed.user?.id != userId) {
+                sessionCoordinator.clearActiveOwner(explicit = false)
+                sessionCoordinator.updateRemoteSession(RemoteSession.ReauthenticationRequired(userId))
+                return Result.failure(IllegalStateException("La sesión restaurada no corresponde al usuario local"))
+            }
+            if (refreshed != null && refreshed.user?.id == userId) {
+                val now = Instant.now()
+                val updated = StoredAuthSession.fromUserSession(refreshed, userId, now)
+                supabaseClient.auth.importSession(updated.toUserSession(), autoRefresh = false)
+                sessionStorage.save(StoredAuthSession.encode(updated))
+                sessionCoordinator.updateRemoteSession(RemoteSession.Valid(userId, now.plusSeconds(updated.expiresIn)))
+            } else {
+                sessionCoordinator.updateRemoteSession(RemoteSession.RefreshRequired(userId))
+            }
             Result.success(AuthResult.Success(userId))
         } catch (e: Exception) {
             Result.failure(e)

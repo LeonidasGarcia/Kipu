@@ -37,11 +37,11 @@ SET LOCAL "request.jwt.claim.sub" = '11111111-1111-1111-1111-111111111111';
 
 SELECT lives_ok(
     $$
-    INSERT INTO public.categories (id, user_id, parent_id, origin, is_active)
-    VALUES ('aaaaaaaa-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', NULL, 'CUSTOM', true);
+    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active)
+    VALUES ('aaaaaaaa-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', NULL, 'Raíz', 'CUSTOM', true);
     
-    INSERT INTO public.categories (id, user_id, parent_id, origin, is_active)
-    VALUES ('bbbbbbbb-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-1111-1111-1111-000000000001', 'CUSTOM', true);
+    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active)
+    VALUES ('bbbbbbbb-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-1111-1111-1111-000000000001', 'Hija', 'CUSTOM', true);
     $$,
     'Creating root and subcategory succeeds'
 );
@@ -49,8 +49,8 @@ SELECT lives_ok(
 -- Test 11: Third level hierarchy is rejected by trigger
 SELECT throws_ok(
     $$
-    INSERT INTO public.categories (id, user_id, parent_id, origin, is_active)
-    VALUES ('cccccccc-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', 'bbbbbbbb-1111-1111-1111-000000000001', 'CUSTOM', true);
+    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active)
+    VALUES ('cccccccc-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', 'bbbbbbbb-1111-1111-1111-000000000001', 'Nieta', 'CUSTOM', true);
     $$,
     'P0001',
     NULL,
@@ -103,15 +103,19 @@ SELECT is(
 );
 
 -- Setup test movement for classification tests
-INSERT INTO public.financial_movements (id, user_id, amount, currency, movement_type, status, occurred_at, created_at, updated_at)
+INSERT INTO public.accounts (id, user_id, name, account_type, currency_code)
+VALUES ('99999999-9999-9999-9999-000000000002', '11111111-1111-1111-1111-111111111111', 'Cuenta de prueba', 'CASH', 'PEN');
+
+INSERT INTO public.financial_movements (id, operation_id, user_id, kind, amount_minor_units, currency, account_id, status, effective_at, created_at)
 VALUES (
     '99999999-9999-9999-9999-000000000001',
+    '99999999-9999-9999-9999-000000000003',
     '11111111-1111-1111-1111-111111111111',
-    50.00,
+    'ADJUSTMENT',
+    -5000,
     'PEN',
-    'EXPENSE',
+    '99999999-9999-9999-9999-000000000002',
     'POSTED',
-    now(),
     now(),
     now()
 ) ON CONFLICT (id) DO NOTHING;
@@ -121,7 +125,7 @@ SELECT is(
     (public.update_movement_classification_v1(jsonb_build_object(
         'movement_id', '99999999-9999-9999-9999-000000000001',
         'category_id', 'dddddddd-1111-1111-1111-000000000001',
-        'merchant_id', 'ffffffff-0000-0000-0000-000000000001'
+        'merchant_id', '00000000-0000-0000-0001-000000000001'
     ))->>'success')::boolean,
     true,
     'update_movement_classification_v1 assigns category and catalog merchant'
@@ -144,7 +148,7 @@ SELECT throws_ok(
     SELECT public.update_movement_classification_v1(jsonb_build_object(
         'movement_id', '99999999-9999-9999-9999-000000000001',
         'category_id', 'dddddddd-1111-1111-1111-000000000001',
-        'merchant_id', 'ffffffff-0000-0000-0000-000000000001',
+        'merchant_id', '00000000-0000-0000-0001-000000000001',
         'merchant_provisional_text', 'Conflicting Text'
     ));
     $$,
@@ -196,7 +200,7 @@ SELECT is(
     (public.resolve_category_conflict_v1(jsonb_build_object(
         'conflict_id', '88888888-8888-8888-8888-000000000001',
         'chosen_version', 'LOCAL',
-        'operation_id', 'op-resolve-1'
+        'operation_id', '77777777-7777-7777-7777-000000000001'
     ))->>'status'),
     'RESOLVED',
     'resolve_category_conflict_v1 marks conflict as RESOLVED'

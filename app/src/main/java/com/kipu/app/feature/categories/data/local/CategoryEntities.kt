@@ -34,6 +34,8 @@ data class CategoryEntity(
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long,
+    @ColumnInfo(name = "category_type", defaultValue = "'GENERAL'")
+    val categoryType: String = "GENERAL",
 )
 
 @Serializable

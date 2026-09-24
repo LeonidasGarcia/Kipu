@@ -89,6 +89,8 @@ fun NavGraphBuilder.authDestinations(
         val viewModel: com.kipu.app.feature.auth.presentation.RecoveryViewModel = hiltViewModel()
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
+        LaunchedEffect(Unit) { viewModel.showInvalidRecoveryLinkIfNeeded() }
+
         com.kipu.app.feature.auth.presentation.ResetPasswordScreen(
             uiState = uiState,
             onPasswordChanged = viewModel::onNewPasswordChanged,

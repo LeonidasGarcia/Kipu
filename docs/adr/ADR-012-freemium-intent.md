@@ -41,6 +41,16 @@ The server classifies retries and races as follows:
 | `STALE` | A newer revision is authoritative; adopt remote state without renumbering the intent. |
 | `CONFLICT` | The operation identity or same revision disagrees; preserve remote state and require a new explicit action. |
 
+Quota resource selections use a separate full-snapshot contract. Room stores the current selected
+items per feature key, not a history of every offline edit, so several local revisions may be
+coalesced before synchronization. The quota RPC accepts and records any revision strictly greater
+than its accepted head; equal or older revisions are `STALE`. A revision gap is therefore valid for
+a newer complete snapshot and is not a conflict. When a delayed `STALE` or `CONFLICT` response is
+rebased, the client advances beyond both the latest local revision and the returned accepted head,
+while retaining the latest local items instead of replacing them with the response's older remote
+snapshot. Operation IDs remain deterministic for the exact request payload, and reusing an ID with
+a different canonical payload remains a receipt-hash conflict.
+
 Network failures, timeouts, rate limits, and server unavailability retry the identical operation.
 Authentication failure waits for a valid session belonging to the same user. Validation and
 authorization failures are terminal and retain only safe diagnostics.

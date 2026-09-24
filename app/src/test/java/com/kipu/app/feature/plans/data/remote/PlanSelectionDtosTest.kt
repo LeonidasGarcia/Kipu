@@ -80,6 +80,31 @@ class PlanSelectionDtosTest {
         assertFalse(terminal.retryable)
     }
 
+    @Test
+    fun quotaSelectionDtosRoundTrip() {
+        val request = QuotaSelectionRequestDto(
+            contractVersion = 1,
+            operationId = "5d92af34-c725-4a1a-a863-2c93fa214c86",
+            featureKey = "CUSTOM_CATEGORIES",
+            selectionRevision = "1",
+            items = listOf(
+                QuotaSelectionItemDto(
+                    resourceId = "6a92af34-c725-4a1a-a863-2c93fa214c87",
+                    resourceType = "CATEGORY_ROOT",
+                ),
+            ),
+        )
+        val encoded = json.encodeToString(request)
+        assertTrue(encoded.contains("\"feature_key\":\"CUSTOM_CATEGORIES\""))
+        assertTrue(encoded.contains("\"resource_type\":\"CATEGORY_ROOT\""))
+
+        val responsePayload = """{"contract_version":1,"operation_id":"5d92af34-c725-4a1a-a863-2c93fa214c86","result":"APPLIED","feature_key":"CUSTOM_CATEGORIES","accepted_revision":"1","current_items":[{"resource_id":"6a92af34-c725-4a1a-a863-2c93fa214c87","resource_type":"CATEGORY_ROOT"}],"server_time":"2026-09-15T12:00:00.000000Z"}"""
+        val response = json.decodeFromString<QuotaSelectionResponseDto>(responsePayload)
+        assertEquals("APPLIED", response.result)
+        assertEquals("1", response.acceptedRevision)
+        assertEquals(1, response.currentItems?.size)
+    }
+
     private fun response(result: String) =
         """{"contract_version":1,"operation_id":"5d92af34-c725-4a1a-a863-2c93fa214c86","result":"$result","accepted_revision":"3","current_preference":{"selection":"PREMIUM_INTENT","selected_at":"2026-09-14T15:03:12.123456Z","updated_at":"2026-09-15T12:00:00.000000Z"},"free_limits":{"policy_version":1,"instruments":4,"custom_categories":5,"debts":2,"goals":2,"budgets":2},"server_time":"2026-09-15T12:00:00.000000Z"}"""
 }

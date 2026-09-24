@@ -8,10 +8,13 @@
 | `ownerId` | Obligatorio para categorías personalizadas; vacío para sistema. |
 | `parentId` | Vacío para raíz; una subcategoría referencia una raíz del mismo owner o catálogo. |
 | `origin` | `SYSTEM` o `CUSTOM`; solo `CUSTOM` consume cupo Free. |
+| `categoryType` | `EXPENSE`, `INCOME` o `GENERAL`; las categorías históricas pasan a `GENERAL` sin inferir por movimientos. |
 | `isActive` | Una subcategoría es elegible solo si ella y su raíz están activas. |
 | `revision` | Incrementa por mutación y participa en detección de conflicto. |
 
-**Invariants**: Máximo dos niveles; sin autorreferencia ni ciclos; padre e hijo comparten propietario/origen aplicable. Una raíz inactiva inhabilita nuevas asignaciones de toda su rama y no altera movimientos históricos.
+**Invariants**: Máximo dos niveles; sin autorreferencia ni ciclos; padre e hijo comparten propietario/origen aplicable y `categoryType`. Las raíces `GENERAL` y sus subcategorías aparecen en ambas pestañas. Una raíz inactiva inhabilita nuevas asignaciones de toda su rama y no altera movimientos históricos.
+
+Las nuevas raíces toman el tipo seleccionado en la pestaña Gastos o Ingresos. Las subcategorías heredan el tipo de su raíz y se rechaza un tipo explícito incompatible. Las filas preexistentes se migran como `GENERAL`, preservando las referencias históricas de movimientos.
 
 ## CategoryPresentation
 
@@ -45,6 +48,8 @@ No tiene owner, alias, regla personal ni operación de alta por cliente.
 | `merchantProvisionalText` | Opcional; solo se permite sin `merchantId`; no crea catálogo. |
 
 `categoryId` y `merchantId` son independientes. Actualizar o limpiar uno preserva el otro.
+
+En transacciones nuevas, una categoría `EXPENSE` solo puede clasificar gastos y una `INCOME` solo ingresos; `GENERAL` puede clasificar ambos. Las transferencias no admiten categoría. La migración no reclasifica ni elimina categorías de transacciones históricas.
 
 `MovementClassification` es un valor propiedad de un movimiento, no una tabla independiente: se persiste junto con el movimiento canónico y conserva referencias nulas para movimientos históricos no clasificados.
 

@@ -18,6 +18,9 @@
     <string name="plan_trial_summary">Periodo de prueba voluntario sin cobro inmediato</string>
     <string name="plan_trial_info">7 días de acceso completo sin costo. El cobro de S/ 29.99 se realizará al término del periodo de prueba. Cancelación directa desde la configuración de cuenta en cualquier momento sin penalización.</string>
     <string name="plan_trial_info_content_description">Información del periodo de prueba</string>
+    <string name="plan_annual_info">Opción anual: el precio indicado es S/ 29.99 por año. Esta selección guarda una preferencia; no inicia una prueba ni realiza un cobro.</string>
+    <string name="plan_monthly_info">Opción mensual: el precio indicado es S/ 4.99 por mes. Esta selección guarda una preferencia; no inicia una prueba ni realiza un cobro.</string>
+    <string name="plan_lifetime_info">Opción Lifetime: el precio indicado es S/ 49.99 como pago único. Esta selección guarda una preferencia; no realiza un cobro.</string>
     <string name="plan_annual_title">Premium Anual</string>
     <string name="plan_annual_price">S/ 29.99 / año</string>
     <string name="plan_annual_badge">Recomendado</string>

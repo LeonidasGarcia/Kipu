@@ -9,8 +9,8 @@ INSERT INTO auth.users (id, email) VALUES
     ('55555555-5555-5555-5555-555555555555', 'user5@kipu.app')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.cards (id, user_id, creation_operation_id, type, issuer, network, last_four_digits, currency, credit_limit_minor_units, billing_day, due_day, created_at, updated_at)
-VALUES ('card-credit-5555', '55555555-5555-5555-5555-555555555555', 'op-card-5555', 'CREDIT', 'Interbank', 'VISA', '5555', 'PEN', 300000, 20, 10, now(), now())
+INSERT INTO public.cards (id, user_id, creation_operation_id, network, alias, last4, is_credit, credit_limit_minor, closing_day, due_day, created_at, updated_at)
+VALUES ('55555555-5555-5555-5555-000000000001', '55555555-5555-5555-5555-555555555555', '55555555-5555-5555-5555-000000000011', 'VISA', 'Interbank', '5555', true, 300000, 20, 10, now(), now())
 ON CONFLICT DO NOTHING;
 
 SET LOCAL ROLE authenticated;
@@ -22,7 +22,7 @@ SELECT lives_ok(
     SELECT public.confirm_credit_purchase_v1(
         jsonb_build_object(
             'operation_id', 'a5555555-5555-5555-5555-555555555551',
-            'card_id', 'card-credit-5555',
+            'card_id', '55555555-5555-5555-5555-000000000001',
             'amount_minor_units', 12000,
             'currency', 'PEN',
             'merchant', 'Ripley',
@@ -45,7 +45,7 @@ SELECT is(
 -- Test 4: Verify card debt increased by exactly 12000
 SELECT is(
     (SELECT SUM(amount_minor_units)::bigint FROM public.financial_movements 
-     WHERE card_id = 'card-credit-5555' AND status = 'POSTED'),
+     WHERE card_id = '55555555-5555-5555-5555-000000000001' AND status = 'POSTED'),
     12000::bigint,
     'Card debt increased to 12000'
 );
@@ -56,7 +56,7 @@ SELECT lives_ok(
     SELECT public.confirm_credit_purchase_v1(
         jsonb_build_object(
             'operation_id', 'a5555555-5555-5555-5555-555555555551',
-            'card_id', 'card-credit-5555',
+            'card_id', '55555555-5555-5555-5555-000000000001',
             'amount_minor_units', 12000,
             'currency', 'PEN',
             'merchant', 'Ripley',
@@ -71,7 +71,7 @@ SELECT lives_ok(
 -- Test 6: Verify debt remains 12000 after re-execution
 SELECT is(
     (SELECT SUM(amount_minor_units)::bigint FROM public.financial_movements 
-     WHERE card_id = 'card-credit-5555' AND status = 'POSTED'),
+     WHERE card_id = '55555555-5555-5555-5555-000000000001' AND status = 'POSTED'),
     12000::bigint,
     'Card debt unchanged after idempotent re-execution'
 );
@@ -82,7 +82,7 @@ SELECT throws_ok(
     SELECT public.confirm_credit_purchase_v1(
         jsonb_build_object(
             'operation_id', 'a5555555-5555-5555-5555-555555555552',
-            'card_id', 'card-credit-5555',
+            'card_id', '55555555-5555-5555-5555-000000000001',
             'amount_minor_units', 5000,
             'currency', 'PEN',
             'merchant', 'Saga',

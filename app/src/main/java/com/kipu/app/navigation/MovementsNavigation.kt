@@ -13,7 +13,6 @@ fun NavGraphBuilder.movementsDestinations(
     composable(MOVEMENTS_HISTORY_ROUTE) {
         MovementHistoryRoute(
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
-            onNavigateToNotifications = { navController.navigate(PERMISSIONS_ROUTE) },
         )
     }
 }

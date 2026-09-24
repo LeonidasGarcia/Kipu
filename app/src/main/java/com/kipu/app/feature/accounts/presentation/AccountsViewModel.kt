@@ -26,6 +26,7 @@ import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,6 +52,7 @@ data class InstrumentsUiState(
     val archivedCards: List<Card> = emptyList(),
     val activeComputableCount: Int = 0,
     val maxFreeQuota: Int = FinancialInstrumentsRepository.FREE_TIER_MAX_COMPUTABLE_INSTRUMENTS,
+    val selectedFreeInstrumentIds: Set<String> = emptySet(),
     val isMasked: Boolean = false,
 )
 
@@ -73,6 +75,7 @@ class AccountsViewModel @Inject constructor(
     private val checkCardDuplicateUseCase: com.kipu.app.feature.accounts.domain.usecase.CheckCardDuplicate,
     private val checkUtilizationThresholds: com.kipu.app.feature.accounts.domain.usecase.CheckUtilizationThresholds,
     private val payCreditCardUseCase: com.kipu.app.feature.accounts.domain.usecase.PayCreditCard,
+    private val financialInstrumentsRepository: FinancialInstrumentsRepository,
 ) : ViewModel() {
 
     private val _isMasked = MutableStateFlow(false)
@@ -107,8 +110,9 @@ class AccountsViewModel @Inject constructor(
         observeInstruments.observeAccounts(activeOnly = false),
         observeInstruments.observeCards(activeOnly = false),
         observeInstruments.observeActiveComputableCount(),
+        financialInstrumentsRepository.observeSelectedFreeInstrumentIds(),
         _isMasked,
-    ) { accounts, cards, computableCount, masked ->
+    ) { accounts, cards, computableCount, selectedIds, masked ->
         val activeAccounts = accounts.filter { !it.isArchived }
         val archivedAccounts = accounts.filter { it.isArchived }
         val activeCards = cards.filter { !it.isArchived }
@@ -121,6 +125,7 @@ class AccountsViewModel @Inject constructor(
             activeCards = activeCards,
             archivedCards = archivedCards,
             activeComputableCount = computableCount,
+            selectedFreeInstrumentIds = selectedIds,
             isMasked = masked,
         )
     }.stateIn(
@@ -131,6 +136,24 @@ class AccountsViewModel @Inject constructor(
 
     fun toggleMasked() {
         _isMasked.value = !_isMasked.value
+    }
+
+    fun observeAccountBalance(accountId: AccountId): Flow<Money> =
+        financialInstrumentsRepository.observeAccountBalance(accountId)
+
+    fun saveFreeInstrumentSelection(ids: Set<String>) {
+        viewModelScope.launch {
+            financialInstrumentsRepository.saveSelectedFreeInstrumentIds(ids).fold(
+                onSuccess = {
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage(
+                            "Selección guardada en este dispositivo · Pendiente de sincronización",
+                        ),
+                    )
+                },
+                onFailure = { error -> _eventChannel.send(AccountUiEvent.Error(error.message ?: "No se pudo guardar la selección")) },
+            )
+        }
     }
 
     fun createAccount(
@@ -161,7 +184,9 @@ class AccountsViewModel @Inject constructor(
 
             createLiquidAccountUseCase(account).fold(
                 onSuccess = { created ->
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Cuenta creada con éxito"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Cuenta creada en este dispositivo · Pendiente de sincronización"),
+                    )
                     onSuccess(created)
                 },
                 onFailure = { error ->
@@ -180,7 +205,9 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             recordOpeningAdjustmentUseCase(accountId, correctedAmount, correctedDate).fold(
                 onSuccess = {
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Saldo inicial ajustado"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Saldo inicial corregido · Pendiente de sincronización"),
+                    )
                     onSuccess()
                 },
                 onFailure = { error ->
@@ -201,7 +228,9 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             updateInstrumentAppearanceUseCase(accountId, alias, preset, colorToken, iconToken).fold(
                 onSuccess = {
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Apariencia actualizada"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Presentación actualizada · Pendiente de sincronización"),
+                    )
                     onSuccess()
                 },
                 onFailure = { error ->
@@ -219,7 +248,9 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             archiveInstrumentUseCase(instrumentId, isCard).fold(
                 onSuccess = {
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Instrumento archivado"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Instrumento archivado · Pendiente de sincronización"),
+                    )
                     onSuccess()
                 },
                 onFailure = { error ->
@@ -238,7 +269,9 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             reactivateInstrumentUseCase(instrumentId, isCard, isComputable).fold(
                 onSuccess = {
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Instrumento reactivado"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Instrumento reactivado · Pendiente de sincronización"),
+                    )
                     onSuccess()
                 },
                 onFailure = { error ->
@@ -284,7 +317,9 @@ class AccountsViewModel @Inject constructor(
 
             registerDebitCardUseCase(card).fold(
                 onSuccess = { created ->
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Tarjeta de débito vinculada con éxito"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Tarjeta de débito vinculada · Pendiente de sincronización"),
+                    )
                     onSuccess(created)
                 },
                 onFailure = { error ->
@@ -329,7 +364,9 @@ class AccountsViewModel @Inject constructor(
 
             registerCreditCardUseCase(card).fold(
                 onSuccess = { created ->
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Tarjeta de crédito registrada con éxito"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Tarjeta de crédito registrada · Pendiente de sincronización"),
+                    )
                     onSuccess(created)
                 },
                 onFailure = { error ->
@@ -348,7 +385,9 @@ class AccountsViewModel @Inject constructor(
         viewModelScope.launch {
             payCreditCardUseCase(cardId, sourceAccountId, paymentAmount).fold(
                 onSuccess = {
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Pago de tarjeta registrado exitosamente"))
+                    _eventChannel.send(
+                        AccountUiEvent.ShowMessage("Pago guardado en este dispositivo · Pendiente de sincronización"),
+                    )
                     onSuccess()
                 },
                 onFailure = { error ->

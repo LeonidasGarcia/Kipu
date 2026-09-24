@@ -1,8 +1,9 @@
 BEGIN;
-SELECT plan(8);
+SELECT plan(17);
 
 -- Test 1: Function register_transaction_v1 exists
 SELECT has_function('public', 'register_transaction_v1', ARRAY['jsonb'], 'register_transaction_v1 exists');
+SELECT ok(NOT has_function_privilege('anon', 'public.register_transaction_v1(jsonb)', 'EXECUTE'), 'anon cannot execute financial RPC');
 
 -- Test 2: Tables exist
 SELECT has_table('public', 'transactions', 'transactions table exists');
@@ -15,7 +16,7 @@ INSERT INTO auth.users (id, email) VALUES
     ('44444444-4444-4444-4444-444444444444', 'user4@kipu.app')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.accounts (id, user_id, alias, type, currency_code) VALUES
+INSERT INTO public.accounts (id, user_id, name, account_type, currency_code) VALUES
     ('a3333333-0000-0000-0000-000000000001', '33333333-3333-3333-3333-333333333333', 'BCP Ahorros', 'SAVINGS', 'PEN'),
     ('a3333333-0000-0000-0000-000000000002', '33333333-3333-3333-3333-333333333333', 'Efectivo', 'CASH', 'PEN')
 ON CONFLICT (id) DO NOTHING;
@@ -31,12 +32,12 @@ SELECT is(
             'idempotency_key', 'idemp-tx-1',
             'request_hash', 'hash-tx-1',
             'transaction', jsonb_build_object(
-                'id', 't3333333-0000-0000-0000-000000000001',
+                'id', 'b3333333-0000-0000-0000-000000000001',
                 'type', 'EXPENSE',
                 'amount_minor', 2500,
                 'currency_code', 'PEN',
                 'source_account_id', 'a3333333-0000-0000-0000-000000000001',
-                'category_id', 'c3333333-0000-0000-0000-000000000001',
+                'category_id', '00000000-0000-0000-0000-000000000001',
                 'occurred_at', now()::text,
                 'note', 'Almuerzo'
             )
@@ -48,18 +49,44 @@ SELECT is(
 
 -- Test 6: Verify duplicate returns original response without creating duplicate transaction
 SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'idemp-provisional-1', 'request_hash', 'hash-provisional-1',
+        'transaction', jsonb_build_object(
+            'id', 'b3333333-0000-0000-0000-000000000003',
+            'type', 'EXPENSE', 'amount_minor', 800, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_provisional_text', 'Bodega del barrio'
+        )))->>'status'), 'APPLIED', 'Provisional merchant is accepted');
+SELECT is(
+    (SELECT merchant_provisional_text FROM public.transactions
+     WHERE id = 'b3333333-0000-0000-0000-000000000003'),
+    'Bodega del barrio', 'Provisional merchant text is persisted');
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'idemp-provisional-conflict', 'request_hash', 'hash-provisional-conflict',
+        'transaction', jsonb_build_object(
+            'id', 'b3333333-0000-0000-0000-000000000004',
+            'type', 'EXPENSE', 'amount_minor', 800, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_provisional_text', 'Bodega del barrio'
+        )))->'error'->>'code'), 'MERCHANT_CONFLICT', 'Merchant UUID and text are exclusive');
+
+SELECT is(
     (public.register_transaction_v1(
         jsonb_build_object(
             'contract_version', 1,
             'idempotency_key', 'idemp-tx-1',
             'request_hash', 'hash-tx-1',
             'transaction', jsonb_build_object(
-                'id', 't3333333-0000-0000-0000-000000000001',
+                'id', 'b3333333-0000-0000-0000-000000000001',
                 'type', 'EXPENSE',
                 'amount_minor', 2500,
                 'currency_code', 'PEN',
                 'source_account_id', 'a3333333-0000-0000-0000-000000000001',
-                'category_id', 'c3333333-0000-0000-0000-000000000001',
+                'category_id', '00000000-0000-0000-0000-000000000001',
                 'occurred_at', now()::text,
                 'note', 'Almuerzo'
             )
@@ -77,12 +104,12 @@ SELECT is(
             'idempotency_key', 'idemp-tx-1',
             'request_hash', 'different-hash',
             'transaction', jsonb_build_object(
-                'id', 't3333333-0000-0000-0000-000000000002',
+                'id', 'b3333333-0000-0000-0000-000000000002',
                 'type', 'EXPENSE',
                 'amount_minor', 5000,
                 'currency_code', 'PEN',
                 'source_account_id', 'a3333333-0000-0000-0000-000000000001',
-                'category_id', 'c3333333-0000-0000-0000-000000000001',
+                'category_id', '00000000-0000-0000-0000-000000000001',
                 'occurred_at', now()::text
             )
         )
@@ -92,6 +119,44 @@ SELECT is(
 );
 
 -- Test 8: RLS isolation - User 4 cannot see User 3 transactions
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'invalid-category', 'request_hash', 'invalid-category',
+        'transaction', jsonb_build_object(
+            'type', 'EXPENSE', 'amount_minor', 100, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000099'
+        )))->'error'->>'code'), 'CATEGORY_UNAVAILABLE', 'Unknown category is rejected');
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'invalid-merchant', 'request_hash', 'invalid-merchant',
+        'transaction', jsonb_build_object(
+            'type', 'EXPENSE', 'amount_minor', 100, 'currency_code', 'PEN',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001',
+            'merchant_id', '00000000-0000-0000-0000-000000000099'
+        )))->'error'->>'code'), 'MERCHANT_UNAVAILABLE', 'Unknown merchant is rejected');
+SELECT is(
+    (public.register_transaction_v1(jsonb_build_object(
+        'idempotency_key', 'invalid-currency', 'request_hash', 'invalid-currency',
+        'transaction', jsonb_build_object(
+            'type', 'EXPENSE', 'amount_minor', 100, 'currency_code', 'USD',
+            'source_account_id', 'a3333333-0000-0000-0000-000000000001',
+            'category_id', '00000000-0000-0000-0000-000000000001'
+        )))->'error'->>'code'), 'ACCOUNT_NOT_FOUND', 'Account currency mismatch is rejected');
+
+SELECT is(
+    (SELECT COUNT(*)::integer
+     FROM jsonb_array_elements(public.pull_financial_changes_v1(1, 0, 100)->'changes') change
+     WHERE change->>'entity_type' = 'TRANSACTION'),
+    2, 'Registered transactions are appended to the pull stream');
+SELECT ok(
+    EXISTS (
+        SELECT 1 FROM jsonb_array_elements(public.pull_financial_changes_v1(1, 0, 100)->'changes') change
+        WHERE change->>'entity_type' = 'TRANSACTION'
+          AND change->'payload'->>'merchant_provisional_text' = 'Bodega del barrio'
+    ), 'Pull stream contains complete movement payloads');
+
 SET LOCAL "request.jwt.claim.sub" = '44444444-4444-4444-4444-444444444444';
 
 SELECT is(

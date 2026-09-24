@@ -30,6 +30,8 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.auth.domain.AuthRepository
 import com.kipu.app.feature.auth.domain.model.AuthResult
+import com.kipu.app.feature.auth.data.RecoverySessionInstaller
+import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.settings.data.local.ProfilePreferencesDao
 import com.kipu.app.navigation.AUTH_LOGIN_ROUTE
 import com.kipu.app.navigation.AUTH_RESET_PASSWORD_ROUTE
@@ -50,6 +52,8 @@ import com.kipu.app.ui.theme.KipuTheme
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -74,6 +78,12 @@ class MainActivity : FragmentActivity() {
     @Inject
     lateinit var profileDao: ProfilePreferencesDao
 
+    @Inject
+    lateinit var planPreferencesDao: PlanPreferencesDao
+
+    @Inject
+    lateinit var recoverySessionInstaller: RecoverySessionInstaller
+
     private var pendingDeepLink by mutableStateOf<DeepLinkResult?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,7 +91,7 @@ class MainActivity : FragmentActivity() {
         lifecycle.addObserver(localLockCoordinator)
         enableEdgeToEdge()
 
-        pendingDeepLink = authDeepLinkHandler.handleDeepLink(intent?.data)
+        pendingDeepLink = intent?.data?.let { authDeepLinkHandler.handleDeepLink(it) }
 
         setContent {
             val scope = rememberCoroutineScope()
@@ -112,10 +122,18 @@ class MainActivity : FragmentActivity() {
             val isMasked = profileState.value?.hideBalances ?: false
 
             LaunchedEffect(Unit) {
-                val restoreResult = authRepository.restoreSession()
-                if (restoreResult.getOrNull() is AuthResult.Success && pendingDeepLink == null) {
-                    navController.navigate(MOVEMENTS_HISTORY_ROUTE) {
-                        popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                val restored = authRepository.restoreSession().getOrNull() as? AuthResult.Success
+                val hasActionableDeepLink = pendingDeepLink is DeepLinkResult.ResetPassword ||
+                    pendingDeepLink is DeepLinkResult.ConfirmEmail
+                if (restored != null && !hasActionableDeepLink) {
+                    postAuthDestination(restored.userId)?.let { destination ->
+                        navController.currentBackStackEntryFlow
+                            .filter { it.destination.route == AUTH_LOGIN_ROUTE }
+                            .first()
+                        navController.navigate(destination) {
+                            popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     }
                 }
             }
@@ -123,6 +141,7 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(pendingDeepLink) {
                 when (val link = pendingDeepLink) {
                     is DeepLinkResult.ResetPassword -> {
+                        recoverySessionInstaller.install(link.callbackUrl)
                         navController.navigate(AUTH_RESET_PASSWORD_ROUTE)
                         pendingDeepLink = null
                     }
@@ -149,7 +168,14 @@ class MainActivity : FragmentActivity() {
                                 authDestinations(
                                     navController = navController,
                                     onAuthenticated = { userId ->
-                                        navController.navigate(PLAN_SELECTION_ROUTE)
+                                        scope.launch {
+                                            postAuthDestination(userId)?.let { destination ->
+                                                navController.navigate(destination) {
+                                                    popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                        }
                                     },
                                 )
                                 planSelectionDestination(
@@ -200,6 +226,15 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingDeepLink = authDeepLinkHandler.handleDeepLink(intent.data)
+        pendingDeepLink = intent.data?.let { authDeepLinkHandler.handleDeepLink(it) }
+    }
+
+    private suspend fun postAuthDestination(rawUserId: String): String? {
+        val userId = runCatching { UUID.fromString(rawUserId) }.getOrNull() ?: return null
+        return if (planPreferencesDao.findPreference(userId) == null) {
+            PLAN_SELECTION_ROUTE
+        } else {
+            MOVEMENTS_HISTORY_ROUTE
+        }
     }
 }

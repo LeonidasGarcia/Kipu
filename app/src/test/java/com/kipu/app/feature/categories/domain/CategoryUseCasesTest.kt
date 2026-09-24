@@ -5,12 +5,15 @@ import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.feature.categories.data.FakeCategoryDao
+import com.kipu.app.feature.categories.data.FakeQuotaSelectionDao
+import com.kipu.app.feature.categories.data.FakeFeatureAccessCacheDao
 import com.kipu.app.feature.categories.data.FakeCategorySyncScheduler
 import com.kipu.app.feature.categories.data.FakeMerchantCatalogDao
 import com.kipu.app.feature.categories.data.FakeSessionCoordinator
 import com.kipu.app.feature.categories.data.OfflineFirstCategoriesRepository
 import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.categories.domain.usecase.SetCategoryActive
@@ -58,6 +61,9 @@ class CategoryUseCasesTest {
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
             featureAccessPolicy = FeatureAccessPolicy(),
+            quotaSelectionDao = FakeQuotaSelectionDao(),
+            featureAccessCacheDao = FakeFeatureAccessCacheDao(),
+            quotaPolicy = com.kipu.app.feature.plans.domain.PlanQuotaPolicy(),
         )
 
         observeCategories = ObserveCategories(repository)
@@ -114,6 +120,52 @@ class CategoryUseCasesTest {
         assertEquals(1, items.size)
         assertEquals(1, items.first().subcategories.size)
         assertEquals("Streaming", items.first().subcategories.first().displayName)
+    }
+
+    @Test
+    fun `typed root persists and subcategory inherits root type`() = runTest {
+        val root = createCategory(
+            ownerId = testUserId,
+            name = "Salario",
+            icon = "work",
+            color = "#336699",
+            categoryType = CategoryType.INCOME,
+        ).getOrThrow()
+        val child = createCategory(
+            ownerId = testUserId,
+            name = "Bonificación",
+            icon = "star",
+            color = "#336699",
+            parentId = root.id,
+        ).getOrThrow()
+
+        assertEquals(CategoryType.INCOME, root.categoryType)
+        assertEquals(CategoryType.INCOME, child.categoryType)
+        assertEquals("INCOME", categoryDao.getCategoryById(root.id.value)?.categoryType)
+        assertEquals("INCOME", categoryDao.getCategoryById(child.id.value)?.categoryType)
+    }
+
+    @Test
+    fun `createCategory rejects a subcategory type that differs from its root`() = runTest {
+        val root = createCategory(
+            ownerId = testUserId,
+            name = "Gasto",
+            icon = "shopping_cart",
+            color = "#336699",
+            categoryType = CategoryType.EXPENSE,
+        ).getOrThrow()
+
+        val result = createCategory(
+            ownerId = testUserId,
+            name = "Ingreso inválido",
+            icon = "work",
+            color = "#336699",
+            parentId = root.id,
+            categoryType = CategoryType.INCOME,
+        )
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("match its root") == true)
     }
 
     @Test

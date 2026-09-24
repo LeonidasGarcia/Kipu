@@ -1,5 +1,11 @@
 package com.kipu.app.feature.accounts.presentation.instruments
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,26 +45,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
+import com.kipu.app.feature.accounts.presentation.components.InstrumentCardPreview
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 fun parseAmountToMinorUnits(input: String): Long? {
-    val clean = input.trim().replace(",", ".")
-    if (clean.isBlank()) return 0L
-    val parts = clean.split(".")
-    if (parts.size > 2) return null
-    val major = parts[0].toLongOrNull() ?: return null
-    if (major < 0) return null
-    val minor = if (parts.size == 2) {
-        val centsStr = parts[1].take(2).padEnd(2, '0')
-        centsStr.toLongOrNull() ?: return null
-    } else {
-        0L
-    }
-    return Math.addExact(Math.multiplyExact(major, 100L), minor)
+    if (input.isBlank()) return 0L
+    return MoneyInputParser.parseMinorUnits(input)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,6 +64,7 @@ fun parseAmountToMinorUnits(input: String): Long? {
 fun AccountFormScreen(
     viewModel: AccountsViewModel,
     onNavigateBack: () -> Unit,
+    onSaveSuccess: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostStateState() }
@@ -76,13 +75,19 @@ fun AccountFormScreen(
     var selectedPreset by remember { mutableStateOf<AccountPreset?>(AccountPreset.BCP) }
     var initialBalanceInput by remember { mutableStateOf("0.00") }
     var isSubmitting by remember { mutableStateOf(false) }
+    var aliasError by remember { mutableStateOf<String?>(null) }
+    var initialBalanceError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is AccountUiEvent.ShowMessage -> {
-                    snackbarHostState.showSnackbar(event.message)
-                    onNavigateBack()
+                    if (onSaveSuccess != null) {
+                        onSaveSuccess(event.message)
+                    } else {
+                        snackbarHostState.showSnackbar(event.message)
+                        onNavigateBack()
+                    }
                 }
                 is AccountUiEvent.Error -> {
                     isSubmitting = false
@@ -120,12 +125,29 @@ fun AccountFormScreen(
                 color = MaterialTheme.colorScheme.primary,
             )
 
+            InstrumentCardPreview(
+                title = alias.ifBlank { selectedPreset?.defaultName ?: "Mi cuenta" },
+                instrumentType = when (selectedType) {
+                    AccountType.CASH -> "Efectivo"
+                    AccountType.SAVINGS -> "Ahorros"
+                    AccountType.BANK -> "Corriente"
+                    AccountType.DIGITAL_WALLET -> "Billetera"
+                },
+                subtitle = "${selectedPreset?.defaultName ?: "Cuenta genérica"} · ${selectedCurrency.name}",
+            )
+
             OutlinedTextField(
                 value = alias,
-                onValueChange = { if (it.length <= 80) alias = it },
+                onValueChange = {
+                    if (it.length <= 80) alias = it
+                    aliasError = null
+                },
                 label = { Text("Nombre o Alias de la cuenta") },
                 placeholder = { Text("Ej. Sueldo BCP, Billetera") },
+                isError = aliasError != null,
+                supportingText = aliasError?.let { { Text(it) } },
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -206,15 +228,26 @@ fun AccountFormScreen(
             )
             OutlinedTextField(
                 value = initialBalanceInput,
-                onValueChange = { initialBalanceInput = it },
+                onValueChange = {
+                    initialBalanceInput = it
+                    initialBalanceError = null
+                },
                 label = { Text("Importe inicial (${selectedCurrency.name})") },
+                isError = initialBalanceError != null,
+                supportingText = initialBalanceError?.let { { Text(it) } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            if (selectedType != AccountType.CASH) {
+            AnimatedVisibility(
+                visible = selectedType != AccountType.CASH,
+                enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+            ) {
                 Card(
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -232,9 +265,11 @@ fun AccountFormScreen(
                 onClick = {
                     val minorUnits = parseAmountToMinorUnits(initialBalanceInput)
                     if (alias.isBlank()) {
+                        aliasError = "Escribe un alias para identificar la cuenta."
                         return@Button
                     }
                     if (minorUnits == null) {
+                        initialBalanceError = "Ingresa un importe válido con hasta dos decimales."
                         return@Button
                     }
                     isSubmitting = true
@@ -248,7 +283,7 @@ fun AccountFormScreen(
                         iconToken = selectedPreset?.defaultIconToken,
                     )
                 },
-                enabled = !isSubmitting && alias.isNotBlank() && parseAmountToMinorUnits(initialBalanceInput) != null,
+                enabled = !isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),

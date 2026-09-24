@@ -7,9 +7,13 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.Category
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
+import com.kipu.app.feature.categories.domain.usecase.ObserveSelectedFreeCategoryRoots
+import com.kipu.app.feature.categories.domain.usecase.SaveSelectedFreeCategoryRoots
 import com.kipu.app.feature.categories.domain.usecase.SetCategoryActive
 import com.kipu.app.feature.categories.domain.usecase.UpdateCategoryPresentation
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,14 +26,26 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class CategoryTab {
-    GASTOS,
-    INGRESOS,
+    EXPENSE,
+    INCOME;
+
+    val categoryType: CategoryType
+        get() = when (this) {
+            EXPENSE -> CategoryType.EXPENSE
+            INCOME -> CategoryType.INCOME
+        }
+
+    fun includes(category: Category): Boolean =
+        category.categoryType == categoryType || category.categoryType == CategoryType.GENERAL
+
+    fun filterCategories(categories: List<CategoryItem>): List<CategoryItem> =
+        categories.filter { includes(it.category) }
 }
 
 data class CategoriesUiState(
     val isLoading: Boolean = true,
     val categories: List<CategoryItem> = emptyList(),
-    val selectedTab: CategoryTab = CategoryTab.GASTOS,
+    val selectedTab: CategoryTab = CategoryTab.EXPENSE,
     val activeCustomRootsCount: Int = 0,
     val maxCustomRoots: Int = 5,
     val isCreateDialogOpen: Boolean = false,
@@ -39,10 +55,14 @@ data class CategoriesUiState(
     val createCategoryName: String = "",
     val createCategoryIcon: String = "restaurant",
     val createCategoryColor: String = "#0F766E",
+    val createCategoryType: CategoryType = CategoryType.EXPENSE,
     val showQuotaExceededDialog: Boolean = false,
     val categoryToDelete: CategoryItem? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null,
+    val selectedFreeCategoryRootIds: Set<CategoryId> = emptySet(),
+    val quotaSelectionDraft: Set<CategoryId> = emptySet(),
+    val isQuotaSelectionOpen: Boolean = false,
 ) {
     val isFreeLimitReached: Boolean get() = activeCustomRootsCount >= maxCustomRoots
     val isEditing: Boolean get() = editingCategoryId != null
@@ -54,6 +74,8 @@ class CategoriesViewModel @Inject constructor(
     private val createCategory: CreateCategory,
     private val setCategoryActive: SetCategoryActive,
     private val updateCategoryPresentation: UpdateCategoryPresentation,
+    private val observeSelectedFreeCategoryRoots: ObserveSelectedFreeCategoryRoots,
+    private val saveSelectedFreeCategoryRoots: SaveSelectedFreeCategoryRoots,
     private val sessionCoordinator: SessionCoordinator,
 ) : ViewModel() {
 
@@ -82,16 +104,72 @@ class CategoriesViewModel @Inject constructor(
 
     private fun observeUserCategories(userId: UserId) {
         viewModelScope.launch {
-            observeCategories(userId).collectLatest { items ->
+            kotlinx.coroutines.flow.combine(
+                observeCategories(userId),
+                observeSelectedFreeCategoryRoots(userId),
+            ) { items, selected -> items to selected }.collectLatest { (items, selected) ->
                 val activeCustomRoots = items.count { it.category.isRoot && it.category.isCustom && it.category.isActive }
                 _uiState.update { current ->
                     current.copy(
                         isLoading = false,
                         categories = items,
                         activeCustomRootsCount = activeCustomRoots,
+                        selectedFreeCategoryRootIds = selected,
                     )
                 }
             }
+        }
+    }
+
+    fun openQuotaSelection() {
+        val state = _uiState.value
+        val activeRoots = state.categories.filter { it.category.isRoot && it.category.isCustom && it.category.isActive }
+            .map { it.category.id }.toSet()
+        _uiState.update {
+            it.copy(
+                isQuotaSelectionOpen = true,
+                quotaSelectionDraft = it.selectedFreeCategoryRootIds.intersect(activeRoots),
+                errorMessage = null,
+            )
+        }
+    }
+
+    fun dismissQuotaSelection() {
+        _uiState.update { it.copy(isQuotaSelectionOpen = false, quotaSelectionDraft = emptySet()) }
+    }
+
+    fun toggleQuotaSelection(categoryId: CategoryId) {
+        _uiState.update { state ->
+            if (categoryId in state.quotaSelectionDraft) {
+                state.copy(quotaSelectionDraft = state.quotaSelectionDraft - categoryId)
+            } else if (state.quotaSelectionDraft.size < state.maxCustomRoots) {
+                state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
+            } else {
+                state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRoots} categorías raíz")
+            }
+        }
+    }
+
+    fun saveQuotaSelection() {
+        val userId = currentUserId ?: return
+        val selected = _uiState.value.quotaSelectionDraft
+        if (selected.size > _uiState.value.maxCustomRoots) return
+        viewModelScope.launch {
+            saveSelectedFreeCategoryRoots(userId, selected).fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(
+                            isQuotaSelectionOpen = false,
+                            selectedFreeCategoryRootIds = selected,
+                            quotaSelectionDraft = emptySet(),
+                            successMessage = "Selección del plan guardada en este dispositivo",
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update { it.copy(errorMessage = error.message ?: "No se pudo guardar la selección") }
+                },
+            )
         }
     }
 
@@ -106,6 +184,13 @@ class CategoriesViewModel @Inject constructor(
             _uiState.update { it.copy(showQuotaExceededDialog = true) }
             return
         }
+        val parentCategoryType = parentId?.let { requestedParentId ->
+            state.categories.asSequence()
+                .flatMap { root -> sequenceOf(root) + root.subcategories.asSequence() }
+                .firstOrNull { it.category.id == requestedParentId }
+                ?.category
+                ?.categoryType
+        }
         _uiState.update {
             it.copy(
                 isCreateDialogOpen = true,
@@ -114,6 +199,7 @@ class CategoriesViewModel @Inject constructor(
                 createCategoryName = "",
                 createCategoryIcon = if (parentId == null) "restaurant" else "shopping_cart",
                 createCategoryColor = "#0F766E",
+                createCategoryType = parentCategoryType ?: state.selectedTab.categoryType,
                 errorMessage = null,
             )
         }
@@ -129,6 +215,7 @@ class CategoriesViewModel @Inject constructor(
                 createCategoryName = item.displayName,
                 createCategoryIcon = item.icon,
                 createCategoryColor = item.color,
+                createCategoryType = item.category.categoryType,
                 errorMessage = null,
             )
         }
@@ -141,6 +228,7 @@ class CategoriesViewModel @Inject constructor(
                 editingCategoryId = null,
                 createParentId = null,
                 createCategoryName = "",
+                createCategoryType = it.selectedTab.categoryType,
                 errorMessage = null,
             )
         }
@@ -197,7 +285,19 @@ class CategoriesViewModel @Inject constructor(
     }
 
     fun onParentIdChanged(parentId: CategoryId?) {
-        _uiState.update { it.copy(createParentId = parentId) }
+        _uiState.update { state ->
+            val parentType = parentId?.let { requestedParentId ->
+                state.categories.asSequence()
+                    .flatMap { root -> sequenceOf(root) + root.subcategories.asSequence() }
+                    .firstOrNull { it.category.id == requestedParentId }
+                    ?.category
+                    ?.categoryType
+            }
+            state.copy(
+                createParentId = parentId,
+                createCategoryType = parentType ?: state.selectedTab.categoryType,
+            )
+        }
     }
 
     fun submitCreateCategory() {
@@ -247,6 +347,7 @@ class CategoriesViewModel @Inject constructor(
                     icon = state.createCategoryIcon,
                     color = state.createCategoryColor,
                     parentId = state.createParentId,
+                    categoryType = state.createCategoryType,
                 )
 
                 result.fold(

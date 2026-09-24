@@ -43,6 +43,27 @@ const selectionResponse = {
   server_time: "2026-09-15T12:00:00.000000Z",
 };
 
+const quotaSelectionRequest = {
+  contract_version: 1,
+  operation_id: "6d92af34-c725-4a1a-a863-2c93fa214c86",
+  feature_key: "INSTRUMENTS",
+  selection_revision: "1",
+  items: [
+    { resource_id: "62000000-0000-4000-8000-000000000001", resource_type: "ACCOUNT" },
+    { resource_id: "62000000-0000-4000-8000-000000000002", resource_type: "CARD" },
+  ],
+};
+
+const quotaSelectionResponse = {
+  contract_version: 1,
+  operation_id: quotaSelectionRequest.operation_id,
+  result: "APPLIED",
+  feature_key: "INSTRUMENTS",
+  accepted_revision: "1",
+  current_items: quotaSelectionRequest.items,
+  server_time: "2026-09-23T12:00:00.000000Z",
+};
+
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
@@ -123,6 +144,49 @@ Deno.test("POST /plans/selection delegates the exact typed payload and returns t
     !("user_id" in calls[0].args),
     "user identity must come from the JWT, never the body",
   );
+});
+
+Deno.test("POST /plans/quota-selection delegates typed resources without trusting a body owner", async () => {
+  const { handler, calls } = harness({ data: quotaSelectionResponse });
+  const response = await handler(request("/quota-selection", {
+    method: "POST",
+    headers: { authorization: `Bearer ${validJwt}`, "content-type": "application/json" },
+    body: JSON.stringify(quotaSelectionRequest),
+  }));
+
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), quotaSelectionResponse);
+  assertEquals(calls, [{
+    name: "apply_plan_quota_selection",
+    args: quotaSelectionRequest,
+    authorization: `Bearer ${validJwt}`,
+  }]);
+  assert(!("user_id" in calls[0].args), "owner must come from JWT");
+});
+
+Deno.test("quota-selection rejects malformed, duplicate, over-limit, or group-mismatched resources before RPC", async () => {
+  const tooMany = Array.from({ length: 5 }, (_, index) => ({
+    resource_id: `62000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    resource_type: "ACCOUNT",
+  }));
+  const invalid: Array<Record<string, unknown>> = [
+    { ...quotaSelectionRequest, items: tooMany },
+    { ...quotaSelectionRequest, items: [quotaSelectionRequest.items[0], quotaSelectionRequest.items[0]] },
+    { ...quotaSelectionRequest, items: [{ resource_id: "bad", resource_type: "ACCOUNT" }] },
+    { ...quotaSelectionRequest, items: [{ resource_id: "62000000-0000-4000-8000-000000000003", resource_type: "DEBT" }] },
+    { ...quotaSelectionRequest, user_id: "51000000-0000-4000-8000-000000000001" },
+  ];
+  for (const body of invalid) {
+    const { handler, calls } = harness({ data: quotaSelectionResponse });
+    const response = await handler(request("/quota-selection", {
+      method: "POST",
+      headers: { authorization: `Bearer ${validJwt}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }));
+    assertEquals(response.status, 400);
+    assertEquals(await response.json(), { code: "INVALID_REQUEST", retryable: false });
+    assertEquals(calls.length, 0);
+  }
 });
 
 Deno.test("all APPLIED, DUPLICATE, STALE and CONFLICT outcomes remain HTTP 200", async () => {

@@ -211,3 +211,13 @@ T039 Presentation and conflict use cases
 - All tasks use strict checkbox, sequential-ID, optional-parallel, story-label, and exact-path formatting.
 - `[P]` denotes only work that can avoid conflicting incomplete files after its documented prerequisite is satisfied.
 - Do not introduce Sprint 5 aliases, original merchant text, or personal category preferences while executing these tasks.
+
+## Phase 7: HU-14 expense/income category types
+
+**Purpose**: replace decorative category tabs with persisted, owner-safe type filters while preserving legacy classifications.
+
+- [x] T051 Add `EXPENSE`, `INCOME`, and `GENERAL` to the category domain/local/remote model; existing untyped rows remain `GENERAL` in both tabs in `app/src/main/java/com/kipu/app/feature/categories/domain/model/CategoryModels.kt`, `app/src/main/java/com/kipu/app/feature/categories/data/local/CategoryEntities.kt`, and `app/src/main/java/com/kipu/app/feature/categories/data/remote/CategoryDtos.kt`.
+- [x] T052 Add Room 9→10 and forward-only Postgres migrations that default existing categories to `GENERAL`, preserve movement links, inherit a subcategory's root type, and validate new movement classification in `app/src/main/java/com/kipu/app/core/database/RoomMigrations.kt` and `supabase/migrations/20260923140000_category_types.sql`.
+- [x] T053 Implement real Gastos/Ingresos filters, selected-tab root creation, inherited subcategory type, and type-filtered movement choices in `app/src/main/java/com/kipu/app/feature/categories/presentation/categories/CategoriesScreen.kt`, `app/src/main/java/com/kipu/app/feature/categories/presentation/categories/CategoriesViewModel.kt`, and `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModel.kt`.
+- [x] T054 Add domain, repository payload, Room migration, movement validation, and pgTAP regression coverage in `app/src/test/java/com/kipu/app/feature/categories/domain/CategoryRulesTest.kt`, `app/src/androidTest/java/com/kipu/app/feature/categories/data/local/CategoryTypeMigrationTest.kt`, and `supabase/tests/database/category_type_test.sql`.
+- [x] T055 Run the updated Compose category screen tests and category-selector acceptance flow on a connected device/emulator; verified on connected physical device (Samsung SM-S926B, Android 16) with remote database and live account.

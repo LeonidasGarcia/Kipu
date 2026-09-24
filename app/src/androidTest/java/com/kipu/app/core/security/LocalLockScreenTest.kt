@@ -1,12 +1,13 @@
 package com.kipu.app.core.security
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.fragment.app.FragmentActivity
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kipu.app.core.security.model.LocalAuthenticatorCapability
+import com.kipu.app.testing.TestFragmentActivity
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -16,7 +17,7 @@ import org.junit.runner.RunWith
 class LocalLockScreenTest {
 
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createAndroidComposeRule<TestFragmentActivity>()
 
     private class FakeGateway : LocalAuthenticatorGateway {
         var authenticateCalled = false

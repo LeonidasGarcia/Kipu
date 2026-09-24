@@ -1,8 +1,12 @@
 package com.kipu.app.feature.movements.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,6 +35,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -40,6 +47,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SheetState
@@ -50,6 +58,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,11 +68,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -73,31 +83,43 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.R
+import com.kipu.app.feature.categories.presentation.components.MerchantPickerBottomSheet
+import com.kipu.app.feature.categories.presentation.components.MerchantPickerViewModel
 import com.kipu.app.feature.movements.domain.model.MovementType
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.Date
 import java.util.Locale
-
-private val PrimaryTeal = Color(0xFF0F766E)
-private val IncomeGreen = Color(0xFF16A34A)
-private val ExpenseRed = Color(0xFFE85D5D)
-private val WarningAmber = Color(0xFFF59E0B)
+import com.kipu.app.ui.theme.KipuExpense
+import com.kipu.app.ui.theme.KipuIncome
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickMovementBottomSheet(
     onDismissRequest: () -> Unit,
+    onMessage: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: QuickMovementViewModel = hiltViewModel(),
+    merchantPickerViewModel: MerchantPickerViewModel = hiltViewModel(),
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val merchantPickerState by merchantPickerViewModel.uiState.collectAsStateWithLifecycle()
+    var showMerchantPicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
-                is QuickMovementUiEvent.TransactionSaved -> onDismissRequest()
-                is QuickMovementUiEvent.ShowMessage -> {}
+                is QuickMovementUiEvent.TransactionSaved -> {
+                    onDismissRequest()
+                    onMessage(event.message)
+                }
+                is QuickMovementUiEvent.ShowMessage -> onMessage(event.message)
             }
         }
     }
@@ -106,7 +128,7 @@ fun QuickMovementBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        containerColor = Color.White,
+        containerColor = colors.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -114,7 +136,7 @@ fun QuickMovementBottomSheet(
                     .width(36.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFFE2E8F0))
+                    .background(colors.outlineVariant)
             )
         },
         modifier = modifier.testTag("quick_movement_sheet"),
@@ -126,12 +148,71 @@ fun QuickMovementBottomSheet(
             onSourceAccountSelected = viewModel::onSourceAccountSelected,
             onDestinationAccountSelected = viewModel::onDestinationAccountSelected,
             onCategorySelected = viewModel::onCategorySelected,
-            onMerchantChanged = viewModel::onMerchantChanged,
+            onOpenMerchantPicker = { showMerchantPicker = true },
+            onClearMerchant = {
+                merchantPickerViewModel.clearSelection()
+                viewModel.onMerchantCleared()
+            },
             onNoteChanged = viewModel::onNoteChanged,
+            onOpenDatePicker = { showDatePicker = true },
             onToggleMoreDetails = viewModel::onToggleMoreDetails,
             onSave = viewModel::onSave,
             onClose = onDismissRequest,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        )
+    }
+
+    if (showDatePicker) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = toUtcDateMillis(uiState.occurredAt),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.selectedDateMillis?.let { selectedDateMillis ->
+                            viewModel.onOccurredAtChanged(
+                                datePickerMillisToLocalInstant(selectedDateMillis, uiState.occurredAt),
+                            )
+                        }
+                        showDatePicker = false
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("Listo")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDatePicker = false },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("Cancelar")
+                }
+            },
+        ) {
+            DatePicker(state = state)
+        }
+    }
+
+    if (showMerchantPicker) {
+        MerchantPickerBottomSheet(
+            state = merchantPickerState,
+            onQueryChange = merchantPickerViewModel::onQueryChanged,
+            onSelectMerchant = { merchant ->
+                merchantPickerViewModel.selectMerchant(merchant)
+                viewModel.onMerchantSelected(merchant)
+            },
+            onSetProvisionalText = { name ->
+                merchantPickerViewModel.setProvisionalText(name)
+                viewModel.onMerchantProvisionalText(name)
+            },
+            onClearSelection = {
+                merchantPickerViewModel.clearSelection()
+                viewModel.onMerchantCleared()
+            },
+            onDismiss = { showMerchantPicker = false },
         )
     }
 
@@ -152,14 +233,17 @@ fun QuickMovementContent(
     onSourceAccountSelected: (String) -> Unit,
     onDestinationAccountSelected: (String) -> Unit,
     onCategorySelected: (CategoryOption) -> Unit,
-    onMerchantChanged: (String) -> Unit,
+    onOpenMerchantPicker: () -> Unit,
+    onClearMerchant: () -> Unit,
     onNoteChanged: (String) -> Unit,
+    onOpenDatePicker: () -> Unit,
     onToggleMoreDetails: () -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
+    val colors = MaterialTheme.colorScheme
 
     Column(
         modifier = modifier
@@ -176,7 +260,7 @@ fun QuickMovementContent(
             Text(
                 text = stringResource(R.string.movement_register_title),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = Color(0xFF0F172A),
+                color = colors.onSurface,
             )
             IconButton(
                 onClick = onClose,
@@ -187,7 +271,7 @@ fun QuickMovementContent(
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = null,
-                    tint = Color(0xFF64748B)
+                    tint = colors.onSurfaceVariant
                 )
             }
         }
@@ -204,16 +288,16 @@ fun QuickMovementContent(
 
         TabRow(
             selectedTabIndex = selectedTabIndex,
-            containerColor = Color(0xFFF1F5F9),
-            contentColor = PrimaryTeal,
+            containerColor = colors.surfaceContainerLow,
+            contentColor = colors.primary,
             indicator = { tabPositions ->
                 if (selectedTabIndex < tabPositions.size) {
                     TabRowDefaults.SecondaryIndicator(
                         Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
                         color = when (uiState.type) {
-                            MovementType.EXPENSE -> ExpenseRed
-                            MovementType.INCOME -> IncomeGreen
-                            MovementType.TRANSFER -> PrimaryTeal
+                            MovementType.EXPENSE -> KipuExpense
+                            MovementType.INCOME -> KipuIncome
+                            MovementType.TRANSFER -> colors.primary
                         }
                     )
                 }
@@ -232,7 +316,7 @@ fun QuickMovementContent(
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
                             ),
-                            color = if (selectedTabIndex == index) Color(0xFF0F172A) else Color(0xFF64748B)
+                            color = if (selectedTabIndex == index) colors.onSurface else colors.onSurfaceVariant
                         )
                     },
                     modifier = Modifier
@@ -249,7 +333,7 @@ fun QuickMovementContent(
             Text(
                 text = stringResource(R.string.movement_amount_label),
                 style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF475569)
+                color = colors.onSurfaceVariant
             )
             Spacer(modifier = Modifier.height(6.dp))
             OutlinedTextField(
@@ -260,7 +344,7 @@ fun QuickMovementContent(
                         "0.00",
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontFeatureSettings = "tnum",
-                            color = Color(0xFF94A3B8)
+                            color = colors.outline
                         )
                     )
                 },
@@ -270,9 +354,9 @@ fun QuickMovementContent(
                         style = MaterialTheme.typography.headlineMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = when (uiState.type) {
-                                MovementType.EXPENSE -> ExpenseRed
-                                MovementType.INCOME -> IncomeGreen
-                                MovementType.TRANSFER -> PrimaryTeal
+                                MovementType.EXPENSE -> KipuExpense
+                                MovementType.INCOME -> KipuIncome
+                                MovementType.TRANSFER -> colors.primary
                             }
                         )
                     )
@@ -280,16 +364,16 @@ fun QuickMovementContent(
                 textStyle = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
                     fontFeatureSettings = "tnum",
-                    color = Color(0xFF0F172A)
+                    color = colors.onSurface
                 ),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 isError = uiState.amountError != null,
-                supportingText = uiState.amountError?.let { { Text(it, color = ExpenseRed) } },
+                supportingText = uiState.amountError?.let { { Text(it, color = colors.error) } },
                 singleLine = true,
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryTeal,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.outlineVariant,
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -311,22 +395,34 @@ fun QuickMovementContent(
         )
 
         // Destination Account Selector (Transfer only)
-        if (uiState.type == MovementType.TRANSFER) {
-            Spacer(modifier = Modifier.height(16.dp))
-            AccountDropdownSelector(
-                label = stringResource(R.string.movement_destination_account),
-                accounts = uiState.availableAccounts.filter { it.id.value != uiState.selectedSourceAccountId },
-                selectedAccountId = uiState.selectedDestinationAccountId,
-                onAccountSelected = onDestinationAccountSelected,
-                error = uiState.destinationAccountError,
-                modifier = Modifier.testTag("selector_destination_account"),
-            )
+        AnimatedVisibility(
+            visible = uiState.type == MovementType.TRANSFER,
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                AccountDropdownSelector(
+                    label = stringResource(R.string.movement_destination_account),
+                    accounts = uiState.availableAccounts.filter {
+                        it.id.value != uiState.selectedSourceAccountId && it.currency.name == uiState.currency
+                    },
+                    selectedAccountId = uiState.selectedDestinationAccountId,
+                    onAccountSelected = onDestinationAccountSelected,
+                    error = uiState.destinationAccountError,
+                    modifier = Modifier.testTag("selector_destination_account"),
+                )
+            }
         }
 
         // Category Selector (Expense: mandatory, Income: optional, Transfer: none)
-        if (uiState.type != MovementType.TRANSFER) {
-            Spacer(modifier = Modifier.height(16.dp))
+        AnimatedVisibility(
+            visible = uiState.type != MovementType.TRANSFER,
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+        ) {
             Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -334,17 +430,24 @@ fun QuickMovementContent(
                     Text(
                         text = if (uiState.type == MovementType.EXPENSE) "Categoría *" else "Categoría (opcional)",
                         style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFF475569)
+                        color = colors.onSurfaceVariant
                     )
                     if (uiState.selectedCategoryName != null) {
                         Text(
                             text = uiState.selectedCategoryName,
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = PrimaryTeal
+                            color = colors.primary
                         )
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
+                if (uiState.availableCategories.isEmpty()) {
+                    Text(
+                        "Cargando categorías. Conéctate para sincronizarlas si aún no aparecen.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -357,8 +460,8 @@ fun QuickMovementContent(
                             onClick = { onCategorySelected(category) },
                             label = { Text(category.name) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = PrimaryTeal.copy(alpha = 0.15f),
-                                selectedLabelColor = PrimaryTeal,
+                                selectedContainerColor = colors.primaryContainer,
+                                selectedLabelColor = colors.onPrimaryContainer,
                             ),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
@@ -369,28 +472,28 @@ fun QuickMovementContent(
                 }
                 if (uiState.categoryError != null) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text(uiState.categoryError, color = ExpenseRed, style = MaterialTheme.typography.bodySmall)
+                    Text(uiState.categoryError, color = colors.error, style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = onOpenMerchantPicker,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
+                    ) {
+                        Text(
+                            uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
+                            maxLines = 1,
+                        )
+                    }
+                    if (uiState.merchantName.isNotBlank()) {
+                        IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
+                        }
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Merchant input
-            OutlinedTextField(
-                value = uiState.merchantName,
-                onValueChange = onMerchantChanged,
-                label = { Text(stringResource(R.string.movement_merchant)) },
-                placeholder = { Text(stringResource(R.string.movement_select_merchant)) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryTeal,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("input_merchant"),
-            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -399,7 +502,15 @@ fun QuickMovementContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onToggleMoreDetails() }
+                .heightIn(min = 48.dp)
+                .toggleable(
+                    value = uiState.isMoreDetailsExpanded,
+                    role = Role.Button,
+                    onValueChange = { onToggleMoreDetails() },
+                )
+                .semantics {
+                    stateDescription = if (uiState.isMoreDetailsExpanded) "Expandido" else "Contraído"
+                }
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -407,26 +518,32 @@ fun QuickMovementContent(
             Text(
                 text = stringResource(R.string.movement_more_details),
                 style = MaterialTheme.typography.titleSmall,
-                color = PrimaryTeal
+                color = colors.primary
             )
             Icon(
                 imageVector = if (uiState.isMoreDetailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
-                tint = PrimaryTeal
+                tint = colors.primary
             )
         }
 
-        AnimatedVisibility(visible = uiState.isMoreDetailsExpanded) {
+        AnimatedVisibility(
+            visible = uiState.isMoreDetailsExpanded,
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+        ) {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 // Date Display
                 val formattedDate = remember(uiState.occurredAt) {
                     SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(uiState.occurredAt))
                 }
-                Text(
-                    text = "Fecha: $formattedDate",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B)
-                )
+                OutlinedButton(
+                    onClick = onOpenDatePicker,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Fecha: $formattedDate", color = colors.onSurface)
+                }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -439,8 +556,8 @@ fun QuickMovementContent(
                     maxLines = 3,
                     shape = RoundedCornerShape(12.dp),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryTeal,
-                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedBorderColor = colors.primary,
+                        unfocusedBorderColor = colors.outlineVariant,
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -453,7 +570,7 @@ fun QuickMovementContent(
             Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = uiState.generalError,
-                color = ExpenseRed,
+                color = colors.error,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -468,18 +585,20 @@ fun QuickMovementContent(
             enabled = !uiState.isSaving,
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = PrimaryTeal,
-                contentColor = Color.White
+                containerColor = colors.primary,
+                contentColor = colors.onPrimary
             ),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
                 .testTag("btn_save_transaction")
-                .semantics { contentDescription = "Guardar transacción" },
+                .semantics {
+                    contentDescription = if (uiState.isSaving) "Guardando transacción" else "Guardar transacción"
+                },
         ) {
             if (uiState.isSaving) {
                 CircularProgressIndicator(
-                    color = Color.White,
+                    color = colors.onPrimary,
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(24.dp)
                 )
@@ -505,6 +624,7 @@ private fun AccountDropdownSelector(
     error: String?,
     modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
     val selectedAccount = accounts.find { it.id.value == selectedAccountId }
 
@@ -512,7 +632,7 @@ private fun AccountDropdownSelector(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF475569)
+            color = colors.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(6.dp))
         ExposedDropdownMenuBox(
@@ -526,11 +646,11 @@ private fun AccountDropdownSelector(
                 readOnly = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 isError = error != null,
-                supportingText = error?.let { { Text(it, color = ExpenseRed) } },
+                supportingText = error?.let { { Text(it, color = colors.error) } },
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryTeal,
-                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.outlineVariant,
                 ),
                 modifier = Modifier
                     .menuAnchor()
@@ -555,7 +675,7 @@ private fun AccountDropdownSelector(
                                     Text(
                                         "${account.type.name} • ${account.currency.name}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF64748B)
+                                        color = colors.onSurfaceVariant
                                     )
                                 }
                             },
@@ -577,13 +697,14 @@ fun DuplicateWarningDialog(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = MaterialTheme.colorScheme
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
             Icon(
                 imageVector = Icons.Default.Warning,
                 contentDescription = null,
-                tint = WarningAmber,
+                tint = colors.tertiary,
                 modifier = Modifier.size(32.dp)
             )
         },
@@ -598,13 +719,13 @@ fun DuplicateWarningDialog(
             Text(
                 text = stringResource(R.string.movement_duplicate_message),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF475569)
+                color = colors.onSurfaceVariant
             )
         },
         confirmButton = {
             Button(
                 onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("btn_confirm_duplicate"),
             ) {
@@ -617,9 +738,22 @@ fun DuplicateWarningDialog(
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.testTag("btn_cancel_duplicate"),
             ) {
-                Text(stringResource(R.string.movement_duplicate_cancel), color = Color(0xFF64748B))
+                Text(stringResource(R.string.movement_duplicate_cancel), color = colors.onSurfaceVariant)
             }
         },
         modifier = modifier.testTag("dialog_duplicate_warning"),
     )
+}
+
+private fun toUtcDateMillis(occurredAt: Long): Long {
+    val zone = ZoneId.systemDefault()
+    val localDate = Instant.ofEpochMilli(occurredAt).atZone(zone).toLocalDate()
+    return localDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+}
+
+private fun datePickerMillisToLocalInstant(selectedDateMillis: Long, occurredAt: Long): Long {
+    val zone = ZoneId.systemDefault()
+    val selectedDate = Instant.ofEpochMilli(selectedDateMillis).atZone(ZoneOffset.UTC).toLocalDate()
+    val existingLocalTime = Instant.ofEpochMilli(occurredAt).atZone(zone).toLocalTime()
+    return selectedDate.atTime(existingLocalTime).atZone(zone).toInstant().toEpochMilli()
 }

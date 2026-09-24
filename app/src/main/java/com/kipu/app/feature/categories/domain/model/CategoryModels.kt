@@ -39,13 +39,27 @@ enum class CategoryOrigin {
     CUSTOM
 }
 
+enum class CategoryType {
+    EXPENSE,
+    INCOME,
+    GENERAL;
+
+    companion object {
+        /** Unknown or pre-typing values remain visible in both category tabs. */
+        fun fromStorage(value: String?): CategoryType =
+            entries.firstOrNull { it.name == value } ?: GENERAL
+    }
+}
+
 data class Category(
     val id: CategoryId,
     val ownerId: UserId?,
     val parentId: CategoryId?,
     val origin: CategoryOrigin,
     val isActive: Boolean,
-    val revision: Long = 1L
+    val revision: Long = 1L,
+    val isPlanLocked: Boolean = false,
+    val categoryType: CategoryType = CategoryType.GENERAL,
 ) {
     val isRoot: Boolean get() = parentId == null
     val isSubcategory: Boolean get() = parentId != null

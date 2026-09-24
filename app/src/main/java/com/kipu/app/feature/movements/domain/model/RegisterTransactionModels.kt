@@ -10,6 +10,7 @@ data class RegisterTransactionCommand(
     val destinationAccountId: String? = null,
     val categoryId: String? = null,
     val merchantId: String? = null,
+    val merchantProvisionalText: String? = null,
     val occurredAt: Long = System.currentTimeMillis(),
     val note: String? = null,
     val ignoreSimilarityWarning: Boolean = false,

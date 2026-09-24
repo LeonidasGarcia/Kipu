@@ -11,6 +11,8 @@ import com.kipu.app.feature.categories.data.local.CategoryDao
 import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
+import com.kipu.app.feature.plans.data.local.FeatureAccessCacheDao
+import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.remote.CreateCategoryRequestDto
 import com.kipu.app.feature.categories.data.remote.ResolveCategoryConflictRequestDto
@@ -27,6 +29,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryConflictType
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryOrigin
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.MerchantId
@@ -36,12 +39,16 @@ import com.kipu.app.feature.plans.domain.model.Capability
 import com.kipu.app.feature.plans.domain.model.FeatureAccessDecision
 import com.kipu.app.feature.plans.domain.model.FeatureAccessRequest
 import com.kipu.app.feature.plans.domain.model.FreePlanLimits
+import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
+import com.kipu.app.feature.plans.domain.model.QuotaGroup
+import com.kipu.app.feature.plans.domain.model.EffectiveEntitlement
 import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -53,6 +60,10 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     private val sessionCoordinator: SessionCoordinator,
     private val syncScheduler: CategorySyncScheduler,
     private val featureAccessPolicy: FeatureAccessPolicy = FeatureAccessPolicy(),
+    private val quotaSelectionDao: PlanQuotaSelectionDao,
+    private val featureAccessCacheDao: FeatureAccessCacheDao,
+    private val quotaPolicy: PlanQuotaPolicy,
+    private val planQuotaSyncScheduler: com.kipu.app.feature.plans.data.sync.PlanQuotaSyncScheduler? = null,
 ) : CategoriesRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -68,8 +79,20 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     }
 
     override fun observeCategories(userId: UserId): Flow<List<Category>> {
-        return categoryDao.observeCategoriesForUser(userId.value).map { entities ->
+        val selectedIds = quotaSelectionDao.observeSelectedResourceIds(userId.value, QuotaGroup.CUSTOM_CATEGORIES.name)
+        val access = featureAccessCacheDao.observe(UUID.fromString(userId.value))
+        return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access) { entities, selected, cache ->
+            val activeRoots = entities.filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+            val quota = quotaPolicy.evaluate(
+                group = QuotaGroup.CUSTOM_CATEGORIES,
+                activeResourceIds = activeRoots.map { it.id },
+                selectedResourceIds = selected,
+                limits = FreePlanLimits(),
+                premiumVerified = cache.isPremiumVerified(),
+            )
+            val lockedRoots = quota.planLockedResourceIds
             entities.map { entity ->
+                val rootId = entity.parentId ?: entity.id
                 Category(
                     id = CategoryId(entity.id),
                     ownerId = entity.userId?.let { UserId(it) },
@@ -77,9 +100,33 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     origin = CategoryOrigin.valueOf(entity.origin),
                     isActive = entity.isActive,
                     revision = entity.remoteRevision,
+                    isPlanLocked = rootId in lockedRoots,
+                    categoryType = CategoryType.fromStorage(entity.categoryType),
                 )
             }
         }
+    }
+
+    override fun observeSelectedFreeCategoryRoots(userId: UserId): Flow<Set<CategoryId>> =
+        quotaSelectionDao.observeSelectedResourceIds(userId.value, QuotaGroup.CUSTOM_CATEGORIES.name)
+            .map { ids -> ids.mapTo(linkedSetOf(), ::CategoryId) }
+
+    override suspend fun saveSelectedFreeCategoryRoots(userId: UserId, categoryIds: Set<CategoryId>): Result<Unit> = runCatching {
+        require(currentUserId() == userId.value) { "No active owner session" }
+        val activeRoots = categoryDao.getCategoriesForUser(userId.value)
+            .filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+            .map { it.id }
+            .toSet()
+        require(categoryIds.map { it.value }.all(activeRoots::contains)) { "Selection includes unavailable categories" }
+        require(categoryIds.size <= FreePlanLimits().customCategories) { "Free category selection exceeds its limit" }
+        quotaSelectionDao.replaceSelection(
+            userId = userId.value,
+            featureKey = QuotaGroup.CUSTOM_CATEGORIES.name,
+            resourceType = "CATEGORY_ROOT",
+            resourceIds = categoryIds.map { it.value },
+            now = System.currentTimeMillis(),
+        )
+        planQuotaSyncScheduler?.scheduleSync(userId.value)
     }
 
     override fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>> {
@@ -106,6 +153,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                 origin = CategoryOrigin.valueOf(entity.origin),
                 isActive = entity.isActive,
                 revision = entity.remoteRevision,
+                categoryType = CategoryType.fromStorage(entity.categoryType),
             )
         }
     }
@@ -126,12 +174,17 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                 parentId = it.parentId?.let { pid -> CategoryId(pid) },
                 origin = CategoryOrigin.valueOf(it.origin),
                 isActive = it.isActive,
-                revision = it.remoteRevision
+                revision = it.remoteRevision,
+                categoryType = CategoryType.fromStorage(it.categoryType),
             )
         }
         val hierarchyCheck = CategoryRules.validateHierarchy(category.id, category.parentId, existing)
         if (hierarchyCheck.isFailure) {
             return Result.failure(hierarchyCheck.exceptionOrNull()!!)
+        }
+        val typeCheck = CategoryRules.validateCategoryType(category.categoryType, category.parentId, existing)
+        if (typeCheck.isFailure) {
+            return Result.failure(typeCheck.exceptionOrNull()!!)
         }
 
         // Validate Free quota if custom root
@@ -142,7 +195,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
                     freeLimits = FreePlanLimits(),
-                    effectiveEntitlement = null,
+                    effectiveEntitlement = featureAccessCacheDao.get(UUID.fromString(userId)).toEffectiveEntitlement(),
                 )
             )
             if (decision is FeatureAccessDecision.Denied) {
@@ -154,10 +207,11 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             operationId = operationId,
             categoryId = category.id.value,
             parentId = category.parentId?.value,
+            categoryType = category.categoryType.name,
             name = presentation.name,
             icon = presentation.icon,
             color = presentation.color,
-            payloadHash = sha256("$operationId:${category.id.value}:${presentation.name}")
+            payloadHash = sha256("$operationId:${category.id.value}:${category.categoryType.name}:${presentation.name}")
         )
         val payloadJson = json.encodeToString(payloadDto)
 
@@ -168,6 +222,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     userId = userId,
                     parentId = category.parentId?.value,
                     origin = category.origin.name,
+                    categoryType = category.categoryType.name,
                     isActive = category.isActive,
                     remoteRevision = 1L,
                     createdAt = now,
@@ -221,7 +276,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
                     freeLimits = FreePlanLimits(),
-                    effectiveEntitlement = null,
+                    effectiveEntitlement = featureAccessCacheDao.get(UUID.fromString(userId)).toEffectiveEntitlement(),
                 )
             )
             if (decision is FeatureAccessDecision.Denied) {
@@ -366,6 +421,16 @@ class OfflineFirstCategoriesRepository @Inject constructor(
 
     override suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit> {
         val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
+        classification.categoryId?.let { categoryId ->
+            val category = categoryDao.getCategoryById(categoryId.value)
+                ?: return Result.failure(IllegalArgumentException("Category is unavailable"))
+            if (!category.isActive) return Result.failure(IllegalStateException("Inactive category cannot be assigned"))
+            val lockedRootIds = planLockedCategoryRootIds(userId)
+            val rootId = category.parentId ?: category.id
+            if (rootId in lockedRootIds) {
+                return Result.failure(IllegalStateException("Category is blocked by the Free plan selection"))
+            }
+        }
         val now = System.currentTimeMillis()
         val operationId = UUID.randomUUID().toString()
 
@@ -478,4 +543,33 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         syncScheduler.scheduleSync(userId)
         return Result.success(Unit)
     }
+
+    private suspend fun planLockedCategoryRootIds(userId: String): Set<String> {
+        val categories = categoryDao.getCategoriesForUser(userId)
+        val roots = categories.filter {
+            it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive
+        }
+        val selected = quotaSelectionDao.getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
+        return quotaPolicy.evaluate(
+            group = QuotaGroup.CUSTOM_CATEGORIES,
+            activeResourceIds = roots.map { it.id },
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = featureAccessCacheDao.get(UUID.fromString(userId)).isPremiumVerified(),
+        ).planLockedResourceIds
+    }
+}
+
+private fun com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity?.isPremiumVerified(): Boolean {
+    if (this == null || effectiveTier != "PREMIUM" || verifiedAt == null) return false
+    return entitlementExpiresAt == null || entitlementExpiresAt.isAfter(java.time.Instant.now())
+}
+
+private fun com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity?.toEffectiveEntitlement(): EffectiveEntitlement? {
+    val cache = this ?: return null
+    if (!cache.isPremiumVerified()) return null
+    return EffectiveEntitlement(
+        verified = true,
+        expiresAtEpochMillis = cache.entitlementExpiresAt?.toEpochMilli(),
+    )
 }

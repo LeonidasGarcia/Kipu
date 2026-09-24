@@ -44,6 +44,7 @@ sealed interface Card {
     val remoteRevision: Long
     val createdAt: Instant
     val updatedAt: Instant
+    val isPlanLocked: Boolean get() = false
 
     val isComputableForQuota: Boolean
         get() = true
@@ -95,6 +96,7 @@ data class DebitCard(
     override val colorToken: String? = null,
     override val iconToken: String? = null,
     override val isArchived: Boolean = false,
+    override val isPlanLocked: Boolean = false,
     override val remoteRevision: Long = 0L,
     override val createdAt: Instant = Instant.now(),
     override val updatedAt: Instant = Instant.now(),
@@ -120,6 +122,7 @@ data class CreditCard(
     override val colorToken: String? = null,
     override val iconToken: String? = null,
     override val isArchived: Boolean = false,
+    override val isPlanLocked: Boolean = false,
     override val remoteRevision: Long = 0L,
     override val createdAt: Instant = Instant.now(),
     override val updatedAt: Instant = Instant.now(),

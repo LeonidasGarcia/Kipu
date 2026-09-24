@@ -3,6 +3,7 @@ package com.kipu.app.feature.categories.domain
 import com.kipu.app.feature.categories.domain.model.Category
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryOrigin
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import java.text.Normalizer
 import java.util.Locale
 
@@ -45,6 +46,25 @@ object CategoryRules {
             current = current.parentId?.let { existingCategories[it] }
         }
 
+        return Result.success(Unit)
+    }
+
+    /** Subcategories must use the exact type of their root; GENERAL roots stay GENERAL. */
+    fun validateCategoryType(
+        categoryType: CategoryType,
+        parentId: CategoryId?,
+        existingCategories: Map<CategoryId, Category>,
+    ): Result<Unit> {
+        if (parentId == null) return Result.success(Unit)
+
+        val parent = existingCategories[parentId]
+            ?: return Result.failure(IllegalArgumentException("Parent category does not exist: $parentId"))
+        if (parent.parentId != null) {
+            return Result.failure(IllegalArgumentException("Cannot create a third level. Parent $parentId is already a subcategory."))
+        }
+        if (categoryType != parent.categoryType) {
+            return Result.failure(IllegalArgumentException("Subcategory type must match its root category"))
+        }
         return Result.success(Unit)
     }
 

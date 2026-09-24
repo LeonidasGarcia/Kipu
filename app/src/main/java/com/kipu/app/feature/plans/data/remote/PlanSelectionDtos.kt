@@ -90,6 +90,32 @@ data class TrialEligibilityResponseDto(
     @SerialName("valid_until") val validUntil: String? = null,
 )
 
+@Serializable
+data class QuotaSelectionItemDto(
+    @SerialName("resource_id") val resourceId: String,
+    @SerialName("resource_type") val resourceType: String,
+)
+
+@Serializable
+data class QuotaSelectionRequestDto(
+    @SerialName("contract_version") val contractVersion: Int = 1,
+    @SerialName("operation_id") val operationId: String,
+    @SerialName("feature_key") val featureKey: String,
+    @SerialName("selection_revision") val selectionRevision: String,
+    val items: List<QuotaSelectionItemDto>,
+)
+
+@Serializable
+data class QuotaSelectionResponseDto(
+    @SerialName("contract_version") val contractVersion: Int? = null,
+    @SerialName("operation_id") val operationId: String? = null,
+    val result: String? = null,
+    @SerialName("feature_key") val featureKey: String? = null,
+    @SerialName("accepted_revision") val acceptedRevision: String? = null,
+    @SerialName("current_items") val currentItems: List<QuotaSelectionItemDto>? = null,
+    @SerialName("server_time") val serverTime: String? = null,
+)
+
 fun SyncOutboxEntity.toRequestDto() = PlanSelectionRequestDto(
     contractVersion,
     operationId.toString(),

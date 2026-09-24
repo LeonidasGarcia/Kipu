@@ -9,6 +9,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.MovementClassification
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.Flow
 
 interface CategoriesRepository {
@@ -18,6 +19,9 @@ interface CategoriesRepository {
     suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category>
     suspend fun setCategoryActive(categoryId: CategoryId, isActive: Boolean): Result<Unit>
     suspend fun updateCategoryPresentation(presentation: CategoryPresentation, expectedRevision: Long): Result<Unit>
+    fun observeSelectedFreeCategoryRoots(userId: UserId): Flow<Set<CategoryId>> = flowOf(emptySet())
+    suspend fun saveSelectedFreeCategoryRoots(userId: UserId, categoryIds: Set<CategoryId>): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Free category selection is unavailable"))
 
     fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>>
     fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?>

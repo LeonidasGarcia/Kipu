@@ -1,6 +1,11 @@
 package com.kipu.app.feature.categories.presentation.categories
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -61,16 +66,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.presentation.CATEGORY_ICON_SECTIONS
 import com.kipu.app.feature.categories.presentation.CATEGORY_PALETTE
 import com.kipu.app.feature.categories.presentation.parseHexColor
 import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryFormDialog(
     isEditing: Boolean,
+    categoryType: CategoryType = CategoryType.GENERAL,
     name: String,
     icon: String,
     color: String,
@@ -101,7 +109,7 @@ fun CategoryFormDialog(
                 TopAppBar(
                     title = {
                         Text(
-                            text = if (isEditing) "Crear O Editar Categoría" else "Crear O Editar Categoría",
+                            text = if (isEditing) "Editar Categoría" else "Nueva Categoría",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 18.sp,
                         )
@@ -169,7 +177,17 @@ fun CategoryFormDialog(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = if (isSubcategory) "Subcategoría" else "Categoría Principal",
+                                text = buildString {
+                                    append(if (isSubcategory) "Subcategoría" else "Categoría Principal")
+                                    append(" • ")
+                                    append(
+                                        when (categoryType) {
+                                            CategoryType.EXPENSE -> "Gastos"
+                                            CategoryType.INCOME -> "Ingresos"
+                                            CategoryType.GENERAL -> "General"
+                                        }
+                                    )
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -253,7 +271,11 @@ fun CategoryFormDialog(
                 }
 
                 // Selector de categoría padre condicional si es subcategoría
-                AnimatedVisibility(visible = isSubcategory) {
+                AnimatedVisibility(
+                    visible = isSubcategory,
+                    enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                    exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "Categoría Principal Padre *",

@@ -1,6 +1,7 @@
 package com.kipu.app.feature.accounts.presentation.instruments
 
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,8 +43,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountType
@@ -52,6 +55,8 @@ import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
+import com.kipu.app.feature.accounts.presentation.components.InstrumentCardPreview
+import com.kipu.app.ui.theme.KipuMotionTokens
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,6 +64,7 @@ import kotlinx.coroutines.launch
 fun CardFormScreen(
     viewModel: AccountsViewModel,
     onNavigateBack: () -> Unit,
+    onSaveSuccess: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -69,6 +75,7 @@ fun CardFormScreen(
     var issuer by remember { mutableStateOf("BCP") }
     var selectedNetwork by remember { mutableStateOf(CardNetwork.VISA) }
     var lastFourDigits by remember { mutableStateOf("") }
+    var lastFourDigitsError by remember { mutableStateOf<String?>(null) }
     var alias by remember { mutableStateOf("") }
     var selectedPreset by remember { mutableStateOf<CardPreset?>(CardPreset.BCP_VISA) }
 
@@ -84,6 +91,25 @@ fun CardFormScreen(
     var creditLimitInput by remember { mutableStateOf("1000.00") }
     var billingDayInput by remember { mutableStateOf("15") }
     var dueDayInput by remember { mutableStateOf("5") }
+    val creditLimitMinorUnits = MoneyInputParser.parseMinorUnits(creditLimitInput)
+    val creditLimitError = when {
+        creditLimitInput.isBlank() -> "Ingresa una línea de crédito autorizada."
+        creditLimitMinorUnits == null -> "Ingresa un importe válido con hasta dos decimales."
+        else -> null
+    }
+    val billingDay = billingDayInput.toIntOrNull()
+    val billingDayError = when {
+        billingDayInput.isBlank() -> "Ingresa el día de corte."
+        billingDay == null || billingDay !in 1..31 -> "Ingresa el día de corte entre 1 y 31."
+        else -> null
+    }
+    val dueDay = dueDayInput.toIntOrNull()
+    val dueDayError = when {
+        dueDayInput.isBlank() -> "Ingresa el día de pago."
+        dueDay == null || dueDay !in 1..31 -> "Ingresa el día de pago entre 1 y 31."
+        else -> null
+    }
+    val areCreditTermsValid = creditLimitError == null && billingDayError == null && dueDayError == null
 
     var isSubmitting by remember { mutableStateOf(false) }
     var showDuplicateWarning by remember { mutableStateOf(false) }
@@ -92,8 +118,12 @@ fun CardFormScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is AccountUiEvent.ShowMessage -> {
-                    snackbarHostState.showSnackbar(event.message)
-                    onNavigateBack()
+                    if (onSaveSuccess != null) {
+                        onSaveSuccess(event.message)
+                    } else {
+                        snackbarHostState.showSnackbar(event.message)
+                        onNavigateBack()
+                    }
                 }
                 is AccountUiEvent.Error -> {
                     isSubmitting = false
@@ -154,6 +184,17 @@ fun CardFormScreen(
                 )
             }
 
+            InstrumentCardPreview(
+                title = alias.ifBlank { issuer },
+                instrumentType = if (isDebit) "Tarjeta de débito" else "Tarjeta de crédito",
+                subtitle = if (isDebit) {
+                    "${selectedAccount?.alias ?: issuer} · ${selectedNetwork.name}"
+                } else {
+                    "${selectedNetwork.name} · ${selectedCurrency.name}"
+                },
+                lastFourDigits = lastFourDigits.takeIf { it.length == 4 },
+            )
+
             Text(
                 text = "Identificación de la Tarjeta",
                 style = MaterialTheme.typography.titleSmall,
@@ -174,6 +215,7 @@ fun CardFormScreen(
                     }
                 },
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -194,17 +236,28 @@ fun CardFormScreen(
             OutlinedTextField(
                 value = lastFourDigits,
                 onValueChange = { input ->
-                    val filtered = input.filter { it.isDigit() }.take(4)
-                    lastFourDigits = filtered
+                    val digits = input.filter { it.isDigit() }
+                    if (digits.length > 4) {
+                        lastFourDigitsError = "Solo se guardan los últimos 4 dígitos. La entrada se rechazó y no se guardó."
+                    } else {
+                        lastFourDigits = digits
+                        lastFourDigitsError = null
+                    }
                 },
                 label = { Text("Últimos 4 dígitos del plástico") },
                 placeholder = { Text("1234") },
                 supportingText = {
-                    Text("Solo los 4 dígitos finales. Nunca solicitamos tu número completo ni CVV.")
+                    lastFourDigitsError?.let { error ->
+                        Text(error, color = MaterialTheme.colorScheme.error)
+                    } ?: Text("Solo los 4 dígitos finales. Nunca solicitamos tu número completo ni CVV.")
                 },
+                isError = lastFourDigitsError != null,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_last_four_digits"),
             )
 
             OutlinedTextField(
@@ -219,125 +272,152 @@ fun CardFormScreen(
                     }
                 },
                 singleLine = true,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            if (isDebit) {
-                Text(
-                    text = "Cuenta Vinculada",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(KipuMotionTokens.FastMillis)),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                if (isDebit) {
+                    Text(
+                        text = "Cuenta Vinculada",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
 
-                if (eligibleAccounts.isEmpty()) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "No tienes cuentas de ahorro o corriente activas para vincular esta tarjeta.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(12.dp),
-                        )
+                    if (eligibleAccounts.isEmpty()) {
+                        Card(
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = "No tienes cuentas de ahorro o corriente activas para vincular esta tarjeta.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    } else {
+                        ExposedDropdownMenuBox(
+                            expanded = isAccountDropdownExpanded,
+                            onExpandedChange = { isAccountDropdownExpanded = it },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            OutlinedTextField(
+                                value = selectedAccount?.let { "${it.alias} (${it.currency.name})" } ?: "Seleccionar cuenta",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Cuenta a la que pertenece la tarjeta") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAccountDropdownExpanded) },
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                            )
+                            ExposedDropdownMenu(
+                                expanded = isAccountDropdownExpanded,
+                                onDismissRequest = { isAccountDropdownExpanded = false },
+                            ) {
+                                eligibleAccounts.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = { Text("${account.alias} • ${account.currency.name}") },
+                                        onClick = {
+                                            selectedAccount = account
+                                            isAccountDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Card(
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = "Esta tarjeta reflejará los fondos de la cuenta seleccionada. No añadirá saldo por separado.",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
                     }
                 } else {
-                    ExposedDropdownMenuBox(
-                        expanded = isAccountDropdownExpanded,
-                        onExpandedChange = { isAccountDropdownExpanded = it },
+                    Text(
+                        text = "Condiciones de Crédito",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedTextField(
-                            value = selectedAccount?.let { "${it.alias} (${it.currency.name})" } ?: "Seleccionar cuenta",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Cuenta a la que pertenece la tarjeta") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAccountDropdownExpanded) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
-                        )
-                        ExposedDropdownMenu(
-                            expanded = isAccountDropdownExpanded,
-                            onDismissRequest = { isAccountDropdownExpanded = false },
-                        ) {
-                            eligibleAccounts.forEach { account ->
-                                DropdownMenuItem(
-                                    text = { Text("${account.alias} • ${account.currency.name}") },
-                                    onClick = {
-                                        selectedAccount = account
-                                        isAccountDropdownExpanded = false
-                                    }
-                                )
-                            }
+                        Currency.entries.forEach { curr ->
+                            FilterChip(
+                                selected = selectedCurrency == curr,
+                                onClick = { selectedCurrency = curr },
+                                label = { Text(curr.name) },
+                            )
                         }
                     }
 
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    OutlinedTextField(
+                        value = creditLimitInput,
+                        onValueChange = { creditLimitInput = it },
+                        label = { Text("Línea de crédito autorizada (${selectedCurrency.name})") },
+                        isError = creditLimitError != null,
+                        supportingText = creditLimitError?.let { error ->
+                            { Text(error, color = MaterialTheme.colorScheme.error) }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(
-                            text = "Esta tarjeta reflejará los fondos de la cuenta seleccionada. No añadirá saldo por separado.",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(12.dp),
+                        OutlinedTextField(
+                            value = billingDayInput,
+                            onValueChange = { billingDayInput = it },
+                            label = { Text("Día de corte (1-31)") },
+                            isError = billingDayError != null,
+                            supportingText = billingDayError?.let { error ->
+                                { Text(error, color = MaterialTheme.colorScheme.error) }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = dueDayInput,
+                            onValueChange = { dueDayInput = it },
+                            label = { Text("Día de pago (1-31)") },
+                            isError = dueDayError != null,
+                            supportingText = dueDayError?.let { error ->
+                                { Text(error, color = MaterialTheme.colorScheme.error) }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                }
-            } else {
-                Text(
-                    text = "Condiciones de Crédito",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Currency.entries.forEach { curr ->
-                        FilterChip(
-                            selected = selectedCurrency == curr,
-                            onClick = { selectedCurrency = curr },
-                            label = { Text(curr.name) },
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = creditLimitInput,
-                    onValueChange = { creditLimitInput = it },
-                    label = { Text("Línea de crédito autorizada (${selectedCurrency.name})") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedTextField(
-                        value = billingDayInput,
-                        onValueChange = { billingDayInput = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("Día de corte (1-31)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = dueDayInput,
-                        onValueChange = { dueDayInput = it.filter { c -> c.isDigit() }.take(2) },
-                        label = { Text("Día de pago (1-31)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
                 }
             }
 
             if (showDuplicateWarning) {
                 Card(
+                    shape = MaterialTheme.shapes.large,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -361,6 +441,7 @@ fun CardFormScreen(
             }
 
             Card(
+                shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -379,6 +460,9 @@ fun CardFormScreen(
                     if (issuer.isBlank() || isIssuerForbidden) return@Button
                     if (isAliasForbidden) return@Button
                     if (isDebit && selectedAccount == null) return@Button
+                    if (!isDebit && !areCreditTermsValid) {
+                        return@Button
+                    }
 
                     scope.launch {
                         val isDuplicate = viewModel.checkDuplicateCard(
@@ -405,9 +489,9 @@ fun CardFormScreen(
                                 iconToken = selectedPreset?.defaultIconToken,
                             )
                         } else {
-                            val limitMinor = parseAmountToMinorUnits(creditLimitInput) ?: 0L
-                            val bDay = billingDayInput.toIntOrNull() ?: 1
-                            val dDay = dueDayInput.toIntOrNull() ?: 1
+                            val limitMinor = creditLimitMinorUnits ?: return@launch
+                            val bDay = billingDay?.takeIf { it in 1..31 } ?: return@launch
+                            val dDay = dueDay?.takeIf { it in 1..31 } ?: return@launch
 
                             viewModel.registerCreditCard(
                                 alias = alias,
@@ -416,8 +500,8 @@ fun CardFormScreen(
                                 lastFourDigits = lastFourDigits,
                                 currency = selectedCurrency,
                                 creditLimitMinorUnits = limitMinor,
-                                billingDay = bDay.coerceIn(1, 31),
-                                dueDay = dDay.coerceIn(1, 31),
+                                billingDay = bDay,
+                                dueDay = dDay,
                                 preset = selectedPreset,
                                 colorToken = selectedPreset?.defaultColorToken,
                                 iconToken = selectedPreset?.defaultIconToken,
@@ -425,7 +509,8 @@ fun CardFormScreen(
                         }
                     }
                 },
-                enabled = !isSubmitting && lastFourDigits.length == 4 && issuer.isNotBlank() && !isIssuerForbidden && !isAliasForbidden && (!isDebit || selectedAccount != null),
+                enabled = !isSubmitting && lastFourDigits.length == 4 && issuer.isNotBlank() && !isIssuerForbidden && !isAliasForbidden &&
+                    (if (isDebit) selectedAccount != null else areCreditTermsValid),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),

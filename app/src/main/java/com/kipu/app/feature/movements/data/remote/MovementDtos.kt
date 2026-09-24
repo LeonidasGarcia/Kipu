@@ -33,6 +33,8 @@ data class TransactionDto(
     val categoryId: String? = null,
     @SerialName("merchant_id")
     val merchantId: String? = null,
+    @SerialName("merchant_provisional_text")
+    val merchantProvisionalText: String? = null,
     @SerialName("occurred_at")
     val occurredAt: String,
     @SerialName("note")

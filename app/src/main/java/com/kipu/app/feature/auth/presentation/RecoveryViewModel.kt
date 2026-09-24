@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kipu.app.feature.auth.domain.CompletePasswordReset
 import com.kipu.app.feature.auth.domain.PasswordValidator
 import com.kipu.app.feature.auth.domain.RequestPasswordRecovery
+import com.kipu.app.feature.auth.data.RecoverySessionInstaller
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,10 +18,19 @@ import kotlinx.coroutines.launch
 class RecoveryViewModel @Inject constructor(
     private val requestPasswordRecovery: RequestPasswordRecovery,
     private val completePasswordReset: CompletePasswordReset,
+    private val recoverySessionInstaller: RecoverySessionInstaller,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecoveryUiState())
     val uiState: StateFlow<RecoveryUiState> = _uiState.asStateFlow()
+
+    fun showInvalidRecoveryLinkIfNeeded() {
+        if (!recoverySessionInstaller.isReady()) {
+            _uiState.update {
+                it.copy(errorMessage = "El enlace de recuperación es inválido, ya fue usado o ha vencido.")
+            }
+        }
+    }
 
     fun onEmailChanged(email: String) {
         _uiState.update {
@@ -52,14 +62,28 @@ class RecoveryViewModel @Inject constructor(
 
         _uiState.update { it.copy(isLoading = true, errorMessage = null) }
         viewModelScope.launch {
-            requestPasswordRecovery(email)
-            // Neutral confirmation always displayed (FR-008, SC-002)
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    isRequestAccepted = true,
-                )
-            }
+            requestPasswordRecovery(email).fold(
+                onSuccess = {
+                    // The same confirmation is shown for existing and unknown emails.
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRequestAccepted = true,
+                            errorMessage = null,
+                        )
+                    }
+                },
+                onFailure = { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isRequestAccepted = false,
+                            errorMessage = error.message
+                                ?: "No se pudo solicitar la recuperación. Intenta nuevamente.",
+                        )
+                    }
+                },
+            )
         }
     }
 

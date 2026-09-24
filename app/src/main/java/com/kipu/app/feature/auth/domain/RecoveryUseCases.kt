@@ -2,6 +2,7 @@ package com.kipu.app.feature.auth.domain
 
 import com.kipu.app.feature.auth.data.remote.ApiResponse
 import com.kipu.app.feature.auth.data.remote.AuthApi
+import com.kipu.app.feature.auth.data.RecoverySessionInstaller
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import javax.inject.Inject
@@ -43,6 +44,7 @@ open class RequestPasswordRecovery @Inject constructor(
 @Singleton
 open class CompletePasswordReset @Inject constructor(
     private val supabaseClient: SupabaseClient,
+    private val recoverySessionInstaller: RecoverySessionInstaller,
 ) {
     /**
      * Updates the password using the active authenticated session restored from recovery deep link.
@@ -53,10 +55,15 @@ open class CompletePasswordReset @Inject constructor(
         if (!validation.isValid) {
             return Result.failure(Exception((validation as PasswordValidator.ValidationResult.Invalid).reason))
         }
+        if (!recoverySessionInstaller.isReady()) {
+            return Result.failure(Exception("El enlace de recuperación es inválido, ya fue usado o ha vencido."))
+        }
         return try {
             supabaseClient.auth.updateUser {
                 password = newPassword
             }
+            recoverySessionInstaller.clear()
+            runCatching { supabaseClient.auth.signOut() }
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(Exception("El enlace de recuperación es inválido, ya fue usado o ha vencido."))

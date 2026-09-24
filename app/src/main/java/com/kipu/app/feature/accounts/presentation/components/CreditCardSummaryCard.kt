@@ -73,6 +73,13 @@ fun CreditCardSummaryCard(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
+                        if (card.isPlanLocked) {
+                            Text(
+                                text = "Bloqueada por el plan Free",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),

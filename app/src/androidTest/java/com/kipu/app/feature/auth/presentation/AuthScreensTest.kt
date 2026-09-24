@@ -22,7 +22,7 @@ class AuthScreensTest {
                 onEmailChanged = {},
                 onPasswordChanged = {},
                 onLoginClick = {},
-                onNavigateToRegister = {},
+                onRegisterClick = {},
                 onNavigateToRecovery = {},
             )
         }

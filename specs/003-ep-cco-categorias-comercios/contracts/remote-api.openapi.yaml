@@ -3,12 +3,31 @@ info:
   title: Kipu Category and Merchant Contract
   version: 1.0.0
 paths:
-  /rpc/create_custom_category_v1:
+  /rpc/create_category_v1:
     post:
-      summary: Creates a custom root or subcategory for the authenticated owner.
+      summary: Creates a custom root or subcategory using the local category RPC contract.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [category_id, name, icon, color]
+                  properties:
+                    category_id: { type: string, format: uuid }
+                    parent_id: { type: [string, 'null'], format: uuid }
+                    category_type: { type: string, enum: [EXPENSE, INCOME, GENERAL], default: GENERAL }
+                    name: { type: string, minLength: 1 }
+                    icon: { type: string }
+                    color: { type: string }
+                  description: Omit category_type for legacy callers; roots then default to GENERAL and subcategories inherit their root type.
       responses:
-        '200': { description: Applied or duplicate command receipt }
-        '409': { description: Free limit, hierarchy, or revision conflict }
+        '200': { description: Category and presentation created }
+        '400': { description: Invalid type, parent, hierarchy, or Free category limit }
   /rpc/update_category_presentation_v1:
     post:
       summary: Updates an owner presentation using an expected revision.
@@ -21,7 +40,7 @@ paths:
       responses:
         '200': { description: Applied or duplicate command receipt }
         '409': { description: Free limit, invalid parent lifecycle, or conflict carrying the remote lifecycle version }
-  /rpc/assign_movement_classification_v1:
+  /rpc/update_movement_classification_v1:
     post:
       summary: Independently sets category, catalog merchant, and provisional merchant text on one movement.
       responses:

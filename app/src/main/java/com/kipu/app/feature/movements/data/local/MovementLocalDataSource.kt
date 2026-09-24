@@ -2,6 +2,7 @@ package com.kipu.app.feature.movements.data.local
 
 import androidx.room.withTransaction
 import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.feature.movements.data.MovementOutboxPayloadFactory
 import com.kipu.app.feature.movements.domain.model.LedgerRole
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import com.kipu.app.feature.movements.domain.model.MovementType
@@ -9,9 +10,11 @@ import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
 import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionStatus
+import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
+import com.kipu.app.feature.plans.domain.model.FreePlanLimits
+import com.kipu.app.feature.plans.domain.model.QuotaGroup
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import kotlinx.coroutines.flow.Flow
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -21,6 +24,7 @@ class MovementLocalDataSource @Inject constructor(
     private val database: KipuDatabase,
     private val movementDao: MovementDao,
     private val balanceProjectionStore: BalanceProjectionStore,
+    private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
 ) {
     fun observeTransactions(userId: String): Flow<List<TransactionEntity>> {
         return movementDao.observeTransactions(userId)
@@ -70,11 +74,103 @@ class MovementLocalDataSource @Inject constructor(
                             isDuplicate = true,
                         )
                     }
+                    return@withTransaction RegisterTransactionResult.Failure(
+                        "El recibo local existe, pero falta su transacción; se requiere reconciliación"
+                    )
                 } else {
                     return@withTransaction RegisterTransactionResult.Conflict(
                         "Idempotency conflict: key ${command.idempotencyKey} already used with different payload"
                     )
                 }
+            }
+
+            val sourceId = command.sourceAccountId
+                ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta es obligatoria"
+                )
+            val sourceAccount = database.accountDao().getById(command.userId, sourceId)
+                ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta no existe para este usuario"
+                )
+            if (sourceAccount.isArchived || sourceAccount.currency != command.currency) {
+                return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta está archivada o su moneda no coincide"
+                )
+            }
+            if (isPlanLockedInstrument(command.userId, sourceId)) {
+                return@withTransaction RegisterTransactionResult.ValidationError(
+                    "source_account", "La cuenta está bloqueada por la selección del plan Free"
+                )
+            }
+            if (command.type == MovementType.TRANSFER) {
+                if (command.categoryId != null) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "Las transferencias no admiten categoría"
+                    )
+                }
+                val destinationId = command.destinationAccountId
+                    ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta de destino es obligatoria"
+                    )
+                val destinationAccount = database.accountDao().getById(command.userId, destinationId)
+                    ?: return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta de destino no existe para este usuario"
+                    )
+                if (destinationId == sourceId || destinationAccount.isArchived || destinationAccount.currency != command.currency) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta de destino es inválida para esta transferencia"
+                    )
+                }
+                if (isPlanLockedInstrument(command.userId, destinationId)) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "destination_account", "La cuenta está bloqueada por la selección del plan Free"
+                    )
+                }
+            }
+            if (command.categoryId != null) {
+                val category = database.categoryDao().getCategoryById(command.categoryId)
+                if (category == null || !category.isActive ||
+                    (category.userId != null && category.userId != command.userId)) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "La categoría no está activa para este usuario"
+                    )
+                }
+                if (category.parentId != null) {
+                    val parent = database.categoryDao().getCategoryById(category.parentId)
+                    if (parent == null || !parent.isActive || parent.categoryType != category.categoryType) {
+                        return@withTransaction RegisterTransactionResult.ValidationError(
+                            "category", "La categoría principal está inactiva o tiene un tipo incompatible"
+                        )
+                    }
+                }
+                val expectedCategoryType = when (command.type) {
+                    MovementType.EXPENSE -> CategoryType.EXPENSE
+                    MovementType.INCOME -> CategoryType.INCOME
+                    MovementType.TRANSFER -> null
+                }
+                if (category.categoryType != "GENERAL" && category.categoryType != expectedCategoryType?.name) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "La categoría no corresponde al tipo de movimiento"
+                    )
+                }
+                if (isPlanLockedCategory(command.userId, category)) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "category", "La categoría está bloqueada por la selección del plan Free"
+                    )
+                }
+            }
+            if (command.merchantId != null) {
+                val merchant = database.merchantCatalogDao().getMerchantById(command.merchantId)
+                if (merchant == null || !merchant.isActive) {
+                    return@withTransaction RegisterTransactionResult.ValidationError(
+                        "merchant", "El comercio no está disponible en el catálogo"
+                    )
+                }
+            }
+            if (command.merchantId != null && command.merchantProvisionalText != null) {
+                return@withTransaction RegisterTransactionResult.ValidationError(
+                    "merchant", "Selecciona un comercio o escribe un nombre provisional"
+                )
             }
 
             // 2. Insert transaction
@@ -90,6 +186,7 @@ class MovementLocalDataSource @Inject constructor(
                 destinationAccountId = command.destinationAccountId,
                 categoryId = command.categoryId,
                 merchantId = command.merchantId,
+                merchantProvisionalText = command.merchantProvisionalText,
                 occurredAt = command.occurredAt,
                 note = command.note,
                 status = TransactionStatus.ACTIVE.name,
@@ -163,19 +260,13 @@ class MovementLocalDataSource @Inject constructor(
             }
             movementDao.insertLedgerEntries(ledgerEntries)
 
-            // 4. Update balance projections
-            for (entry in ledgerEntries) {
-                val currentBalance = balanceProjectionStore.getBalance(command.userId, entry.accountId)
-                val newBalance = currentBalance + entry.signedAmountMinor
-                movementDao.upsertBalanceProjection(
-                    BalanceProjectionEntity(
-                        userId = command.userId,
-                        accountId = entry.accountId,
-                        balanceMinor = newBalance,
-                        currencyCode = entry.currencyCode,
-                        lastTransactionAt = command.occurredAt,
-                        updatedAt = now,
-                    )
+            // 4. Rebuild each affected projection from the authoritative ledger.
+            // The new entries are already visible inside this Room transaction.
+            for (entry in ledgerEntries.distinctBy { it.accountId }) {
+                balanceProjectionStore.rebuildBalanceFromLedger(
+                    userId = command.userId,
+                    accountId = entry.accountId,
+                    currencyCode = entry.currencyCode,
                 )
             }
 
@@ -194,7 +285,11 @@ class MovementLocalDataSource @Inject constructor(
             )
 
             // 6. Insert movement outbox
-            val outboxPayload = buildOutboxPayload(transactionEntity, command.idempotencyKey, requestHash)
+            val outboxPayload = MovementOutboxPayloadFactory.build(
+                transaction = transactionEntity,
+                idempotencyKey = command.idempotencyKey,
+                requestHash = requestHash,
+            )
             movementDao.insertOutbox(
                 MovementOutboxEntity(
                     id = UUID.randomUUID().toString(),
@@ -219,32 +314,6 @@ class MovementLocalDataSource @Inject constructor(
         }
     }
 
-    private fun buildOutboxPayload(
-        transaction: TransactionEntity,
-        idempotencyKey: String,
-        requestHash: String,
-    ): String {
-        return """
-            {
-                "contract_version": 1,
-                "idempotency_key": "$idempotencyKey",
-                "request_hash": "$requestHash",
-                "transaction": {
-                    "id": "${transaction.id}",
-                    "type": "${transaction.type}",
-                    "amount_minor": ${transaction.amountMinor},
-                    "currency_code": "${transaction.currencyCode}",
-                    "source_account_id": ${transaction.sourceAccountId?.let { "\"$it\"" } ?: "null"},
-                    "destination_account_id": ${transaction.destinationAccountId?.let { "\"$it\"" } ?: "null"},
-                    "category_id": ${transaction.categoryId?.let { "\"$it\"" } ?: "null"},
-                    "merchant_id": ${transaction.merchantId?.let { "\"$it\"" } ?: "null"},
-                    "occurred_at": "${transaction.occurredAt}",
-                    "note": ${transaction.note?.let { "\"$it\"" } ?: "null"}
-                }
-            }
-        """.trimIndent()
-    }
-
     fun TransactionEntity.toDomain(): Transaction = Transaction(
         id = id,
         userId = userId,
@@ -255,6 +324,8 @@ class MovementLocalDataSource @Inject constructor(
         destinationAccountId = destinationAccountId,
         categoryId = categoryId,
         merchantId = merchantId,
+        merchantProvisionalText = merchantProvisionalText,
+        legacyKind = legacyKind,
         occurredAt = occurredAt,
         note = note,
         status = TransactionStatus.fromString(status),
@@ -262,4 +333,46 @@ class MovementLocalDataSource @Inject constructor(
         createdAt = createdAt,
         updatedAt = updatedAt,
     )
+
+    private suspend fun isPlanLockedCategory(
+        userId: String,
+        category: com.kipu.app.feature.categories.data.local.CategoryEntity,
+    ): Boolean {
+        val root = category.parentId?.let { database.categoryDao().getCategoryById(it) } ?: category
+        if (root.parentId != null || root.origin != "CUSTOM" || root.userId != userId) return false
+        val activeRoots = database.categoryDao().getCategoriesForUser(userId)
+            .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+        val selected = database.planQuotaSelectionDao()
+            .getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
+        val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        val quota = quotaPolicy.evaluate(
+            group = QuotaGroup.CUSTOM_CATEGORIES,
+            activeResourceIds = activeRoots.map { it.id },
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        )
+        return root.id in quota.planLockedResourceIds
+    }
+
+    private suspend fun isPlanLockedInstrument(userId: String, accountId: String): Boolean {
+        val account = database.accountDao().getById(userId, accountId) ?: return false
+        if (account.type == "CASH") return false
+        val activeIds = database.accountDao().getActiveComputable(userId).map { it.id } +
+            database.cardDao().getActive(userId).map { it.id }
+        val selected = database.planQuotaSelectionDao()
+            .getSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name)
+        val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        return accountId in quotaPolicy.evaluate(
+            group = QuotaGroup.INSTRUMENTS,
+            activeResourceIds = activeIds,
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        ).planLockedResourceIds
+    }
 }

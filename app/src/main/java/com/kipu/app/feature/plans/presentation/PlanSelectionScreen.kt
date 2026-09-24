@@ -1,6 +1,9 @@
 package com.kipu.app.feature.plans.presentation
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +37,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +57,7 @@ import com.kipu.app.ui.theme.KipuPrimaryContainer
 import com.kipu.app.ui.theme.KipuTheme
 import com.kipu.app.ui.theme.KipuSelectionRing
 import com.kipu.app.ui.theme.KipuSurfaceContainerLowest
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 private val CardShape = RoundedCornerShape(16.dp)
 private val ControlShape = RoundedCornerShape(12.dp)
@@ -223,6 +228,16 @@ private fun PremiumOptionCard(
     @StringRes badge: Int? = null,
     @StringRes supporting: Int? = null,
 ) {
+    val borderColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        animationSpec = tween(KipuMotionTokens.FeedbackMillis),
+        label = "plan-option-border-color",
+    )
+    val borderWidth by animateDpAsState(
+        targetValue = if (selected) 2.dp else 1.dp,
+        animationSpec = tween(KipuMotionTokens.FeedbackMillis),
+        label = "plan-option-border-width",
+    )
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -232,7 +247,7 @@ private fun PremiumOptionCard(
             .testTag("plan-option-${option.name}"),
         shape = CardShape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(borderWidth, borderColor),
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
             RadioButton(selected = selected, onClick = null)

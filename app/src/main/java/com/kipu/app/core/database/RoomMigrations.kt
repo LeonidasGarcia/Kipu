@@ -400,3 +400,119 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
+/**
+ * Migration 5 -> 6: preserve posted account movements in the local ledger.
+ * Card-only liability rows remain in financial_movements until the card model is migrated.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.query(
+            """SELECT COUNT(*) FROM financial_movements
+               WHERE account_id IS NOT NULL AND status = 'POSTED'
+                 AND (amount_minor_units < -99999999999999 OR amount_minor_units > 99999999999999)"""
+        ).use { cursor ->
+            check(cursor.moveToFirst() && cursor.getLong(0) == 0L) {
+                "Cannot migrate account movements outside the supported monetary range"
+            }
+        }
+
+        db.execSQL("ALTER TABLE transactions ADD COLUMN legacy_kind TEXT")
+        db.execSQL(
+            """INSERT INTO transactions (
+                   id, user_id, type, amount_minor, currency_code, source_account_id,
+                   destination_account_id, category_id, merchant_id, legacy_kind,
+                   occurred_at, note, status, sync_status, created_at, updated_at
+               )
+               SELECT 'legacy:' || id, user_id,
+                   CASE WHEN amount_minor_units < 0 THEN 'EXPENSE' ELSE 'INCOME' END,
+                   ABS(amount_minor_units), currency, account_id, NULL,
+                   category_id, merchant_id, kind,
+                   effective_at / 1000, NULL, 'ACTIVE', 'MIGRATED_LOCAL',
+                   created_at / 1000, created_at / 1000
+               FROM financial_movements
+               WHERE account_id IS NOT NULL AND status = 'POSTED' AND amount_minor_units <> 0"""
+        )
+        db.execSQL(
+            """INSERT INTO ledger_entries (
+                   id, user_id, transaction_id, account_id, role,
+                   signed_amount_minor, currency_code, created_at
+               )
+               SELECT 'legacy:' || id, user_id, 'legacy:' || id, account_id,
+                   CASE WHEN amount_minor_units < 0 THEN 'SOURCE' ELSE 'DESTINATION' END,
+                   amount_minor_units, currency, created_at / 1000
+               FROM financial_movements
+               WHERE account_id IS NOT NULL AND status = 'POSTED' AND amount_minor_units <> 0"""
+        )
+        db.execSQL(
+            """INSERT OR REPLACE INTO balance_projections (
+                   user_id, account_id, balance_minor, currency_code, last_transaction_at, updated_at
+               )
+               SELECT a.user_id, a.id, COALESCE(SUM(le.signed_amount_minor), 0),
+                   a.currency, MAX(le.created_at), CAST(strftime('%s', 'now') AS INTEGER) * 1000
+               FROM accounts a
+               LEFT JOIN ledger_entries le ON le.user_id = a.user_id AND le.account_id = a.id
+               GROUP BY a.user_id, a.id, a.currency"""
+        )
+    }
+}
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE transactions ADD COLUMN merchant_provisional_text TEXT")
+    }
+}
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS movement_sync_checkpoints (
+                user_id TEXT NOT NULL PRIMARY KEY,
+                sequence INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """.trimIndent())
+    }
+}
+
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS plan_selections (
+                user_id TEXT NOT NULL,
+                feature_key TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, feature_key)
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS index_plan_selections_user_id_updated_at
+            ON plan_selections(user_id, updated_at)
+        """.trimIndent())
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS plan_selection_items (
+                user_id TEXT NOT NULL,
+                feature_key TEXT NOT NULL,
+                resource_id TEXT NOT NULL,
+                resource_type TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, feature_key, resource_id),
+                FOREIGN KEY(user_id, feature_key) REFERENCES plan_selections(user_id, feature_key) ON DELETE CASCADE
+            )
+        """.trimIndent())
+        db.execSQL("""
+            CREATE INDEX IF NOT EXISTS index_plan_selection_items_user_id_feature_key_resource_type
+            ON plan_selection_items(user_id, feature_key, resource_type)
+        """.trimIndent())
+    }
+}
+
+/** Legacy categories remain untyped and therefore visible in both category tabs. */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE `categories` ADD COLUMN `category_type` TEXT NOT NULL DEFAULT 'GENERAL'",
+        )
+    }
+}
+

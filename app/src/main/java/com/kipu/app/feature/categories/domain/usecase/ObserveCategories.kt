@@ -51,3 +51,19 @@ class ObserveCategories @Inject constructor(
         }
     }
 }
+
+class ObserveSelectedFreeCategoryRoots @Inject constructor(
+    private val repository: CategoriesRepository,
+) {
+    operator fun invoke(userId: UserId): Flow<Set<com.kipu.app.feature.categories.domain.model.CategoryId>> =
+        repository.observeSelectedFreeCategoryRoots(userId)
+}
+
+class SaveSelectedFreeCategoryRoots @Inject constructor(
+    private val repository: CategoriesRepository,
+) {
+    suspend operator fun invoke(
+        userId: UserId,
+        categoryIds: Set<com.kipu.app.feature.categories.domain.model.CategoryId>,
+    ): Result<Unit> = repository.saveSelectedFreeCategoryRoots(userId, categoryIds)
+}

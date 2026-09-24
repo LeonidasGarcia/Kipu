@@ -1,6 +1,7 @@
 *.iml
 .gradle
 .gradle-user/
+.android/
 /local.properties
 /.idea/caches
 /.idea/libraries
@@ -46,3 +47,4 @@ __pycache__/
 venv/
 *.egg-info/
 supabase/.temp/
+supabase/.branches/

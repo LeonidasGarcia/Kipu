@@ -5,8 +5,11 @@ import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.feature.categories.domain.model.Category
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryOrigin
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
+import com.kipu.app.feature.categories.domain.usecase.CategoryItem
+import com.kipu.app.feature.categories.presentation.categories.CategoryTab
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -31,6 +34,31 @@ class CategoryRulesTest {
 
         val result = CategoryRules.validateHierarchy(subId, rootId, mapOf(rootId to root))
         assertTrue(result.isSuccess)
+    }
+
+    @Test
+    fun `subcategory type must match its root`() {
+        val rootId = CategoryId.generate()
+        val subId = CategoryId.generate()
+        val root = Category(
+            rootId, user1, null, CategoryOrigin.CUSTOM, true,
+            categoryType = CategoryType.INCOME,
+        )
+
+        assertTrue(CategoryRules.validateCategoryType(CategoryType.INCOME, rootId, mapOf(rootId to root)).isSuccess)
+        assertTrue(CategoryRules.validateCategoryType(CategoryType.EXPENSE, rootId, mapOf(rootId to root)).isFailure)
+        assertTrue(CategoryRules.validateCategoryType(CategoryType.INCOME, subId, mapOf(rootId to root)).isFailure)
+    }
+
+    @Test
+    fun `expense and income tabs include general categories but exclude the opposite type`() {
+        val expense = Category(CategoryId.generate(), user1, null, CategoryOrigin.CUSTOM, true, categoryType = CategoryType.EXPENSE)
+        val income = Category(CategoryId.generate(), user1, null, CategoryOrigin.CUSTOM, true, categoryType = CategoryType.INCOME)
+        val general = Category(CategoryId.generate(), user1, null, CategoryOrigin.CUSTOM, true, categoryType = CategoryType.GENERAL)
+        val items = listOf(expense, income, general).map { CategoryItem(it, null) }
+
+        assertEquals(listOf(expense.id, general.id), CategoryTab.EXPENSE.filterCategories(items).map { it.category.id })
+        assertEquals(listOf(income.id, general.id), CategoryTab.INCOME.filterCategories(items).map { it.category.id })
     }
 
     @Test

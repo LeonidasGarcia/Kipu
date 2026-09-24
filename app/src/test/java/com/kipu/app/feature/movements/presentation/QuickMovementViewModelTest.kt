@@ -14,6 +14,20 @@ import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
+import com.kipu.app.feature.categories.domain.CategoriesRepository
+import com.kipu.app.feature.categories.domain.model.Category
+import com.kipu.app.feature.categories.domain.model.CategoryConflict
+import com.kipu.app.feature.categories.domain.model.CategoryId
+import com.kipu.app.feature.categories.domain.model.CategoryOrigin
+import com.kipu.app.feature.categories.domain.model.CategoryPresentation
+import com.kipu.app.feature.categories.domain.model.CategoryType
+import com.kipu.app.feature.categories.domain.model.ConflictId
+import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MerchantId
+import com.kipu.app.feature.categories.domain.model.MovementClassification
+import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
+import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
+import com.kipu.app.core.finance.domain.model.MovementId
 import com.kipu.app.feature.movements.domain.MovementRepository
 import com.kipu.app.feature.movements.domain.RegisterTransaction
 import com.kipu.app.feature.movements.domain.RegisterTransactionValidator
@@ -24,10 +38,12 @@ import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -46,7 +62,11 @@ class QuickMovementViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val testAccountId = AccountId.generate()
+    private val usdAccountId = AccountId.generate()
     private val testUserId = UserId.generate()
+    private val testCategoryId = CategoryId.generate()
+    private val testIncomeCategoryId = CategoryId.generate()
+    private val transferAccountId = AccountId.generate()
     private lateinit var fakeMovementRepo: FakeMovementRepo
     private lateinit var fakeInstrumentsRepo: FakeInstrumentsRepo
     private lateinit var fakeSessionCoordinator: FakeSessionCoordinator
@@ -56,7 +76,7 @@ class QuickMovementViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         fakeMovementRepo = FakeMovementRepo()
-        fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, testUserId)
+        fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, usdAccountId, transferAccountId, testUserId)
         fakeSessionCoordinator = FakeSessionCoordinator(testUserId.value)
 
         val validator = RegisterTransactionValidator()
@@ -66,6 +86,11 @@ class QuickMovementViewModelTest {
         viewModel = QuickMovementViewModel(
             registerTransactionUseCase = registerUseCase,
             observeInstruments = observeInstruments,
+            observeCategories = ObserveCategories(FakeCategoriesRepo(testUserId, testCategoryId, testIncomeCategoryId)),
+            categorySyncScheduler = object : CategorySyncScheduler {
+                override fun scheduleSync(userId: String) = Unit
+                override fun cancelSync(userId: String) = Unit
+            },
             sessionCoordinator = fakeSessionCoordinator,
         )
     }
@@ -81,6 +106,7 @@ class QuickMovementViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(MovementType.EXPENSE, state.type)
         assertEquals(testAccountId.value, state.selectedSourceAccountId)
+        assertEquals(testCategoryId.value, state.availableCategories.single().id)
     }
 
     @Test
@@ -93,6 +119,30 @@ class QuickMovementViewModelTest {
         viewModel.onTypeSelected(MovementType.INCOME)
         assertEquals(null, viewModel.uiState.value.amountError)
         assertEquals(MovementType.INCOME, viewModel.uiState.value.type)
+    }
+
+    @Test
+    fun `category selector filters by income and hides categories for transfers`() = runTest {
+        advanceUntilIdle()
+        viewModel.onTypeSelected(MovementType.INCOME)
+
+        assertEquals(listOf(testIncomeCategoryId.value), viewModel.uiState.value.availableCategories.map { it.id })
+
+        viewModel.onTypeSelected(MovementType.TRANSFER)
+        assertTrue(viewModel.uiState.value.availableCategories.isEmpty())
+        assertEquals(null, viewModel.uiState.value.selectedCategoryId)
+    }
+
+    @Test
+    fun `transfer command never carries a category`() = runTest {
+        advanceUntilIdle()
+        viewModel.onTypeSelected(MovementType.TRANSFER)
+        viewModel.onAmountChanged("12.00")
+        viewModel.onDestinationAccountSelected(transferAccountId.value)
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(null, fakeMovementRepo.registeredCommands.single().categoryId)
     }
 
     @Test
@@ -115,7 +165,7 @@ class QuickMovementViewModelTest {
     fun `valid expense registration succeeds`() = runTest {
         advanceUntilIdle()
         viewModel.onAmountChanged("25.50")
-        viewModel.onCategorySelected(CategoryOption("cat-food", "Alimentación", "restaurant"))
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
         viewModel.onSave()
         advanceUntilIdle()
 
@@ -129,7 +179,7 @@ class QuickMovementViewModelTest {
         fakeMovementRepo.triggerDuplicateWarning = true
 
         viewModel.onAmountChanged("30.00")
-        viewModel.onCategorySelected(CategoryOption("cat-food", "Alimentación", "restaurant"))
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
         viewModel.onSave()
         advanceUntilIdle()
 
@@ -144,6 +194,93 @@ class QuickMovementViewModelTest {
         assertEquals(false, viewModel.uiState.value.showDuplicateWarning)
         assertEquals(1, fakeMovementRepo.registeredCommands.size)
         assertTrue(fakeMovementRepo.registeredCommands.first().ignoreSimilarityWarning)
+    }
+
+    @Test
+    fun `selecting a USD account updates the movement currency`() = runTest {
+        advanceUntilIdle()
+        viewModel.onSourceAccountSelected(usdAccountId.value)
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals("USD", fakeMovementRepo.registeredCommands.single().currency)
+    }
+
+    @Test
+    fun `provisional merchant is not sent as a catalog UUID`() = runTest {
+        advanceUntilIdle()
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onMerchantProvisionalText("Bodega del barrio")
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        val command = fakeMovementRepo.registeredCommands.single()
+        assertEquals(null, command.merchantId)
+        assertEquals("Bodega del barrio", command.merchantProvisionalText)
+    }
+
+    @Test
+    fun `selected occurrence date is saved and success reports pending local sync`() = runTest {
+        advanceUntilIdle()
+        val selectedDate = java.time.Instant.parse("2026-09-18T14:30:00Z").toEpochMilli()
+        val event = async { viewModel.events.first() }
+
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onOccurredAtChanged(selectedDate)
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(selectedDate, fakeMovementRepo.registeredCommands.single().occurredAt)
+        assertEquals(
+            QuickMovementUiEvent.TransactionSaved("Guardado en este dispositivo · Pendiente de sincronización"),
+            event.await(),
+        )
+    }
+
+    @Test
+    fun `catalog merchant uses its UUID and clears provisional text`() = runTest {
+        advanceUntilIdle()
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onMerchantProvisionalText("Bodega del barrio")
+        val merchantId = MerchantId.generate()
+        viewModel.onMerchantSelected(MerchantCatalogEntry(merchantId, "Tambo", "tambo"))
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        val command = fakeMovementRepo.registeredCommands.single()
+        assertEquals(merchantId.value, command.merchantId)
+        assertEquals(null, command.merchantProvisionalText)
+    }
+
+    private class FakeCategoriesRepo(
+        private val userId: UserId,
+        private val categoryId: CategoryId,
+        private val incomeCategoryId: CategoryId,
+    ) : CategoriesRepository {
+        override fun observeCategories(userId: UserId): Flow<List<Category>> = flowOf(listOf(
+            Category(categoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.EXPENSE),
+            Category(incomeCategoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.INCOME),
+        ))
+        override fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>> = flowOf(listOf(
+            CategoryPresentation(categoryId, this.userId, "Alimentación", "restaurant", "#ffffff"),
+            CategoryPresentation(incomeCategoryId, this.userId, "Salario", "work", "#ffffff"),
+        ))
+        override suspend fun getCategory(categoryId: CategoryId): Category? = null
+        override suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category> = Result.failure(UnsupportedOperationException())
+        override suspend fun setCategoryActive(categoryId: CategoryId, isActive: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override suspend fun updateCategoryPresentation(presentation: CategoryPresentation, expectedRevision: Long): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>> = flowOf(emptyList())
+        override fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?> = flowOf(null)
+        override suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override suspend fun clearCategoryClassification(movementId: MovementId): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override suspend fun clearMerchantClassification(movementId: MovementId): Result<Unit> = Result.failure(UnsupportedOperationException())
+        override fun observeConflicts(userId: UserId): Flow<List<CategoryConflict>> = flowOf(emptyList())
+        override suspend fun resolveConflict(conflictId: ConflictId, chosenVersion: String): Result<Unit> = Result.failure(UnsupportedOperationException())
     }
 
     private class FakeMovementRepo : MovementRepository {
@@ -200,7 +337,12 @@ class QuickMovementViewModelTest {
         override fun observeBalance(userId: String, accountId: String): Flow<Long?> = flowOf(0L)
     }
 
-    private class FakeInstrumentsRepo(val accountId: AccountId, val userId: UserId) : FinancialInstrumentsRepository {
+    private class FakeInstrumentsRepo(
+        val accountId: AccountId,
+        val usdAccountId: AccountId,
+        val transferAccountId: AccountId,
+        val userId: UserId,
+    ) : FinancialInstrumentsRepository {
         val accounts = listOf(
             Account(
                 id = accountId,
@@ -210,7 +352,25 @@ class QuickMovementViewModelTest {
                 currency = Currency.PEN,
                 initialBalance = Money(100000L, Currency.PEN),
                 openedAt = java.time.Instant.now(),
-            )
+            ),
+            Account(
+                id = usdAccountId,
+                userId = userId,
+                alias = "Dólares",
+                type = AccountType.SAVINGS,
+                currency = Currency.USD,
+                initialBalance = Money(100000L, Currency.USD),
+                openedAt = java.time.Instant.now(),
+            ),
+            Account(
+                id = transferAccountId,
+                userId = userId,
+                alias = "Cuenta secundaria",
+                type = AccountType.SAVINGS,
+                currency = Currency.PEN,
+                initialBalance = Money(100000L, Currency.PEN),
+                openedAt = java.time.Instant.now(),
+            ),
         )
 
         override fun observeAccounts(activeOnly: Boolean): Flow<List<Account>> = flowOf(accounts)

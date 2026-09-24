@@ -38,6 +38,9 @@ import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.DebitCard
+import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
+import com.kipu.app.feature.plans.domain.model.FreePlanLimits
+import com.kipu.app.feature.plans.domain.model.QuotaGroup
 import java.security.MessageDigest
 import java.time.Instant
 import javax.inject.Inject
@@ -49,8 +52,11 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+private val NON_COMPUTABLE_ACCOUNT_TYPES = setOf("CASH", "GOALS_VIRTUAL", "CREDIT_LIABILITY")
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -62,6 +68,8 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     private val syncDao: InstrumentSyncDao,
     private val sessionCoordinator: SessionCoordinator,
     private val syncScheduler: InstrumentSyncScheduler,
+    private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
+    private val planQuotaSyncScheduler: com.kipu.app.feature.plans.data.sync.PlanQuotaSyncScheduler? = null,
 ) : FinancialInstrumentsRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -612,6 +620,9 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
 
                 require(!sourceAccount.isArchived) { "Cannot pay from archived account" }
                 require(!creditCard.isArchived) { "Cannot pay archived credit card" }
+                val lockedIds = lockedInstrumentIds(userId)
+                require(cardId.value !in lockedIds) { "La tarjeta está bloqueada por la selección del plan Free" }
+                require(sourceAccountId.value !in lockedIds) { "La cuenta está bloqueada por la selección del plan Free" }
                 require(sourceAccount.currency == paymentAmount.currency.name) { "Source account currency mismatch" }
                 require(creditCard.currency == paymentAmount.currency.name) { "Credit card currency mismatch" }
 
@@ -701,6 +712,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     ?: throw IllegalArgumentException("Card not found: ${cardId.value}")
                 require(card.type == "CREDIT") { "Only credit cards can record credit purchases" }
                 require(!card.isArchived) { "Cannot record purchase on archived card" }
+                require(cardId.value !in lockedInstrumentIds(userId)) { "La tarjeta está bloqueada por la selección del plan Free" }
                 require(card.currency == amount.currency.name) { "Card currency mismatch" }
                 require(amount.minorUnits > 0L) { "Purchase amount must be positive" }
                 require(installments in 1..36) { "Installments must be between 1 and 36: $installments" }
@@ -861,7 +873,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         }
     }
 
-    private fun AccountEntity.toDomain(): Account {
+    private fun AccountEntity.toDomain(isPlanLocked: Boolean = false): Account {
         val curr = Currency.fromCode(currency)
         return Account(
             id = AccountId(id),
@@ -878,10 +890,14 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
             remoteRevision = remoteRevision,
             createdAt = Instant.ofEpochMilli(createdAt / 1000L),
             updatedAt = Instant.ofEpochMilli(updatedAt / 1000L),
+            isPlanLocked = isPlanLocked,
         )
     }
 
-    private fun CardEntity.toDomain(): Card {
+    private fun AccountEntity.isVisibleInDomain(): Boolean =
+        runCatching { AccountType.valueOf(type) }.isSuccess
+
+    private fun CardEntity.toDomain(isPlanLocked: Boolean = false): Card {
         val curr = Currency.fromCode(currency)
         return if (type == "DEBIT") {
             DebitCard(
@@ -897,6 +913,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 colorToken = color,
                 iconToken = icon,
                 isArchived = isArchived,
+                isPlanLocked = isPlanLocked,
                 remoteRevision = remoteRevision,
                 createdAt = Instant.ofEpochMilli(createdAt / 1000L),
                 updatedAt = Instant.ofEpochMilli(updatedAt / 1000L),
@@ -918,6 +935,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 colorToken = color,
                 iconToken = icon,
                 isArchived = isArchived,
+                isPlanLocked = isPlanLocked,
                 remoteRevision = remoteRevision,
                 createdAt = Instant.ofEpochMilli(createdAt / 1000L),
                 updatedAt = Instant.ofEpochMilli(updatedAt / 1000L),
@@ -930,7 +948,9 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
             when (access) {
                 is LocalAccess.Available -> {
                     val flow = if (activeOnly) accountDao.observeActive(access.userId) else accountDao.observeAll(access.userId)
-                    flow.map { list -> list.map { it.toDomain() } }
+                    combine(flow, observePlanLockedInstrumentIds(access.userId)) { list, locked ->
+                        list.filter { it.isVisibleInDomain() }.map { it.toDomain(it.id in locked) }
+                    }
                 }
                 else -> flowOf(emptyList())
             }
@@ -940,7 +960,10 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     override fun observeAccountById(accountId: AccountId): Flow<Account?> {
         return sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
-                is LocalAccess.Available -> accountDao.observeById(access.userId, accountId.value).map { it?.toDomain() }
+                is LocalAccess.Available -> combine(
+                    accountDao.observeById(access.userId, accountId.value),
+                    observePlanLockedInstrumentIds(access.userId),
+                ) { account, locked -> account?.takeIf { it.isVisibleInDomain() }?.toDomain(accountId.value in locked) }
                 else -> flowOf(null)
             }
         }.distinctUntilChanged()
@@ -971,7 +994,9 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
             when (access) {
                 is LocalAccess.Available -> {
                     val flow = if (activeOnly) cardDao.observeActive(access.userId) else cardDao.observeAll(access.userId)
-                    flow.map { list -> list.map { it.toDomain() } }
+                    combine(flow, observePlanLockedInstrumentIds(access.userId)) { list, locked ->
+                        list.map { it.toDomain(it.id in locked) }
+                    }
                 }
                 else -> flowOf(emptyList())
             }
@@ -981,10 +1006,76 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     override fun observeCardById(cardId: CardId): Flow<Card?> {
         return sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
-                is LocalAccess.Available -> cardDao.observeById(access.userId, cardId.value).map { it?.toDomain() }
+                is LocalAccess.Available -> combine(
+                    cardDao.observeById(access.userId, cardId.value),
+                    observePlanLockedInstrumentIds(access.userId),
+                ) { card, locked -> card?.toDomain(cardId.value in locked) }
                 else -> flowOf(null)
             }
         }.distinctUntilChanged()
+    }
+
+    private fun observePlanLockedInstrumentIds(userId: String): Flow<Set<String>> = combine(
+        accountDao.observeActive(userId),
+        cardDao.observeActive(userId),
+        database.planQuotaSelectionDao().observeSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name),
+        database.featureAccessCacheDao().observe(UUID.fromString(userId)),
+    ) { accounts, cards, selected, cache ->
+        val activeIds = accounts.filter { it.type !in NON_COMPUTABLE_ACCOUNT_TYPES }.map { it.id } + cards.map { it.id }
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        quotaPolicy.evaluate(
+            group = QuotaGroup.INSTRUMENTS,
+            activeResourceIds = activeIds,
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        ).planLockedResourceIds
+    }.distinctUntilChanged()
+
+    private suspend fun lockedInstrumentIds(userId: String): Set<String> {
+        val activeIds = accountDao.getActiveComputable(userId).map { it.id } + cardDao.getActive(userId).map { it.id }
+        val selected = database.planQuotaSelectionDao()
+            .getSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name)
+        val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        return quotaPolicy.evaluate(
+            group = QuotaGroup.INSTRUMENTS,
+            activeResourceIds = activeIds,
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        ).planLockedResourceIds
+    }
+
+    override fun observeSelectedFreeInstrumentIds(): Flow<Set<String>> =
+        sessionCoordinator.localAccess.flatMapLatest { access ->
+            when (access) {
+                is LocalAccess.Available -> database.planQuotaSelectionDao()
+                    .observeSelectedResourceIds(access.userId, QuotaGroup.INSTRUMENTS.name)
+                    .map { it.toSet() }
+                else -> flowOf(emptySet())
+            }
+        }.distinctUntilChanged()
+
+    override suspend fun saveSelectedFreeInstrumentIds(ids: Set<String>): Result<Unit> = runCatching {
+        val userId = currentUserId() ?: error("No active owner session")
+        require(ids.size <= FreePlanLimits().instruments) { "Puedes seleccionar hasta ${FreePlanLimits().instruments} instrumentos" }
+        val accounts = accountDao.getActiveComputable(userId)
+        val cards = cardDao.getActive(userId)
+        val activeIds = accounts.map { it.id }.toSet() + cards.map { it.id }
+        require(activeIds.containsAll(ids)) { "La selección contiene instrumentos inactivos o que no pertenecen a esta cuenta" }
+        val resourceTypes = accounts.associate { it.id to "ACCOUNT" } + cards.associate { it.id to "CARD" }
+        database.planQuotaSelectionDao().replaceSelection(
+            userId = userId,
+            featureKey = QuotaGroup.INSTRUMENTS.name,
+            resourceType = "INSTRUMENT",
+            resourceIds = ids,
+            now = System.currentTimeMillis(),
+            resourceTypesById = resourceTypes,
+        )
+        planQuotaSyncScheduler?.scheduleSync(userId)
     }
 
     override fun observeCardDebt(cardId: CardId): Flow<Money> {
@@ -1045,7 +1136,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         accountDao.observeActive(access.userId),
                         cardDao.observeActive(access.userId),
                     ) { accounts, cards ->
-                        val computableAccounts = accounts.count { it.type != "CASH" }
+                        val computableAccounts = accounts.count { it.type !in NON_COMPUTABLE_ACCOUNT_TYPES }
                         computableAccounts + cards.size
                     }
                 }

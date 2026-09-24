@@ -42,6 +42,10 @@ data class TransactionEntity(
     val categoryId: String? = null,
     @ColumnInfo(name = "merchant_id")
     val merchantId: String? = null,
+    @ColumnInfo(name = "merchant_provisional_text")
+    val merchantProvisionalText: String? = null,
+    @ColumnInfo(name = "legacy_kind")
+    val legacyKind: String? = null,
     @ColumnInfo(name = "occurred_at")
     val occurredAt: Long,
     @ColumnInfo(name = "note")
@@ -161,4 +165,11 @@ data class BalanceProjectionEntity(
     val lastTransactionAt: Long? = null,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(tableName = "movement_sync_checkpoints", primaryKeys = ["user_id"])
+data class MovementSyncCheckpointEntity(
+    @ColumnInfo(name = "user_id") val userId: String,
+    @ColumnInfo(name = "sequence") val sequence: Long = 0L,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis(),
 )

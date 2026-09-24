@@ -24,6 +24,7 @@ fun String.asBuildConfigString(): String =
 
 android {
     namespace = "com.kipu.app"
+    testBuildType = if (providers.gradleProperty("isolatedAndroidTests").orNull == "true") "lab" else "debug"
     compileSdk {
         version = release(37)
     }
@@ -53,6 +54,13 @@ android {
     }
 
     buildTypes {
+        create("lab") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".lab"
+            matchingFallbacks += listOf("debug")
+            buildConfigField("String", "SUPABASE_URL", "\"\"")
+            buildConfigField("String", "SUPABASE_PUBLISHABLE_KEY", "\"\"")
+        }
         release {
             optimization {
                 enable = false
@@ -137,6 +145,7 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.mockk.jvm)
     testImplementation(libs.androidx.navigation.testing)
     testImplementation(libs.hilt.android.testing)
     kspTest(libs.hilt.compiler)
@@ -152,9 +161,12 @@ dependencies {
     androidTestImplementation(libs.ktor.client.mock)
     androidTestImplementation(libs.kotlin.test)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.mockk.android)
+    androidTestImplementation(libs.mockk.agent)
     kspAndroidTest(libs.hilt.compiler)
 
     // Debug
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    add("labImplementation", libs.androidx.compose.ui.test.manifest)
 }

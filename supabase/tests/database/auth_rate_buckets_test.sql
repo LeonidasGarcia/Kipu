@@ -26,7 +26,7 @@ SELECT has_function(
 
 -- 4. Test rate bucket consumption and progression
 SELECT lives_ok(
-    $$
+    $test$ DO $block$
     DECLARE
         v_hash bytea := sha256('test_origin_ip'::bytea);
         v_res jsonb;
@@ -48,12 +48,12 @@ SELECT lives_ok(
             RAISE EXCEPTION 'Fourth attempt should be rate limited';
         END IF;
     END;
-    $$,
+    $block$; $test$,
     'Rate bucket consumes and blocks after exceeding max attempts'
 );
 
 SELECT lives_ok(
-    $$
+    $test$ DO $block$
     DECLARE
         v_key text := 'login:test-expired-cooldown';
         v_hash bytea := extensions.digest(convert_to(v_key, 'UTF8'), 'sha256');
@@ -76,7 +76,7 @@ SELECT lives_ok(
             RAISE EXCEPTION 'An attempt should be allowed after the cooldown';
         END IF;
     END;
-    $$,
+    $block$; $test$,
     'Expired cooldown allows one more login attempt'
 );
 

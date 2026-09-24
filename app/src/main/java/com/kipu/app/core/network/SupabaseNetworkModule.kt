@@ -40,7 +40,12 @@ abstract class SupabaseNetworkModule {
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_PUBLISHABLE_KEY,
         ) {
-            install(Auth)
+            install(Auth) {
+                // Kipu persists sessions only in KeystoreEncryptedSessionStorage.
+                autoLoadFromStorage = false
+                autoSaveToStorage = false
+                alwaysAutoRefresh = false
+            }
             install(Postgrest)
         }
 

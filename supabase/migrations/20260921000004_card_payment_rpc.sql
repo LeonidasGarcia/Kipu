@@ -10,8 +10,8 @@ AS $$
 DECLARE
     v_user_id UUID;
     v_op_id UUID;
-    v_card_id TEXT;
-    v_source_account_id TEXT;
+    v_card_id UUID;
+    v_source_account_id UUID;
     v_amount_minor BIGINT;
     v_currency TEXT;
     v_effective_at TIMESTAMPTZ;
@@ -19,7 +19,7 @@ DECLARE
     v_source_balance BIGINT;
     v_card_debt BIGINT;
     v_account_curr TEXT;
-    v_card_curr TEXT;
+    v_card_is_credit BOOLEAN;
     v_card_archived BOOLEAN;
     v_acc_archived BOOLEAN;
     v_mov_cash_id UUID;
@@ -31,8 +31,8 @@ BEGIN
     END IF;
 
     v_op_id := (p_command->>'operation_id')::uuid;
-    v_card_id := p_command->>'card_id';
-    v_source_account_id := p_command->>'source_account_id';
+    v_card_id := (p_command->>'card_id')::uuid;
+    v_source_account_id := (p_command->>'source_account_id')::uuid;
     v_amount_minor := (p_command->>'amount_minor_units')::bigint;
     v_currency := p_command->>'currency';
     v_effective_at := COALESCE((p_command->>'effective_at')::timestamptz, now());
@@ -42,14 +42,14 @@ BEGIN
     END IF;
 
     -- Idempotency check
-    SELECT * INTO v_existing_receipt FROM public.command_receipts
-    WHERE user_id = v_user_id AND operation_id = v_op_id;
+    SELECT * INTO v_existing_receipt FROM internal.command_receipts
+    WHERE user_id = v_user_id AND idempotency_key = v_op_id::text;
     IF FOUND THEN
         RETURN v_existing_receipt.response_payload;
     END IF;
 
     -- Verify source account
-    SELECT currency, is_archived INTO v_account_curr, v_acc_archived
+    SELECT currency_code, is_archived INTO v_account_curr, v_acc_archived
     FROM public.accounts
     WHERE user_id = v_user_id AND id = v_source_account_id;
     IF NOT FOUND THEN
@@ -63,17 +63,17 @@ BEGIN
     END IF;
 
     -- Verify credit card
-    SELECT currency, is_archived INTO v_card_curr, v_card_archived
+    SELECT is_credit, is_archived INTO v_card_is_credit, v_card_archived
     FROM public.cards
     WHERE user_id = v_user_id AND id = v_card_id;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Credit card not found' USING ERRCODE = 'P0002';
     END IF;
+    IF NOT v_card_is_credit THEN
+        RAISE EXCEPTION 'Cannot pay non-credit card' USING ERRCODE = '22000';
+    END IF;
     IF v_card_archived THEN
         RAISE EXCEPTION 'Cannot pay archived credit card' USING ERRCODE = '22000';
-    END IF;
-    IF v_card_curr != v_currency THEN
-        RAISE EXCEPTION 'Credit card currency mismatch' USING ERRCODE = '22023';
     END IF;
 
     -- Verify source balance
@@ -100,7 +100,7 @@ BEGIN
         id, operation_id, operation_sequence, user_id, kind, amount_minor_units, currency,
         account_id, effective_at, status, created_at
     ) VALUES (
-        v_mov_cash_id::text, v_op_id, 0, v_user_id, 'CARD_PAYMENT_CASH', -v_amount_minor, v_currency,
+        v_mov_cash_id, v_op_id, 0, v_user_id, 'CARD_PAYMENT_CASH', -v_amount_minor, v_currency,
         v_source_account_id, v_effective_at, 'POSTED', now()
     );
 
@@ -109,15 +109,15 @@ BEGIN
         id, operation_id, operation_sequence, user_id, kind, amount_minor_units, currency,
         card_id, effective_at, status, created_at
     ) VALUES (
-        v_mov_liab_id::text, v_op_id, 1, v_user_id, 'CARD_PAYMENT_LIABILITY', -v_amount_minor, v_currency,
+        v_mov_liab_id, v_op_id, 1, v_user_id, 'CARD_PAYMENT_LIABILITY', -v_amount_minor, v_currency,
         v_card_id, v_effective_at, 'POSTED', now()
     );
 
     -- Receipt
-    INSERT INTO public.command_receipts (
-        user_id, operation_id, command_type, aggregate_type, aggregate_id, payload_hash, response_payload, created_at
+    INSERT INTO internal.command_receipts (
+        user_id, idempotency_key, command_type, request_hash, response_payload, status, created_at
     ) VALUES (
-        v_user_id, v_op_id, 'PAY_CREDIT_CARD', 'CARD', v_card_id,
+        v_user_id, v_op_id::text, 'PAY_CREDIT_CARD',
         COALESCE(p_command->>'payload_hash', 'unhashed'),
         jsonb_build_object(
             'status', 'SUCCESS',
@@ -126,6 +126,7 @@ BEGIN
             'amount_minor_units', v_amount_minor,
             'currency', v_currency
         ),
+        'APPLIED',
         now()
     );
 

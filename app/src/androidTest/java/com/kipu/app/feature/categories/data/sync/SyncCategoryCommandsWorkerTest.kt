@@ -13,6 +13,7 @@ import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.remote.CategoriesApi
 import com.kipu.app.feature.categories.data.remote.CategoryApiResponse
 import com.kipu.app.feature.categories.data.remote.CategoryCommandResponseDto
+import com.kipu.app.feature.categories.data.remote.CategoryCatalogItemDto
 import com.kipu.app.feature.categories.data.remote.MerchantCatalogItemDto
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -38,7 +39,7 @@ class SyncCategoryCommandsWorkerTest {
 
     @Before
     fun setup() {
-        coEvery { workerParams.inputData } returns workDataOf(
+        io.mockk.every { workerParams.inputData } returns workDataOf(
             SyncCategoryCommandsWorker.KEY_USER_ID to testUserId
         )
     }
@@ -69,6 +70,15 @@ class SyncCategoryCommandsWorkerTest {
                 MerchantCatalogItemDto("m1", "Tambo", "tambo", true, 1L)
             )
         )
+        coEvery { api.fetchCategories() } returns CategoryApiResponse.Success(listOf(
+            CategoryCatalogItemDto(
+                id = "00000000-0000-0000-0000-000000000001",
+                name = "Alimentación", origin = "SYSTEM", isActive = true,
+                remoteRevision = 1L,
+                createdAt = "2026-09-23T00:00:00Z", updatedAt = "2026-09-23T00:00:00Z",
+            ),
+        ))
+        coEvery { api.fetchCategoryPresentations() } returns CategoryApiResponse.Success(emptyList())
 
         val worker = SyncCategoryCommandsWorker(
             appContext = context,
@@ -84,5 +94,7 @@ class SyncCategoryCommandsWorkerTest {
 
         coVerify { categoryDao.updateOutboxCommand(match { it.state == "COMPLETED" }) }
         coVerify { merchantDao.insertMerchants(match { it.size == 1 && it.first().id == "m1" }) }
+        coVerify { categoryDao.insertCategoriesIfAbsent(match { it.size == 1 && it.first().id == "00000000-0000-0000-0000-000000000001" }) }
+        coVerify { categoryDao.insertPresentationsIfAbsent(match { it.size == 1 && it.first().name == "Alimentación" }) }
     }
 }
