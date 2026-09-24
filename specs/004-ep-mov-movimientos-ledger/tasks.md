@@ -46,7 +46,7 @@
 - [x] T012 [P] [US1] Probar validaciones, signos, moneda y campos requeridos de los tres tipos en `app/src/test/java/com/kipu/app/feature/movements/domain/RegisterTransactionTest.kt`
 - [x] T013 [P] [US1] Probar persistencia y lectura cronológica local de gasto, ingreso y transferencia en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
 - [x] T014 [P] [US1] Probar estado, validaciones y envío único del formulario en `app/src/test/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModelTest.kt`
-- [ ] T015 [P] [US1] Probar tabs, campos condicionales y accesibilidad básica en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/QuickMovementScreenTest.kt`
+- [x] T015 [P] [US1] Probar tabs, campos condicionales y accesibilidad básica en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/QuickMovementScreenTest.kt`
 - [x] T016 [P] [US1] Probar gasto, ingreso, transferencia y referencias ajenas del RPC en `supabase/tests/database/movements_register_transaction_test.sql`
 
 ### Implementation for US1
@@ -102,7 +102,7 @@
 - [x] T036 [P] [US3] Probar representación canónica, hash, repetición y conflicto en `app/src/test/java/com/kipu/app/feature/movements/domain/TransactionIdempotencyTest.kt`
 - [x] T037 [P] [US3] Probar consulta de similitud, recibos y ausencia de efectos al cancelar en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSourceTest.kt`
 - [x] T038 [P] [US3] Probar clave/hash iguales, clave/hash distintos y concurrencia en `supabase/tests/database/movements_register_transaction_test.sql`
-- [ ] T039 [P] [US3] Probar el diálogo de advertencia, cancelación y confirmación con identidad nueva en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/DuplicateWarningDialogTest.kt`
+- [x] T039 [P] [US3] Probar el diálogo de advertencia, cancelación y confirmación con identidad nueva en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/DuplicateWarningDialogTest.kt`
 
 ### Implementation for US3
 
@@ -130,7 +130,7 @@
 - [ ] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_migration_test.sql`
 - [x] T053 [P] Probar que la deduplicación permanece disponible en Free sin consumir cupos en `app/src/test/java/com/kipu/app/feature/movements/domain/FreeDeduplicationTest.kt`
 - [x] T054 [P] Probar que logs y errores no exponen notas, tokens ni datos financieros sensibles en `app/src/test/java/com/kipu/app/core/logging/MovementLogRedactionTest.kt`
-- [ ] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_idempotency_stress_test.sql`
+- [x] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_idempotency_stress_test.sql`
 - [ ] T056 [P] Medir en dispositivo la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/ManualEntryAcceptanceTest.kt`
 - [ ] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md` (revisores y evidencias pendientes).
 
