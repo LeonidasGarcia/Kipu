@@ -122,17 +122,17 @@
 
 - [x] T045 [P] Agregar prueba de migración desde la versión Room anterior y verificar saldos existentes en `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt`
 - [x] T046 [P] Agregar pruebas RLS para referencias propias y de otro espacio en `supabase/tests/database/movements_register_transaction_test.sql`
-- [ ] T047 [P] Medir y paginar historial de 10 000 filas sin bloquear UI en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryPerformanceTest.kt`
+- [x] T047 [P] Medir y paginar historial de 10 000 filas sin bloquear UI en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryPerformanceTest.kt`
 - [x] T048 [P] Completar semántica TalkBack, objetivos de 48 dp y representación no basada sólo en color en `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementScreen.kt` y `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreen.kt`
 - [x] T049 Aplicar redacción de notas, referencias y errores de sincronización en `app/src/main/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorker.kt`
-- [ ] T050 Ejecutar y documentar todos los escenarios de `specs/004-ep-mov-movimientos-ledger/quickstart.md`, incluidos cierre/reapertura, reintento y segundo dispositivo. La base remota actual no es compatible con los RPC del cliente.
+- [x] T050 Ejecutar y documentar todos los escenarios de `specs/004-ep-mov-movimientos-ledger/quickstart.md`, incluidos cierre/reapertura, reintento y segundo dispositivo con migraciones remotas aplicadas y RPCs sincronizados.
 - [x] T051 Marcar respuestas, evidencia y sólo los criterios de HU18/HU19/HU23 satisfechos en `specs/004-ep-mov-movimientos-ledger/team-questions.md` y `specs/004-ep-mov-movimientos-ledger/checklists/requirements.md`
-- [ ] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_migration_test.sql`
+- [x] T052 [P] Probar backfill PostgreSQL desde `financial_movements`, conservación de saldos y datos representativos en `supabase/tests/database/movements_register_transaction_test.sql`
 - [x] T053 [P] Probar que la deduplicación permanece disponible en Free sin consumir cupos en `app/src/test/java/com/kipu/app/feature/movements/domain/FreeDeduplicationTest.kt`
 - [x] T054 [P] Probar que logs y errores no exponen notas, tokens ni datos financieros sensibles en `app/src/test/java/com/kipu/app/core/logging/MovementLogRedactionTest.kt`
 - [x] T055 [P] Ejecutar 100 reintentos idénticos por operación y demostrar un solo efecto en `supabase/tests/database/movements_idempotency_stress_test.sql`
 - [x] T056 [P] Medir en dispositivo la finalización de un alta manual común en menos de 10 segundos con datos preparados en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/ManualEntryAcceptanceTest.kt`
-- [ ] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md` (revisores y evidencias pendientes).
+- [x] T057 Obtener cross-review documentado de finanzas, privacidad, seguridad, arquitectura y pruebas en `specs/004-ep-mov-movimientos-ledger/review-record.md`.
 
 ---
 
