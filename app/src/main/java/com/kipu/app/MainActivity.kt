@@ -91,7 +91,7 @@ class MainActivity : FragmentActivity() {
         lifecycle.addObserver(localLockCoordinator)
         enableEdgeToEdge()
 
-        pendingDeepLink = authDeepLinkHandler.handleDeepLink(intent?.data)
+        pendingDeepLink = intent?.data?.let { authDeepLinkHandler.handleDeepLink(it) }
 
         setContent {
             val scope = rememberCoroutineScope()
@@ -122,9 +122,10 @@ class MainActivity : FragmentActivity() {
             val isMasked = profileState.value?.hideBalances ?: false
 
             LaunchedEffect(Unit) {
-                val restoreResult = authRepository.restoreSession()
-                val restored = restoreResult.getOrNull() as? AuthResult.Success
-                if (restored != null && pendingDeepLink == null) {
+                val restored = authRepository.restoreSession().getOrNull() as? AuthResult.Success
+                val hasActionableDeepLink = pendingDeepLink is DeepLinkResult.ResetPassword ||
+                    pendingDeepLink is DeepLinkResult.ConfirmEmail
+                if (restored != null && !hasActionableDeepLink) {
                     postAuthDestination(restored.userId)?.let { destination ->
                         navController.currentBackStackEntryFlow
                             .filter { it.destination.route == AUTH_LOGIN_ROUTE }
@@ -225,7 +226,7 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        pendingDeepLink = authDeepLinkHandler.handleDeepLink(intent.data)
+        pendingDeepLink = intent.data?.let { authDeepLinkHandler.handleDeepLink(it) }
     }
 
     private suspend fun postAuthDestination(rawUserId: String): String? {
