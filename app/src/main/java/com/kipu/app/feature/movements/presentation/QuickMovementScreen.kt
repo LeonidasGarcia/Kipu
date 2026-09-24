@@ -1,14 +1,12 @@
 package com.kipu.app.feature.movements.presentation
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -72,7 +71,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -248,7 +249,6 @@ fun QuickMovementContent(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(scrollState)
-            .animateContentSize(animationSpec = tween(KipuMotionTokens.EnterMillis))
             .padding(bottom = 24.dp)
     ) {
         // Top Header
@@ -395,24 +395,34 @@ fun QuickMovementContent(
         )
 
         // Destination Account Selector (Transfer only)
-        if (uiState.type == MovementType.TRANSFER) {
-            Spacer(modifier = Modifier.height(16.dp))
-            AccountDropdownSelector(
-                label = stringResource(R.string.movement_destination_account),
-                accounts = uiState.availableAccounts.filter {
-                    it.id.value != uiState.selectedSourceAccountId && it.currency.name == uiState.currency
-                },
-                selectedAccountId = uiState.selectedDestinationAccountId,
-                onAccountSelected = onDestinationAccountSelected,
-                error = uiState.destinationAccountError,
-                modifier = Modifier.testTag("selector_destination_account"),
-            )
+        AnimatedVisibility(
+            visible = uiState.type == MovementType.TRANSFER,
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                AccountDropdownSelector(
+                    label = stringResource(R.string.movement_destination_account),
+                    accounts = uiState.availableAccounts.filter {
+                        it.id.value != uiState.selectedSourceAccountId && it.currency.name == uiState.currency
+                    },
+                    selectedAccountId = uiState.selectedDestinationAccountId,
+                    onAccountSelected = onDestinationAccountSelected,
+                    error = uiState.destinationAccountError,
+                    modifier = Modifier.testTag("selector_destination_account"),
+                )
+            }
         }
 
         // Category Selector (Expense: mandatory, Income: optional, Transfer: none)
-        if (uiState.type != MovementType.TRANSFER) {
-            Spacer(modifier = Modifier.height(16.dp))
+        AnimatedVisibility(
+            visible = uiState.type != MovementType.TRANSFER,
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+        ) {
             Column(modifier = Modifier.fillMaxWidth()) {
+                Spacer(modifier = Modifier.height(16.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -464,23 +474,23 @@ fun QuickMovementContent(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(uiState.categoryError, color = colors.error, style = MaterialTheme.typography.bodySmall)
                 }
-            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedButton(
-                    onClick = onOpenMerchantPicker,
-                    modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
-                ) {
-                    Text(
-                        uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
-                        maxLines = 1,
-                    )
-                }
-                if (uiState.merchantName.isNotBlank()) {
-                    IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = onOpenMerchantPicker,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
+                    ) {
+                        Text(
+                            uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
+                            maxLines = 1,
+                        )
+                    }
+                    if (uiState.merchantName.isNotBlank()) {
+                        IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
+                        }
                     }
                 }
             }
@@ -492,7 +502,15 @@ fun QuickMovementContent(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onToggleMoreDetails() }
+                .heightIn(min = 48.dp)
+                .toggleable(
+                    value = uiState.isMoreDetailsExpanded,
+                    role = Role.Button,
+                    onValueChange = { onToggleMoreDetails() },
+                )
+                .semantics {
+                    stateDescription = if (uiState.isMoreDetailsExpanded) "Expandido" else "Contraído"
+                }
                 .padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
@@ -511,8 +529,8 @@ fun QuickMovementContent(
 
         AnimatedVisibility(
             visible = uiState.isMoreDetailsExpanded,
-            enter = fadeIn(tween(KipuMotionTokens.EnterMillis)) + expandVertically(tween(KipuMotionTokens.EnterMillis)),
-            exit = fadeOut(tween(KipuMotionTokens.ExitMillis)) + shrinkVertically(tween(KipuMotionTokens.ExitMillis)),
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 // Date Display
@@ -574,7 +592,9 @@ fun QuickMovementContent(
                 .fillMaxWidth()
                 .height(52.dp)
                 .testTag("btn_save_transaction")
-                .semantics { contentDescription = "Guardar transacción" },
+                .semantics {
+                    contentDescription = if (uiState.isSaving) "Guardando transacción" else "Guardar transacción"
+                },
         ) {
             if (uiState.isSaving) {
                 CircularProgressIndicator(

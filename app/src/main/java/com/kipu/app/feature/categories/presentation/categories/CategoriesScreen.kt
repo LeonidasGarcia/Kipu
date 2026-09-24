@@ -456,7 +456,7 @@ fun CategoryRootCard(
     val cardAlpha = if (isRootActive) 1f else 0.5f
     val rotationAngle by animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
-        animationSpec = tween(KipuMotionTokens.EnterMillis),
+        animationSpec = tween(KipuMotionTokens.FastMillis),
         label = "expand_rotation",
     )
 
@@ -584,8 +584,8 @@ fun CategoryRootCard(
             // Subcategorías colapsables
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = fadeIn(tween(KipuMotionTokens.EnterMillis)) + expandVertically(tween(KipuMotionTokens.EnterMillis)),
-                exit = fadeOut(tween(KipuMotionTokens.ExitMillis)) + shrinkVertically(tween(KipuMotionTokens.ExitMillis)),
+                enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
             ) {
                 Column(
                     modifier = Modifier

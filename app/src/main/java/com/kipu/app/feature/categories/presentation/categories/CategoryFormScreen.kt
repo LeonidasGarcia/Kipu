@@ -1,6 +1,11 @@
 package com.kipu.app.feature.categories.presentation.categories
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,6 +72,7 @@ import com.kipu.app.feature.categories.presentation.CATEGORY_ICON_SECTIONS
 import com.kipu.app.feature.categories.presentation.CATEGORY_PALETTE
 import com.kipu.app.feature.categories.presentation.parseHexColor
 import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -265,7 +271,11 @@ fun CategoryFormDialog(
                 }
 
                 // Selector de categoría padre condicional si es subcategoría
-                AnimatedVisibility(visible = isSubcategory) {
+                AnimatedVisibility(
+                    visible = isSubcategory,
+                    enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                    exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "Categoría Principal Padre *",

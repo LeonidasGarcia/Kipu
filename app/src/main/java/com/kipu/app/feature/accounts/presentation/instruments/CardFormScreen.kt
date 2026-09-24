@@ -158,7 +158,6 @@ fun CardFormScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
-                .animateContentSize(animationSpec = tween(KipuMotionTokens.EnterMillis))
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -277,135 +276,142 @@ fun CardFormScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            if (isDebit) {
-                Text(
-                    text = "Cuenta Vinculada",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(animationSpec = tween(KipuMotionTokens.FastMillis)),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                if (isDebit) {
+                    Text(
+                        text = "Cuenta Vinculada",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
 
-                if (eligibleAccounts.isEmpty()) {
-                    Card(
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "No tienes cuentas de ahorro o corriente activas para vincular esta tarjeta.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            modifier = Modifier.padding(12.dp),
-                        )
+                    if (eligibleAccounts.isEmpty()) {
+                        Card(
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = "No tienes cuentas de ahorro o corriente activas para vincular esta tarjeta.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
+                    } else {
+                        ExposedDropdownMenuBox(
+                            expanded = isAccountDropdownExpanded,
+                            onExpandedChange = { isAccountDropdownExpanded = it },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            OutlinedTextField(
+                                value = selectedAccount?.let { "${it.alias} (${it.currency.name})" } ?: "Seleccionar cuenta",
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Cuenta a la que pertenece la tarjeta") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAccountDropdownExpanded) },
+                                shape = MaterialTheme.shapes.medium,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                            )
+                            ExposedDropdownMenu(
+                                expanded = isAccountDropdownExpanded,
+                                onDismissRequest = { isAccountDropdownExpanded = false },
+                            ) {
+                                eligibleAccounts.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = { Text("${account.alias} • ${account.currency.name}") },
+                                        onClick = {
+                                            selectedAccount = account
+                                            isAccountDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Card(
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = "Esta tarjeta reflejará los fondos de la cuenta seleccionada. No añadirá saldo por separado.",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp),
+                            )
+                        }
                     }
                 } else {
-                    ExposedDropdownMenuBox(
-                        expanded = isAccountDropdownExpanded,
-                        onExpandedChange = { isAccountDropdownExpanded = it },
+                    Text(
+                        text = "Condiciones de Crédito",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedTextField(
-                            value = selectedAccount?.let { "${it.alias} (${it.currency.name})" } ?: "Seleccionar cuenta",
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text("Cuenta a la que pertenece la tarjeta") },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAccountDropdownExpanded) },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(),
-                        )
-                        ExposedDropdownMenu(
-                            expanded = isAccountDropdownExpanded,
-                            onDismissRequest = { isAccountDropdownExpanded = false },
-                        ) {
-                            eligibleAccounts.forEach { account ->
-                                DropdownMenuItem(
-                                    text = { Text("${account.alias} • ${account.currency.name}") },
-                                    onClick = {
-                                        selectedAccount = account
-                                        isAccountDropdownExpanded = false
-                                    }
-                                )
-                            }
+                        Currency.entries.forEach { curr ->
+                            FilterChip(
+                                selected = selectedCurrency == curr,
+                                onClick = { selectedCurrency = curr },
+                                label = { Text(curr.name) },
+                            )
                         }
                     }
 
-                    Card(
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    OutlinedTextField(
+                        value = creditLimitInput,
+                        onValueChange = { creditLimitInput = it },
+                        label = { Text("Línea de crédito autorizada (${selectedCurrency.name})") },
+                        isError = creditLimitError != null,
+                        supportingText = creditLimitError?.let { error ->
+                            { Text(error, color = MaterialTheme.colorScheme.error) }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Text(
-                            text = "Esta tarjeta reflejará los fondos de la cuenta seleccionada. No añadirá saldo por separado.",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(12.dp),
+                        OutlinedTextField(
+                            value = billingDayInput,
+                            onValueChange = { billingDayInput = it },
+                            label = { Text("Día de corte (1-31)") },
+                            isError = billingDayError != null,
+                            supportingText = billingDayError?.let { error ->
+                                { Text(error, color = MaterialTheme.colorScheme.error) }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = dueDayInput,
+                            onValueChange = { dueDayInput = it },
+                            label = { Text("Día de pago (1-31)") },
+                            isError = dueDayError != null,
+                            supportingText = dueDayError?.let { error ->
+                                { Text(error, color = MaterialTheme.colorScheme.error) }
+                            },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.weight(1f),
                         )
                     }
-                }
-            } else {
-                Text(
-                    text = "Condiciones de Crédito",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Currency.entries.forEach { curr ->
-                        FilterChip(
-                            selected = selectedCurrency == curr,
-                            onClick = { selectedCurrency = curr },
-                            label = { Text(curr.name) },
-                        )
-                    }
-                }
-
-                OutlinedTextField(
-                    value = creditLimitInput,
-                    onValueChange = { creditLimitInput = it },
-                    label = { Text("Línea de crédito autorizada (${selectedCurrency.name})") },
-                    isError = creditLimitError != null,
-                    supportingText = creditLimitError?.let { error ->
-                        { Text(error, color = MaterialTheme.colorScheme.error) }
-                    },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedTextField(
-                        value = billingDayInput,
-                        onValueChange = { billingDayInput = it },
-                        label = { Text("Día de corte (1-31)") },
-                        isError = billingDayError != null,
-                        supportingText = billingDayError?.let { error ->
-                            { Text(error, color = MaterialTheme.colorScheme.error) }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = dueDayInput,
-                        onValueChange = { dueDayInput = it },
-                        label = { Text("Día de pago (1-31)") },
-                        isError = dueDayError != null,
-                        supportingText = dueDayError?.let { error ->
-                            { Text(error, color = MaterialTheme.colorScheme.error) }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.weight(1f),
-                    )
                 }
             }
 

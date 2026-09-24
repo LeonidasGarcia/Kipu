@@ -1,6 +1,11 @@
 package com.kipu.app.feature.auth.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -73,6 +78,7 @@ import com.kipu.app.ui.theme.KipuPrimaryContainer
 import com.kipu.app.ui.theme.KipuSecondaryContainer
 import com.kipu.app.ui.theme.KipuSurfaceContainerLow
 import com.kipu.app.ui.theme.KipuSurfaceContainerLowest
+import com.kipu.app.ui.theme.KipuMotionTokens
 
 /**
  * Pantalla 1: Registro, Autenticación y Recuperación unificada
@@ -341,7 +347,11 @@ fun LoginScreen(
                 }
 
                 // Heurística de Nielsen: Indicadores dinámicos de requisitos de contraseña (solo en modo Registro)
-                AnimatedVisibility(visible = isRegisterMode) {
+                AnimatedVisibility(
+                    visible = isRegisterMode,
+                    enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                    exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -364,7 +374,11 @@ fun LoginScreen(
                 }
 
                 // Campo: Confirmar Contraseña (solo en modo Registro)
-                AnimatedVisibility(visible = isRegisterMode) {
+                AnimatedVisibility(
+                    visible = isRegisterMode,
+                    enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                    exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -531,7 +545,11 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Enlace "¿Olvidaste tu contraseña?" (solo en modo Iniciar Sesión)
-                AnimatedVisibility(visible = !isRegisterMode) {
+                AnimatedVisibility(
+                    visible = !isRegisterMode,
+                    enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+                    exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+                ) {
                     TextButton(
                         onClick = onNavigateToRecovery,
                         modifier = Modifier.height(36.dp),
