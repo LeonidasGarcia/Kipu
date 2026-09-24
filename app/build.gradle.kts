@@ -168,4 +168,5 @@ dependencies {
     // Debug
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    add("labImplementation", libs.androidx.compose.ui.test.manifest)
 }
