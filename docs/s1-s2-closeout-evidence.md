@@ -30,7 +30,7 @@
 
 - The 119-test isolated suite passes on the Samsung SM-S926B, but does not verify a full authenticated offline→remote-sync→second-device walkthrough or TalkBack acceptance.
 - T047's 10,000-row lazy-history performance assertion now runs successfully; database-level pagination remains unverified because the current repository observes the full transaction list.
-- T052 PostgreSQL historical backfill, T050 full offline/restart/second-device walkthrough, and T057 named cross-review remain open. T055's 100-retry pgTAP stress test passes locally; T056's prepared manual-entry acceptance passes on device.
+- T052 PostgreSQL historical backfill remains open until EP-CTA/EP-CCO reviews one deterministic transaction identity: Room 5→6 currently prefixes legacy IDs with `legacy:`, while the PostgreSQL source IDs are UUIDs. T050 full offline/restart/second-device walkthrough and T057 named cross-review also remain open. T055's 100-retry pgTAP stress test passes locally; T056's prepared manual-entry acceptance passes on device.
 - No live sign-in with supplied credentials was performed: the remote backend currently has missing current-branch migrations/RPCs and catalog-column mismatches. Credentials were not stored in source or test fixtures.
 - `specs/004-ep-mov-movimientos-ledger/review-record.md` still requires named cross-reviewers. The PostgreSQL historical backfill and database-level history pagination remain unchecked in `specs/004/tasks.md`.
 - The remote Kipu database and `plans` Edge Function remain incompatible with this branch and were not modified. See [`s1-s2-remote-backend-readiness.md`](s1-s2-remote-backend-readiness.md) for read-only MCP evidence and release gates.
