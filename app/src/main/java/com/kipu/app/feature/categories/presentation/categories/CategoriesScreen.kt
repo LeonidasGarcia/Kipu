@@ -512,53 +512,6 @@ fun CategoryRootCard(
                 }
 
                 IconButton(
-                    onClick = onToggleExpand,
-                    modifier = Modifier.size(48.dp),
-                ) {
-                    Icon(
-                        Icons.Default.ExpandMore,
-                        contentDescription = if (isExpanded) "Colapsar ${item.displayName}" else "Expandir ${item.displayName}",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .rotate(rotationAngle),
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (item.category.isCustom) "Personalizada" else "Predeterminada",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (item.category.isCustom) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = when {
-                            item.category.isPlanLocked -> "Bloqueada por el plan Free"
-                            isRootActive -> "Activa"
-                            else -> "Inactiva · Bloquea nuevas asignaciones"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (item.category.isPlanLocked || !isRootActive) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(
                     onClick = onEdit,
                     modifier = Modifier.size(48.dp),
                 ) {
@@ -580,6 +533,52 @@ fun CategoryRootCard(
                         modifier = Modifier.size(18.dp),
                     )
                 }
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) "Colapsar ${item.displayName}" else "Expandir ${item.displayName}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(20.dp)
+                            .rotate(rotationAngle),
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 56.dp, top = 4.dp),
+            ) {
+                Text(
+                    text = if (item.category.isCustom) "Personalizada" else "Predeterminada",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (item.category.isCustom) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = when {
+                        item.category.isPlanLocked -> "Bloqueada por el plan Free"
+                        isRootActive -> "Activa"
+                        else -> "Inactiva · Bloquea nuevas asignaciones"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (item.category.isPlanLocked || !isRootActive) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
 
             // Subcategorías colapsables
@@ -601,22 +600,20 @@ fun CategoryRootCard(
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(parseHexColor(item.color)),
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(parseHexColor(item.color)),
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Text(
-                                        text = subItem.displayName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
+                                Text(
+                                    text = subItem.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                                 if (!isRootActive) {
                                     Text(
                                         text = "Inactiva por categoría padre",
@@ -624,33 +621,28 @@ fun CategoryRootCard(
                                         color = MaterialTheme.colorScheme.error,
                                     )
                                 }
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End,
-                                ) {
-                                    IconButton(
-                                        onClick = { onEditSubcategory(subItem) },
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Edit,
-                                            contentDescription = "Editar ${subItem.displayName}",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
-                                    IconButton(
-                                        onClick = { onDeleteSubcategory(subItem) },
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Default.DeleteOutline,
-                                            contentDescription = "Inactivar ${subItem.displayName}",
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
-                                }
+                            }
+                            IconButton(
+                                onClick = { onEditSubcategory(subItem) },
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = "Editar ${subItem.displayName}",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            IconButton(
+                                onClick = { onDeleteSubcategory(subItem) },
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.DeleteOutline,
+                                    contentDescription = "Inactivar ${subItem.displayName}",
+                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                    modifier = Modifier.size(18.dp),
+                                )
                             }
                         }
                     }

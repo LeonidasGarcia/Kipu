@@ -31,6 +31,7 @@ import com.kipu.app.feature.categories.presentation.categories.QuotaBanner
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.math.abs
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -97,6 +98,59 @@ class CategoriesScreenTest {
         composeTestRule.onNodeWithText("Personalizada").assertIsDisplayed()
         composeTestRule.onNodeWithText("Activa").assertIsDisplayed()
         composeTestRule.onNodeWithText("Agregar subcategoría").assertIsDisplayed()
+    }
+
+    @Test
+    fun editButtonsAlignWithRootAndSubcategoryNames() {
+        val rootId = CategoryId.generate()
+        val subId = CategoryId.generate()
+        val subItem = CategoryItem(
+            category = Category(
+                id = subId,
+                ownerId = testUserId,
+                parentId = rootId,
+                origin = CategoryOrigin.CUSTOM,
+                isActive = true,
+            ),
+            presentation = CategoryPresentation(
+                categoryId = subId,
+                ownerId = testUserId,
+                name = "Restaurantes",
+                icon = "restaurant",
+                color = "#E91E63",
+            ),
+        )
+        val rootItem = CategoryItem(
+            category = Category(
+                id = rootId,
+                ownerId = testUserId,
+                parentId = null,
+                origin = CategoryOrigin.CUSTOM,
+                isActive = true,
+            ),
+            presentation = CategoryPresentation(
+                categoryId = rootId,
+                ownerId = testUserId,
+                name = "Alimentación",
+                icon = "food",
+                color = "#4CAF50",
+            ),
+            subcategories = listOf(subItem),
+        )
+
+        composeTestRule.setContent { CategoryRootCard(item = rootItem) }
+
+        val rootNameY = composeTestRule.onNodeWithText("Alimentación")
+            .fetchSemanticsNode().boundsInRoot.center.y
+        val rootEditY = composeTestRule.onNodeWithContentDescription("Editar Alimentación")
+            .fetchSemanticsNode().boundsInRoot.center.y
+        val subcategoryNameY = composeTestRule.onNodeWithText("Restaurantes")
+            .fetchSemanticsNode().boundsInRoot.center.y
+        val subcategoryEditY = composeTestRule.onNodeWithContentDescription("Editar Restaurantes")
+            .fetchSemanticsNode().boundsInRoot.center.y
+
+        assertTrue("Root edit should align with the root title", abs(rootEditY - rootNameY) < 16f)
+        assertTrue("Subcategory edit should align with its label", abs(subcategoryEditY - subcategoryNameY) < 8f)
     }
 
     @Test
