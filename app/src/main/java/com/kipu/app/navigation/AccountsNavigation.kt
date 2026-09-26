@@ -91,6 +91,7 @@ fun NavGraphBuilder.accountsDestinations(
             onReturnToDashboard = { message ->
                 navController.returnToAccountsDashboard(message)
             },
+            onNavigateToRateCatalog = { cardId -> navController.navigateToRateCatalog(cardId) },
         )
     }
 
@@ -126,8 +127,16 @@ fun NavGraphBuilder.accountsDestinations(
         val cardId = cardIdStr?.let {
             runCatching { CardId(it) }.getOrNull()
         }
+        val viewModel: AccountsViewModel = hiltViewModel()
+        val products = viewModel.creditProductCatalog.collectAsState().value
+        val catalogError = viewModel.creditCatalogError.collectAsState().value
         RateCatalogScreen(
             cardId = cardId,
+            products = products,
+            catalogError = catalogError,
+            events = viewModel.events,
+            onLoadCatalog = viewModel::loadCreditProductCatalog,
+            onUpdatePersonalTea = viewModel::updatePersonalTea,
             onNavigateBack = { navController.popBackStack() },
         )
     }

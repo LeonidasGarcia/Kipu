@@ -32,15 +32,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.kipu.app.core.finance.domain.InstallmentCalculator
-import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.InstallmentScheduleItem
 import com.kipu.app.feature.accounts.domain.model.InstallmentSimulation
 import com.kipu.app.feature.accounts.domain.model.PurchaseCandidate
-import com.kipu.app.feature.accounts.domain.model.RateSource
+import com.kipu.app.feature.accounts.domain.usecase.SimulateInstallments
 import com.kipu.app.ui.component.MoneyText
-import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 @Composable
@@ -54,22 +51,12 @@ fun InstallmentSimulatorScreen(
 ) {
     var selectedInstallments by remember { mutableIntStateOf(candidate.suggestedInstallments.coerceIn(1, 36)) }
 
-    val firstDueDate = remember(card.dueDay) {
-        val now = LocalDate.now()
-        val candidateDate = LocalDate.of(now.year, now.month, card.dueDay.coerceIn(1, 28))
-        if (candidateDate.isAfter(now)) candidateDate else candidateDate.plusMonths(1)
-    }
-
-    val simulation = remember(selectedInstallments, candidate.amount, teaBps) {
-        InstallmentCalculator.simulate(
-            cardId = card.id,
-            principal = candidate.amount,
+    val simulation = remember(selectedInstallments, candidate, card, teaBps) {
+        SimulateInstallments()(
+            candidate = candidate,
+            card = card,
             installmentsCount = selectedInstallments,
-            firstDueDate = firstDueDate,
-            dueDay = card.dueDay,
-            teaBps = teaBps,
-            rateSource = if (teaBps != null && teaBps > 0) RateSource.PERSONAL_TEA else RateSource.NONE,
-            candidateId = candidate.id,
+            acceptedReferenceTeaBps = teaBps,
         )
     }
 

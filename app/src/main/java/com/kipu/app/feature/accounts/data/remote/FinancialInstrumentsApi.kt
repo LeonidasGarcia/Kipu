@@ -4,6 +4,7 @@ import com.kipu.app.core.network.AuthenticatedSessionProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.header
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -51,6 +52,67 @@ class FinancialInstrumentsApi @Inject constructor(
 
     suspend fun recordOpeningAdjustment(request: RecordOpeningAdjustmentRequestDto): FinancialApiResponse<CommandResponseDto> {
         return callRpc("record_opening_adjustment_v1", request)
+    }
+
+    suspend fun registerCreditPurchase(request: CreditCommandRequestDto): FinancialApiResponse<CreditCommandResponseDto> {
+        return callRpc("register_transaction_v1", request)
+    }
+
+    suspend fun allocateCreditPayment(request: CreditCommandRequestDto): FinancialApiResponse<CreditCommandResponseDto> {
+        return callRpc("allocate_credit_payment_v1", request)
+    }
+
+    suspend fun updatePersonalTea(request: UpdatePersonalTeaRequestDto): FinancialApiResponse<PersonalTeaCommandResponseDto> {
+        return callRpc("update_card_personal_tea_v1", request)
+    }
+
+    suspend fun fetchCreditProducts(): FinancialApiResponse<List<CreditProductCatalogDto>> {
+        return try {
+            val auth = getAuthHeader() ?: return FinancialApiResponse.Error(401, "No active session")
+            val response = httpClient.get("rest/v1/credit_products") {
+                header(HttpHeaders.Authorization, auth)
+                url {
+                    parameters.append(
+                        "select",
+                        "id,institution_code,institution_name,product_name,card_network,reference_tea_bps,reference_tea_pen_min_bps,reference_tea_pen_max_bps,reference_tea_usd_min_bps,reference_tea_usd_max_bps,published_tea_summary,published_tcea_summary,membership_fee_pen_minor,membership_fee_usd_minor,membership_condition,source_url,verification_status,catalog_as_of,effective_from,effective_to",
+                    )
+                    parameters.append("is_catalog_listed", "eq.true")
+                    parameters.append("order", "institution_code.asc,product_name.asc")
+                }
+            }
+            when (response.status) {
+                HttpStatusCode.OK -> FinancialApiResponse.Success(response.body())
+                else -> FinancialApiResponse.Error(response.status.value, response.body<String>())
+            }
+        } catch (e: Exception) {
+            FinancialApiResponse.NetworkFailure(e)
+        }
+    }
+
+    suspend fun fetchCreditUtilizationNotifications(cardId: String? = null): FinancialApiResponse<List<CreditUtilizationNotificationDto>> {
+        return try {
+            val auth = getAuthHeader() ?: return FinancialApiResponse.Error(401, "No active session")
+            val response = httpClient.get("rest/v1/app_notifications") {
+                header(HttpHeaders.Authorization, auth)
+                url {
+                    parameters.append(
+                        "select",
+                        "id,title,body,notification_type,reference_entity_type,reference_entity_id,is_read,created_at,event_key",
+                    )
+                    parameters.append("notification_type", "eq.CREDIT_UTILIZATION_THRESHOLD_CROSSED")
+                    parameters.append("reference_entity_type", "eq.CARD")
+                    parameters.append("is_read", "eq.false")
+                    if (cardId != null) parameters.append("reference_entity_id", "eq.$cardId")
+                    parameters.append("order", "created_at.desc")
+                }
+            }
+            when (response.status) {
+                HttpStatusCode.OK -> FinancialApiResponse.Success(response.body())
+                else -> FinancialApiResponse.Error(response.status.value, response.body<String>())
+            }
+        } catch (e: Exception) {
+            FinancialApiResponse.NetworkFailure(e)
+        }
     }
 
     suspend fun pullChanges(request: PullChangesRequestDto): FinancialApiResponse<PullChangesResponseDto> {

@@ -1,12 +1,15 @@
+**Propagated**: 2026-09-24 — Updated from the approved Sprint 3 refinement in spec.md.
+
+
 # Implementation Plan: EP-CTA - Cuentas y Tarjetas
 
-**Branch**: `002-ep-cta-cuentas-tarjetas` | **Date**: 2026-09-21 | **Spec**: [spec.md](spec.md)
+**Branch**: `002-ep-cta-cuentas-tarjetas` | **Date**: 2026-09-24 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/002-ep-cta-cuentas-tarjetas/spec.md` plus the requested Android, Room, Supabase and Stitch architecture constraints.
 
 ## Summary
 
-Disenar EP-CTA como una vertical local-first dentro del modulo Android existente. Sprint 2 entrega HU-07 y HU-08 mediante modelos financieros puros, repositorios de dominio, Room v3, comandos atomicos de cuenta+apertura y tarjeta, una outbox propia de instrumentos, sincronizacion idempotente mediante RPC PostgreSQL tipadas y Pantallas 4/5 en Compose. Sprint 3 extiende el mismo ledger y contrato de comandos para deuda, alertas, tasas, pagos y compras en cuotas sin introducir una segunda verdad financiera. La implementacion permanece bloqueada hasta recuperar y validar el baseline remoto.
+Disenar EP-CTA como una vertical local-first dentro del modulo Android existente. Sprint 2 cerró HU-07 y HU-08; el repositorio contiene Room version 10. Sprint 3 implementa HU-09 a HU-13 sobre los modelos existentes, con migracion local de 10 a 11. T075 fue aprobado: el reset limpio de PostgreSQL 17 y el diff local pasaron; la historia y el esquema remotos presentan drift y se preservaran con migraciones nuevas forward-only. El incremento unifica crédito, tasas, pagos y cuotas sobre el ledger canónico.
 
 Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconciliada. Los saldos se derivan exclusivamente de movimientos en unidades menores enteras. `AccountEntity.initialBalanceMinorUnits` se conserva solo como dato inmutable de auditoria y debe coincidir con el movimiento `OPENING`; nunca actua como saldo actual. Una tarjeta de debito no tiene saldo propio y una linea de credito nunca participa en dinero real disponible.
 
@@ -16,7 +19,7 @@ Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconc
 
 - HU-07: cuentas liquidas, presets, apertura atomica, edicion visual, ajustes auditables, archivo/reactivacion y cupo Free.
 - HU-08: tarjetas de debito/credito, vinculo de debito, identificacion segura, coincidencias advertidas y privacidad PAN/CVV.
-- Room v3, migracion `2 -> 3`, repositorios, casos de uso, Pantallas 4/5, navegacion, outbox, worker, RPC, RLS y pruebas asociadas.
+- El diseño inicial de S2 incorporó Room v3, repositorios, casos de uso, Pantallas 4/5, navegación, outbox, worker, RPC, RLS y pruebas. El esquema que hoy está en el repositorio llegó a la versión 10.
 - Baseline remoto reproducible y endurecido como precondicion obligatoria del backend.
 
 ### Sprint 3 - Evolucion sobre la misma base
@@ -64,7 +67,7 @@ Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconc
 | IX. Quality Is Correctness | PASS | Incluye dominio, migraciones, atomicidad, sync, RLS, privacidad, aislamiento, accesibilidad y pruebas reales. |
 | X. Product Boundary | PASS | Registra informacion; no mueve dinero, emite credito ni lee bancos/SMS/correo. |
 
-**Pre-research result**: PASS. El baseline remoto faltante no se acepta como deuda silenciosa: su recuperacion y `supabase db reset` limpio son una precondicion de implementacion y release.
+**Pre-research result**: PASS. T075 was approved on 2026-09-24: 23 local migrations reset cleanly, `supabase db diff --local --schema public,internal` returned no schema changes, and the linked project's migration/schema drift was documented for forward-only reconciliation. No remote reset or historical migration rewrite is allowed.
 
 ### Post-Design Re-check
 
@@ -73,7 +76,7 @@ Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconc
 | Efectos e invariantes financieros | PASS - [data-model.md](data-model.md) define dinero, ledger, apertura, debito y credito sin doble conteo. |
 | Retry, conflicto y offline | PASS - [sync-contract.md](contracts/sync-contract.md) define outbox, cadena causal por aggregate, recibos, revisiones y resultados exhaustivos. |
 | RLS, grants y privacidad | PASS - [remote-api.openapi.yaml](contracts/remote-api.openapi.yaml) y [security-boundary.md](contracts/security-boundary.md) limitan lecturas y comandos. |
-| Migraciones y preservacion | BLOCKED - Room `2 -> 3` esta disenada, pero Supabase no pasa hasta recuperar el baseline, reconciliar el esquema vinculado y demostrar `supabase db reset` limpio. |
+| Migraciones y preservacion | PASS - Room 10 -> 11 se valida con prueba de migracion. T075 aprobó el reset local y el diff vacío; la diferencia del proyecto remoto se reconcilia forward-only. |
 | UI, accesibilidad y masking | PASS - [ui-contract.md](contracts/ui-contract.md) aplica Stitch, `MoneyText`, semantica y layouts adaptativos. |
 | Pruebas en limites de fallo | PASS - [quickstart.md](quickstart.md) cubre JVM, Room, workers, Compose, PostgreSQL y dispositivo. |
 | Complejidad constitucional | PASS - se conserva un modulo y se introduce solo una outbox financiera especializada, justificada por atomicidad e idempotencia. |
@@ -156,14 +159,14 @@ Se crea `instrument_sync_outbox`; no se reutiliza `sync_outbox`, cuyo payload es
 - Comandos financieros se deduplican por `operationId`+hash. Metadata mutable usa compare-and-set por `expectedRevision`; timestamps nunca resuelven verdad financiera.
 - El cursor de pull avanza exclusivamente tras aplicar una pagina completa. Una respuesta push nunca marca eventos concurrentes como consumidos.
 
-### 6. Remote Boundary and Database Recovery
+### 6. Remote Boundary, Baseline Validation and Database Reconciliation
 
-El repositorio no contiene la migracion que creo las tablas financieras referenciadas por `20260920162500_align_domain_schema_names.sql`. Antes de escribir la migracion EP-CTA:
+El repositorio contiene `20260920000000_financial_core_baseline.sql` and later alignment migrations. Their clean-reset reproducibility and equivalence to the linked schema have not been demonstrated here. Before writing a Sprint 3 migration:
 
-1. Recuperar las migraciones originales desde historial/artefactos/backups y restaurarlas con sus versiones reales.
-2. Reconstruir una base PostgreSQL 17 limpia y compararla con un dump de esquema del proyecto vinculado.
-3. Agregar una migracion forward-only EP-CTA/hardening; no usar `IF NOT EXISTS` para esconder drift desconocido.
-4. Exigir `supabase db reset`, pgTAP y advisors sin hallazgos EP-CTA bloqueantes.
+1. Run a clean PostgreSQL 17 reset using the checked-in migration chain and record its result.
+2. Compare the rebuilt schema with the linked project and the canonical data model; classify every difference.
+3. Add only forward-only EP-CTA reconciliation/hardening migrations; do not edit applied history or use `IF NOT EXISTS` to hide drift.
+4. Require clean `supabase db reset`, pgTAP and advisors without blocking EP-CTA findings.
 
 Arquitectura remota:
 
@@ -214,11 +217,13 @@ Navegacion agrega `app/dashboard`, `app/instruments`, `app/instruments/create`, 
 | Worker/API | Leasing, backoff, auth mismatch, payload estable, cadena causal create/edit/archive, timeout post-commit, pull de movimientos y resultados APPLIED/DUPLICATE/CONFLICT/REJECTED. |
 | Compose/navigation | Secciones separadas, formularios tipados, masking sin leak semantico, presets, 48dp, 200%, compact/list-detail y rutas sin PII. |
 | PostgreSQL | Baseline limpio, constraints, RLS/grants, cross-user, RPC atomica, receipts/hash, revisions, tombstones y ledger. |
-| Real device | Offline, reinicio, process death, reconnect, Doze/force-stop, TalkBack, keyboard, tablet/foldable y screenshots sin datos reales. |
+| Real device | Offline, reinicio, process death, reconnect, Doze/force-stop, TalkBack en tarjeta física simulada/Card Preview, compra en cuotas y amortización de deuda; teclado, tablet/foldable y screenshots sin datos reales. Registrar evidencia por dispositivo/API. |
 
 ## Project Structure
 
 ### Documentation (this feature)
+
+Sprint 3 financial command contract: [credit-commands.md](contracts/credit-commands.md).
 
 ```text
 specs/002-ep-cta-cuentas-tarjetas/
@@ -258,10 +263,10 @@ app/src/main/java/com/kipu/app/
 
 app/src/test/java/com/kipu/app/{core/finance,feature/accounts}/
 app/src/androidTest/java/com/kipu/app/{core/database,feature/accounts}/
-app/schemas/com.kipu.app.core.database.KipuDatabase/3.json
+app/schemas/com.kipu.app.core.database.KipuDatabase/10.json
 
 supabase/
-├── migrations/                     # baseline recuperado + migracion EP-CTA/hardening
+├── migrations/                     # baseline versionado + migracion EP-CTA/hardening
 └── tests/database/financial_*.sql
 ```
 
@@ -273,9 +278,78 @@ No existen violaciones constitucionales que requieran excepcion. La outbox espec
 
 ## Implementation Gates
 
-1. Recuperar el baseline SQL financiero y demostrar reconstruccion limpia antes de crear tablas/RPC EP-CTA.
-   El esquema vinculado observado no satisface por si mismo este plan: `accounts` carece de snapshot/apertura, `cards.account_id` es obligatorio y usa `is_credit`, `transactions` no modela `OPENING`, `ledger_entries` prohibe cero y las FKs financieras no son owner-composite. Estas diferencias deben resolverse en migraciones forward-only despues de recuperar el baseline.
-2. Corregir/validar la cadena Room existente y aprobar schema v3 antes de fusionar persistencia.
+1. Demonstrate a clean reconstruction from the checked-in SQL baseline and compare it with the linked project before creating Sprint 3 migrations/RPCs.
+   The linked schema observed does not satisfy this plan by itself: `accounts` lacks the opening snapshot, `cards.account_id` is required and uses `is_credit`, `transactions` does not model `OPENING`, `ledger_entries` rejects zero, and financial FKs are not owner-composite. Resolve differences only through reviewed forward-only migrations.
+2. Validar la cadena Room existente hasta v10 y aprobar la migración 10 -> 11, su JSON exportado y pruebas de preservación antes de fusionar persistencia.
 3. Agregar `Postgrest` al `SupabaseClient` si se usa `supabase.postgrest.rpc`; una prueba de integracion debe demostrar el plugin instalado.
 4. Actualizar `docs/stitch-design-system.md` antes de usar colores propios de Banco de la Nacion o afirmar fidelidad a Pantallas 4/5.
 5. No iniciar Sprint 3 hasta que Sprint 2 demuestre saldo derivado, idempotencia, RLS y aislamiento sin defectos bloqueantes.
+
+## Dependency Gate Evidence (2026-09-24)
+
+- EP-CTA HU-07/HU-08 and EP-MOV HU-18/HU-19/HU-23 implementation tasks are checked complete in their existing Sprint 2 task artifacts. HU-18 also depends on EP-CCO HU-14; its category task and device acceptance are recorded complete.
+- The repository contains the corresponding account/card, transaction/ledger, category and duplicate-detection code and tests. A fresh `testDebugUnitTest --rerun-tasks` run completed successfully; 228 unit tests are recorded in Gradle XML. `assembleDebug` and `compileDebugAndroidTestKotlin` also succeeded in this session.
+- Instrumented device tests were not rerun: the local ADB client/server versions conflict (client 40 vs server 41), and the device listing failed. Re-run the Room/movement acceptance tests with a coherent ADB setup before treating their persistence gate as freshly verified.
+- The Supabase clean local reset passed and its `public,internal` diff was empty. The remote project has documented history, schema, policy and grant drift; Sprint 3 database changes must reconcile it forward-only, preserve the historical migrations and retain the legacy RPC wrappers.
+
+## Sprint 3 Plan: HU-09 to HU-13
+
+**Sprint Goal**: Kipu distinguishes credit and validates purchases.
+
+**Scope boundary**: This increment adds only EP-CTA HU-09, HU-10, HU-11, HU-12 and HU-13. HU-07 and HU-08 remain the closed Sprint 2 baseline. No later HU in EP-CTA is included.
+
+### Dependency and delivery order
+
+0. T075 is complete and approved. Use the clean local baseline as the migration test oracle; preserve the linked project's data/history and resolve its documented drift through new forward-only migrations before enabling the new canonical commands.
+1. Verify the Sprint 2 outputs HU-07 and HU-08, plus external prerequisites HU-18, HU-19 and HU-23, are implemented and green before their dependent implementation begins. Their status is a gate, not something this plan assumes.
+2. Start HU-09 after HU-08, HU-18 and HU-19. It establishes the base consultation of confirmed debt, credit line, available credit and cycle dates; it does not add a dependency on HU-13.
+3. HU-11 can proceed in parallel with HU-09 after HU-08 and the T075 readiness gate; its Android catalog flow uses the imported T079 snapshot. HU-13 may design its no-interest principal path independently, then integrate rate-backed estimates after HU-11.
+4. HU-10 follows HU-09 and develops threshold alerts over confirmed utilization. Its event contract can be prepared alongside EP-NOT HU-42. End-to-end verification using a credit purchase originated in Kipu completes after HU-13.
+5. HU-12 follows HU-07, HU-09, HU-18 and HU-19 and develops payment of confirmed debt. End-to-end verification from an app-originated purchase through card payment completes after HU-13.
+6. HU-13 follows HU-08, HU-18, HU-19 and HU-23. It closes the app-originated purchase path used by end-to-end verification of debt consultation, threshold alerts and card payment. HU-11 remains a partial dependency for rate-backed estimates only.
+
+### Sprint 3 canonical model and command boundaries
+
+- Keep `public.credit_products` as the single reference catalog source and `public.cards.personal_tea_bps` as the per-card rate. Reconcile the existing `referential_rate_catalog` migration/data into this canonical table; do not introduce another rate-catalog table or a historical simulation table. The Sprint 3 snapshot is the official `KIPU_CATALOGO_TARJETAS_CREDITO_PERU_2026.md` at 2026-09-24: exactly 44 confirmed products (BCP 18, BBVA 10, Interbank 16). Preserve source-supported purchase TEA by PEN/USD, ranges/profile conditions, membership cost/conditions, source references and editorial caveats. Missing or conflicted values remain explicitly unpublished/conflicted and are never inferred. Show `Tasa referencial al 24/09/2026`; do not auto-expire by age.
+- Keep public.credit_installments and public.credit_payment_allocations as the canonical persisted schedule and payment-allocation relations. Add their missing local Room projections with Kotlin Long amounts; do not create parallel remote entities.
+- Read debt from confirmed credit-card ledger effects. A credit line or unused capacity never contributes to liquid money or net worth as an asset.
+- A confirmed card purchase is one EXPENSE transaction with CARD_PURCHASE semantics on the liability card. It recognizes the purchase principal as expense when confirmed and writes its installment schedule atomically. A simulation is a display-only estimate and writes no ledger entries.
+- A card payment is a TRANSFER with CARD_PAYMENT semantics. One canonical atomic command reduces the source liquid asset and card liability, allocates the paid amount to installments, and creates no operational expense. Replace or delegate the existing pay_credit_card_v1 and confirm_credit_purchase_v1 movement-only paths; never keep two accounting authorities.
+- Allocate card payments by ascending `due_date`; a partial payment reduces the principal of the oldest outstanding installment and does not advance until that installment is paid. Use purchase occurrence time, installment number and stable installment ID as deterministic tie-breaks for equal due dates. Allocation sum equals the transfer amount.
+- HU-10 emits a stable CREDIT_UTILIZATION_THRESHOLD_CROSSED event containing owner-scoped card and operation references, threshold and utilization. EP-NOT/HU-42 consumes and deduplicates it through the shared `app_notifications` contract and owns notification persistence. The Dashboard and card-detail alert surfaces consume active alerts through that same contract; EP-CTA has no notification state or table of its own.
+
+### Canonical command ownership
+
+| Task | Owner and boundary |
+|------|--------------------|
+| T080 | Canonical database purchase command: `register_transaction_v1`, ledger/installments atomicity and legacy RPC compatibility. |
+| T065 | Android integration of purchase confirmation with T080; no independent server accounting path. |
+| T081 | Canonical database payment command: `allocate_credit_payment_v1`, FIFO allocation and legacy RPC compatibility. |
+| T058 | Android integration of card amortization with T081; no independent server accounting path. |
+
+### Deterministic credit and installment rules
+
+- Preserve the user's preferred closing and due days in the range 1..31. For a given month, the effective date is min(preferred day, days in that month); clamping never mutates the preferred value. The existing remote constraint capped at 28 must be reconciled before implementation.
+- A purchase on or before the effective closing date belongs to that billing cycle. A purchase after it belongs to the next cycle. The first installment is due on the earliest effective due_day strictly after that cycle's effective closing date; subsequent installments are monthly, with short months clamped independently.
+- Split a zero-interest principal in integer minor units: base = total / count, remainder = total % count, and add one minor unit to each of the first remainder installments. S/100 over 3 installments is S/33.34, S/33.33, S/33.33.
+- For an interest estimate, convert TEA to TEM as (1 + TEA)^(1/12) - 1, then use the French fixed-payment formula. At zero TEM, payment is principal divided by count. Monetary output is rounded to minor units deterministically; all simulated rows are labeled estimates and never post financial entries. Persisted confirmed purchase rows represent only the actual confirmed amount/schedule.
+- Compute threshold crossings from committed utilization transitions at 50%, 80% and 100%. A new crossing is emitted only when utilization moves from below to at-or-above a threshold; a later drop below re-arms it. The event uses the financial operation identity for idempotent retries.
+
+### Architecture and repository reconciliation gates
+
+- The checked-in schema currently has competing paths: the old card payment/purchase RPCs write financial_movements, while the canonical model is transactions plus internal.ledger_entries, credit_installments and credit_payment_allocations. The current register_transaction_v1 implementation also needs explicit CARD_PURCHASE support. T075 approved a clean local baseline and forward-only remote reconciliation; one canonical command path and compatibility wrappers remain required.
+- Align cards.closing_day/due_day validation with the backlog's 1..31 preference and its short-month effective-date rule. Keep historical values; do not rewrite dates or balances.
+- Reconcile `referential_rate_catalog` with `credit_products` and preserve the dated catalog snapshot, per-currency purchase TEA/ranges, membership disclosures, source references and source status. Extend the existing canonical table only where columns are missing; do not infer or auto-expire data.
+- Room is currently version 10 in the checked-in application. Plan the next schema version from that actual baseline (10 to 11 unless another authorized migration changes it), preserve existing rows, and export/test the resulting schema. Do not use the old Sprint 2 Room 2-to-3 plan.
+- Validate the Sprint 2 dependencies HU-07/HU-08 and the external HU-18/HU-19/HU-23 acceptance suites, the Supabase clean baseline, RLS and idempotency before enabling these commands.
+
+### Planned validation evidence
+
+The minimum Sprint 3 evidence is listed in quickstart.md: exact S/100 three-installment allocation; FIFO partial payment that decreases asset and liability without increasing expense; credit-line separation from real money; 50/80/100% threshold crossing, deduplication and re-arming; purchase confirmation and retry idempotency; owner-isolated RLS; all 44 dated catalog rows and source caveats; TalkBack/Compose semantics for Card Preview, installment purchase and debt amortization; and regression of the Sprint 1/Sprint 2 ledger and instrument flows. Build, lint, unit, Room migration, Compose, synchronization and pgTAP/database tests must be green before Sprint 3 closure.
+
+### Decisions requiring review before implementation
+
+- Approve the forward-only migration that changes the effective preferred-day constraints from 1..28 to 1..31 while retaining monthly clamping.
+- Approve the physical field mapping for the dated catalog snapshot and preserve source conflicts/unpublished values; there is no age-based expiration.
+- Agree the stable event identity jointly with the EP-NOT owner.
+- T075 validated the clean local baseline and documented linked-project drift; reconcile legacy RPCs with forward-only migrations before changing production-facing command dispatch.

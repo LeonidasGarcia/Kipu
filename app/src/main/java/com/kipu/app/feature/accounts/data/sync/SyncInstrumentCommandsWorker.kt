@@ -14,7 +14,10 @@ import com.kipu.app.core.logging.SecureLog
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncDao
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncOutboxEntity
+import com.kipu.app.feature.accounts.data.local.CardDao
 import com.kipu.app.feature.accounts.data.remote.CreateAccountRequestDto
+import com.kipu.app.feature.accounts.data.remote.CreditCommandRequestDto
+import com.kipu.app.feature.accounts.data.remote.UpdatePersonalTeaRequestDto
 import com.kipu.app.feature.accounts.data.remote.DeleteUnusedCardRequestDto
 import com.kipu.app.feature.accounts.data.remote.FinancialApiResponse
 import com.kipu.app.feature.accounts.data.remote.FinancialInstrumentsApi
@@ -22,6 +25,8 @@ import com.kipu.app.feature.accounts.data.remote.RecordOpeningAdjustmentRequestD
 import com.kipu.app.feature.accounts.data.remote.RegisterCardRequestDto
 import com.kipu.app.feature.accounts.data.remote.SetArchivedRequestDto
 import com.kipu.app.feature.accounts.data.remote.UpdateAppearanceRequestDto
+import com.kipu.app.feature.movements.data.local.MovementDao
+import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.serialization.json.Json
@@ -62,7 +67,9 @@ class SyncInstrumentCommandsWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val syncDao: InstrumentSyncDao,
+    private val cardDao: CardDao,
     private val api: FinancialInstrumentsApi,
+    private val movementDao: MovementDao,
     private val sessionCoordinator: SessionCoordinator,
 ) : CoroutineWorker(appContext, workerParams) {
 
@@ -115,6 +122,13 @@ class SyncInstrumentCommandsWorker @AssistedInject constructor(
             errorCode = null,
             nowMicros = nowMicros,
         )
+
+        if (cmd.commandType == "CONFIRM_CREDIT_PURCHASE" || cmd.commandType == "PAY_CREDIT_CARD") {
+            return processCanonicalCreditCommand(cmd, nowMicros)
+        }
+        if (cmd.commandType == "UPDATE_CARD_PERSONAL_TEA") {
+            return processPersonalTeaCommand(cmd, nowMicros)
+        }
 
         val result: FinancialApiResponse<Any> = try {
             when (cmd.commandType) {
@@ -196,5 +210,153 @@ class SyncInstrumentCommandsWorker @AssistedInject constructor(
                 false
             }
         }
+    }
+
+    private suspend fun processCanonicalCreditCommand(
+        cmd: InstrumentSyncOutboxEntity,
+        nowMicros: Long,
+    ): Boolean {
+        val response = try {
+            val request = json.decodeFromString<CreditCommandRequestDto>(cmd.payloadJson)
+            when (cmd.commandType) {
+                "CONFIRM_CREDIT_PURCHASE" -> api.registerCreditPurchase(request)
+                "PAY_CREDIT_CARD" -> api.allocateCreditPayment(request)
+                else -> error("Unsupported canonical credit command")
+            }
+        } catch (e: Exception) {
+            SecureLog.e(
+                "SyncInstrumentWorker",
+                "Error preparing credit command: " + e.javaClass.simpleName,
+            )
+            updateCreditCommandState(cmd, "ERROR", nowMicros + 10_000_000L, "INVALID_PAYLOAD")
+            return false
+        }
+
+        return when (response) {
+            is FinancialApiResponse.Success -> when (response.data.status) {
+                "APPLIED", "DUPLICATE" -> {
+                    syncDao.delete(cmd.userId, cmd.operationId)
+                    movementDao.updateTransactionSyncStatus(
+                        userId = cmd.userId,
+                        transactionId = cmd.aggregateId,
+                        syncStatus = MovementSyncStatus.SYNCED.name,
+                        updatedAt = System.currentTimeMillis(),
+                    )
+                    true
+                }
+                "CONFLICT" -> {
+                    updateCreditCommandState(cmd, "CONFLICT", null, response.data.error?.code ?: "CONFLICT")
+                    movementDao.updateTransactionSyncStatus(
+                        cmd.userId, cmd.aggregateId, MovementSyncStatus.CONFLICT.name, System.currentTimeMillis(),
+                    )
+                    true
+                }
+                "REJECTED" -> {
+                    updateCreditCommandState(
+                        cmd,
+                        "FAILED_PERMANENT",
+                        null,
+                        response.data.error?.code ?: "REJECTED",
+                    )
+                    movementDao.updateTransactionSyncStatus(
+                        cmd.userId, cmd.aggregateId, MovementSyncStatus.FAILED_PERMANENT.name, System.currentTimeMillis(),
+                    )
+                    true
+                }
+                else -> {
+                    updateCreditCommandState(cmd, "ERROR", nowMicros + 10_000_000L, "UNKNOWN_STATUS")
+                    false
+                }
+            }
+            is FinancialApiResponse.Error -> {
+                if (response.statusCode in 400..499 && response.statusCode != 408 && response.statusCode != 429) {
+                    val state = if (response.statusCode == 409) "CONFLICT" else "FAILED_PERMANENT"
+                    updateCreditCommandState(cmd, state, null, "HTTP_" + response.statusCode)
+                    val syncStatus = if (state == "CONFLICT") {
+                        MovementSyncStatus.CONFLICT.name
+                    } else {
+                        MovementSyncStatus.FAILED_PERMANENT.name
+                    }
+                    movementDao.updateTransactionSyncStatus(
+                        cmd.userId, cmd.aggregateId, syncStatus, System.currentTimeMillis(),
+                    )
+                    true
+                } else {
+                    val backoffSeconds = (1L shl kotlin.math.min(cmd.attemptCount + 1, 6)) * 5L
+                    updateCreditCommandState(cmd, "ERROR", nowMicros + backoffSeconds * 1_000_000L, "HTTP_" + response.statusCode)
+                    false
+                }
+            }
+            is FinancialApiResponse.NetworkFailure -> {
+                val backoffSeconds = (1L shl kotlin.math.min(cmd.attemptCount + 1, 6)) * 5L
+                updateCreditCommandState(
+                    cmd,
+                    "ERROR",
+                    nowMicros + backoffSeconds * 1_000_000L,
+                    "NETWORK_ERROR",
+                )
+                false
+            }
+        }
+    }
+
+    private suspend fun processPersonalTeaCommand(
+        cmd: InstrumentSyncOutboxEntity,
+        nowMicros: Long,
+    ): Boolean {
+        val request = try {
+            json.decodeFromString<UpdatePersonalTeaRequestDto>(cmd.payloadJson)
+        } catch (e: Exception) {
+            updateCreditCommandState(cmd, "FAILED_PERMANENT", null, "INVALID_PAYLOAD")
+            return true
+        }
+        val response = api.updatePersonalTea(request)
+        return when (response) {
+            is FinancialApiResponse.Success -> when (response.data.status) {
+                "APPLIED", "DUPLICATE" -> {
+                    response.data.revision?.let {
+                        // Local card metadata remains owner-scoped; update revision after server acceptance.
+                        cardDao.updateRemoteRevision(cmd.userId, cmd.aggregateId, it, System.currentTimeMillis() * 1_000L)
+                    }
+                    syncDao.delete(cmd.userId, cmd.operationId)
+                    true
+                }
+                "CONFLICT", "REJECTED" -> {
+                    updateCreditCommandState(cmd, response.data.status, null, response.data.error?.code ?: response.data.status)
+                    true
+                }
+                else -> {
+                    updateCreditCommandState(cmd, "ERROR", nowMicros + 10_000_000L, "UNKNOWN_STATUS")
+                    false
+                }
+            }
+            is FinancialApiResponse.Error -> if (response.statusCode in 400..499 && response.statusCode != 408 && response.statusCode != 429) {
+                updateCreditCommandState(cmd, if (response.statusCode == 409) "CONFLICT" else "FAILED_PERMANENT", null, "HTTP_${response.statusCode}")
+                true
+            } else {
+                updateCreditCommandState(cmd, "ERROR", nowMicros + 30_000_000L, "HTTP_${response.statusCode}")
+                false
+            }
+            is FinancialApiResponse.NetworkFailure -> {
+                updateCreditCommandState(cmd, "ERROR", nowMicros + 30_000_000L, "NETWORK_ERROR")
+                false
+            }
+        }
+    }
+
+    private suspend fun updateCreditCommandState(
+        cmd: InstrumentSyncOutboxEntity,
+        state: String,
+        nextAttemptAt: Long?,
+        errorCode: String?,
+    ) {
+        syncDao.updateState(
+            userId = cmd.userId,
+            operationId = cmd.operationId,
+            newState = state,
+            nextAttemptAt = nextAttemptAt,
+            errorCode = errorCode,
+            nowMicros = System.currentTimeMillis() * 1_000L,
+        )
     }
 }

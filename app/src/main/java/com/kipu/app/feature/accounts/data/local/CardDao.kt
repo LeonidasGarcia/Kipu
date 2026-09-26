@@ -46,6 +46,12 @@ interface CardDao {
     @Query("UPDATE cards SET alias = :alias, preset_id = :presetId, color = :color, icon = :icon, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
     suspend fun updateAppearance(userId: String, id: String, alias: String?, presetId: String?, color: String?, icon: String?, nowMicros: Long)
 
+    @Query("UPDATE cards SET personal_tea_bps = :teaBps, updated_at = :nowMicros WHERE user_id = :userId AND id = :id AND type = 'CREDIT'")
+    suspend fun updatePersonalTea(userId: String, id: String, teaBps: Int?, nowMicros: Long): Int
+
+    @Query("UPDATE cards SET remote_revision = :revision, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
+    suspend fun updateRemoteRevision(userId: String, id: String, revision: Long, nowMicros: Long): Int
+
     @Query("UPDATE cards SET is_archived = :isArchived, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
     suspend fun setArchived(userId: String, id: String, isArchived: Boolean, nowMicros: Long)
 

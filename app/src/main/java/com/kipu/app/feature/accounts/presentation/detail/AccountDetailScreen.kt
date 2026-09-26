@@ -30,6 +30,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.window.Dialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -37,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,11 +57,16 @@ import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card as FinancialCard
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
+import com.kipu.app.feature.accounts.domain.model.PurchaseCandidate
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.feature.accounts.presentation.instruments.PayCardDialog
+import com.kipu.app.feature.accounts.presentation.instruments.InstallmentSimulatorScreen
 import com.kipu.app.ui.component.MoneyText
 import com.kipu.app.ui.component.formatMinorUnits
+import java.time.Instant
+import java.util.UUID
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,9 +77,11 @@ fun AccountDetailScreen(
     onNavigateBack: () -> Unit,
     onReturnToDashboard: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onNavigateToRateCatalog: (String) -> Unit = {},
 ) {
     val instruments by viewModel.instrumentsUiState.collectAsStateWithLifecycle()
     val dashboard by viewModel.dashboardUiState.collectAsStateWithLifecycle()
+    val creditNotifications by viewModel.creditNotifications.collectAsStateWithLifecycle()
     val account = if (isCard) {
         null
     } else {
@@ -93,8 +102,17 @@ fun AccountDetailScreen(
         dashboard.dashboardData?.creditCards?.firstOrNull { it.card.id == target.id }
     }
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     var isSubmitting by remember(instrumentId) { mutableStateOf(false) }
     var showCardPayment by remember(instrumentId) { mutableStateOf(false) }
+    var showPurchaseDraft by remember(instrumentId) { mutableStateOf(false) }
+    var purchaseMerchant by remember(instrumentId) { mutableStateOf("") }
+    var purchaseAmount by remember(instrumentId) { mutableStateOf("") }
+    var purchaseCandidate by remember(instrumentId) { mutableStateOf<PurchaseCandidate?>(null) }
+
+    LaunchedEffect(viewModel, instrumentId, isCard) {
+        viewModel.refreshCreditUtilizationNotifications(instrumentId.takeIf { isCard })
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -120,6 +138,7 @@ fun AccountDetailScreen(
         card = card,
         currentBalance = currentBalance,
         creditCardSummary = creditCardSummary,
+        creditNotifications = creditNotifications.filter { it.cardId == instrumentId },
         isLoading = instruments.isLoading,
         modifier = modifier,
         snackbarHostState = snackbarHostState,
@@ -157,6 +176,8 @@ fun AccountDetailScreen(
             viewModel.reactivateInstrument(instrumentId, isCard, isComputable)
         },
         onPayCreditCard = { showCardPayment = true },
+        onNavigateToRateCatalog = onNavigateToRateCatalog,
+        onStartCreditPurchase = { showPurchaseDraft = true },
         isSubmitting = isSubmitting,
     )
 
@@ -167,6 +188,79 @@ fun AccountDetailScreen(
             viewModel = viewModel,
             onDismiss = { showCardPayment = false },
         )
+    }
+
+    if (showPurchaseDraft && card is CreditCard) {
+        AlertDialog(
+            onDismissRequest = { showPurchaseDraft = false },
+            title = { Text("Nueva compra con crédito") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("La compra se reconocerá como gasto solo al confirmarla.")
+                    OutlinedTextField(
+                        value = purchaseMerchant,
+                        onValueChange = { purchaseMerchant = it.take(100) },
+                        label = { Text("Comercio") },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = purchaseAmount,
+                        onValueChange = { purchaseAmount = it },
+                        label = { Text("Importe (${card.currency.name})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val amountMinor = MoneyInputParser.parseMinorUnits(purchaseAmount)
+                    if (amountMinor != null && amountMinor > 0L && purchaseMerchant.isNotBlank()) {
+                        purchaseCandidate = PurchaseCandidate(
+                            id = UUID.randomUUID().toString(),
+                            cardId = card.id,
+                            amount = Money(amountMinor, card.currency),
+                            merchant = purchaseMerchant.trim(),
+                            occurredAt = Instant.now(),
+                            suggestedInstallments = 3,
+                        )
+                        showPurchaseDraft = false
+                    } else {
+                        coroutineScope.launch { snackbarHostState.showSnackbar("Indica un comercio y un importe válido.") }
+                    }
+                }) { Text("Ver simulación") }
+            },
+            dismissButton = { TextButton(onClick = { showPurchaseDraft = false }) { Text("Cancelar") } },
+        )
+    }
+
+    purchaseCandidate?.let { candidate ->
+        val creditCard = card as? CreditCard
+        if (creditCard != null) {
+            Dialog(onDismissRequest = { purchaseCandidate = null }) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    InstallmentSimulatorScreen(
+                        candidate = candidate,
+                        card = creditCard,
+                        teaBps = null,
+                        onConfirmPurchase = { installments ->
+                            viewModel.confirmCreditPurchase(
+                                cardId = creditCard.id,
+                                amount = candidate.amount,
+                                merchant = candidate.merchant,
+                                effectiveAt = candidate.occurredAt,
+                                installments = installments,
+                            )
+                            purchaseCandidate = null
+                        },
+                        onRejectPurchase = { purchaseCandidate = null },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -183,9 +277,12 @@ fun AccountDetailContent(
     onCorrectOpeningBalance: (Long) -> Unit,
     onArchive: () -> Unit,
     onReactivate: () -> Unit,
-    onPayCreditCard: () -> Unit = {},
-    isSubmitting: Boolean = false,
     modifier: Modifier = Modifier,
+    creditNotifications: List<com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification> = emptyList(),
+    onPayCreditCard: () -> Unit = {},
+    onNavigateToRateCatalog: (String) -> Unit = {},
+    onStartCreditPurchase: () -> Unit = {},
+    isSubmitting: Boolean = false,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     val instrumentKey = account?.id?.value ?: card?.id?.value
@@ -247,6 +344,18 @@ fun AccountDetailContent(
                     currentBalance = currentBalance,
                     creditCardSummary = creditCardSummary,
                 )
+
+                creditNotifications.forEach { notification ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(notification.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(notification.body, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
 
                 if (archived) {
                     Card(
@@ -341,6 +450,18 @@ fun AccountDetailContent(
                 }
 
                 if (card != null) {
+                    if (card is CreditCard && !archived) {
+                        OutlinedButton(
+                            onClick = onStartCreditPurchase,
+                            enabled = !isSubmitting,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) { Text("Simular compra a crédito") }
+                        OutlinedButton(
+                            onClick = { onNavigateToRateCatalog(card.id.value) },
+                            enabled = !isSubmitting,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) { Text("Tasas referenciales y TEA personal") }
+                    }
                     if (card is CreditCard && !archived && (creditCardSummary?.debt?.minorUnits ?: 0L) > 0L) {
                         Button(
                             onClick = onPayCreditCard,

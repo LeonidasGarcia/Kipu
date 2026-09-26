@@ -107,3 +107,12 @@ No partial effect or receipt may survive rollback.
 - Conflict/error outbox rows remain until acknowledged or superseded explicitly.
 - Synced local outbox rows may be compacted only after accepted revision/cursor is durable.
 - The complete owner change stream and tombstones remain for the lifetime of the Kipu user account, allowing fresh-device bootstrap from sequence zero and preventing resurrection. Account-level deletion policy ultimately removes user data.
+
+## Sprint 3 Financial Commands (HU-09..HU-13)
+
+- A confirmed card purchase is synced through the canonical transaction command as one `EXPENSE` / `CARD_PURCHASE` operation. Its idempotency identity covers the card, amount, currency, category, occurrence time, installment count and confirmed actual purchase data.
+- A card payment is synced as one `TRANSFER` / `CARD_PAYMENT` operation through the canonical allocation command. Transaction, two ledger effects, installment allocations, status updates, receipt and sync change commit atomically.
+- Use existing `credit_installments` and `credit_payment_allocations` rows as the remote source of truth. Local Room projections apply together with their source transaction/payment; they never become an independent balance authority.
+- Persist no simulation command or estimated interest. Only a user-confirmed purchase can create an actual transaction and installment schedule.
+- Threshold crossing events are emitted only after a committed utilization change. Their stable identity includes the accepted financial operation and threshold; EP-NOT/HU-42 consumes them idempotently through the existing notification contract.
+- The current movement-only payment/purchase RPCs must delegate to or be retired in favor of these operations before the worker dispatches Sprint 3 commands. A command must never be sent down two accounting paths.

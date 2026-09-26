@@ -19,6 +19,7 @@ import com.kipu.app.feature.accounts.data.local.AccountEntity
     ],
     indices = [
         Index(value = ["user_id", "occurred_at"]),
+        Index(value = ["user_id", "card_id", "occurred_at"]),
         Index(value = ["user_id", "source_account_id", "occurred_at"]),
         Index(value = ["user_id", "sync_status"]),
     ],
@@ -58,6 +59,12 @@ data class TransactionEntity(
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "card_id")
+    val cardId: String? = null,
+    @ColumnInfo(name = "operation_kind")
+    val operationKind: String? = null,
+    @ColumnInfo(name = "installment_count")
+    val installmentCount: Int? = null,
 )
 
 @Entity(

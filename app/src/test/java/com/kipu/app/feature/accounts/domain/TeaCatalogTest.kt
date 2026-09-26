@@ -4,25 +4,12 @@ import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.feature.accounts.domain.model.PersonalTea
 import com.kipu.app.feature.accounts.domain.model.RateReference
-import com.kipu.app.feature.accounts.domain.usecase.GetReferentialRates
-import com.kipu.app.feature.accounts.domain.usecase.UpdatePersonalTea
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Test
 
 class TeaCatalogTest {
-
-    private lateinit var getRates: GetReferentialRates
-    private lateinit var updateTea: UpdatePersonalTea
-
-    @Before
-    fun setup() {
-        getRates = GetReferentialRates()
-        updateTea = UpdatePersonalTea()
-    }
 
     @Test
     fun `rate reference validates min and max basis points`() {
@@ -71,26 +58,4 @@ class TeaCatalogTest {
         assertTrue(excessTea is IllegalArgumentException)
     }
 
-    @Test
-    fun `get referential rates filters by currency`() {
-        val all = getRates()
-        assertTrue(all.isNotEmpty())
-
-        val penOnly = getRates(Currency.PEN)
-        assertTrue(penOnly.all { it.currency == Currency.PEN })
-
-        val usdOnly = getRates(Currency.USD)
-        assertTrue(usdOnly.all { it.currency == Currency.USD })
-    }
-
-    @Test
-    fun `update and retrieve personal tea`() {
-        val cardId = CardId.generate()
-        val result = updateTea(cardId, 4200)
-        assertTrue(result.isSuccess)
-
-        val retrieved = updateTea.getPersonalTea(cardId)
-        assertNotNull(retrieved)
-        assertEquals(4200, retrieved?.teaBps)
-    }
 }

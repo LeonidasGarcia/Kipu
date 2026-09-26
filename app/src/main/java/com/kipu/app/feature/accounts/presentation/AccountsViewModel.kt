@@ -14,6 +14,8 @@ import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.model.FinancialDashboardData
+import com.kipu.app.feature.accounts.domain.model.CreditProductReference
+import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
 import com.kipu.app.feature.accounts.domain.usecase.ArchiveInstrument
 import com.kipu.app.feature.accounts.domain.usecase.CreateLiquidAccount
 import com.kipu.app.feature.accounts.domain.usecase.ObserveFinancialDashboard
@@ -73,8 +75,10 @@ class AccountsViewModel @Inject constructor(
     private val registerDebitCardUseCase: com.kipu.app.feature.accounts.domain.usecase.RegisterDebitCard,
     private val registerCreditCardUseCase: com.kipu.app.feature.accounts.domain.usecase.RegisterCreditCard,
     private val checkCardDuplicateUseCase: com.kipu.app.feature.accounts.domain.usecase.CheckCardDuplicate,
-    private val checkUtilizationThresholds: com.kipu.app.feature.accounts.domain.usecase.CheckUtilizationThresholds,
     private val payCreditCardUseCase: com.kipu.app.feature.accounts.domain.usecase.PayCreditCard,
+    private val confirmCreditPurchaseUseCase: com.kipu.app.feature.accounts.domain.usecase.ConfirmCreditPurchase,
+    private val getReferentialRatesUseCase: com.kipu.app.feature.accounts.domain.usecase.GetReferentialRates,
+    private val updatePersonalTeaUseCase: com.kipu.app.feature.accounts.domain.usecase.UpdatePersonalTea,
     private val financialInstrumentsRepository: FinancialInstrumentsRepository,
 ) : ViewModel() {
 
@@ -84,17 +88,68 @@ class AccountsViewModel @Inject constructor(
     private val _eventChannel = Channel<AccountUiEvent>(Channel.BUFFERED)
     val events = _eventChannel.receiveAsFlow()
 
+    private val _creditProductCatalog = MutableStateFlow<List<CreditProductReference>>(emptyList())
+    val creditProductCatalog: StateFlow<List<CreditProductReference>> = _creditProductCatalog.asStateFlow()
+
+    private val _creditCatalogError = MutableStateFlow<String?>(null)
+    val creditCatalogError: StateFlow<String?> = _creditCatalogError.asStateFlow()
+
+    private val _creditNotifications = MutableStateFlow<List<CreditUtilizationNotification>>(emptyList())
+    val creditNotifications: StateFlow<List<CreditUtilizationNotification>> = _creditNotifications.asStateFlow()
+
+    fun refreshCreditUtilizationNotifications(cardId: String? = null) {
+        viewModelScope.launch {
+            financialInstrumentsRepository.getCreditUtilizationNotifications(cardId).fold(
+                onSuccess = { _creditNotifications.value = it },
+                onFailure = { /* Keep the last shared notification snapshot visible during transient failures. */ },
+            )
+        }
+    }
+
+    fun loadCreditProductCatalog() {
+        viewModelScope.launch {
+            getReferentialRatesUseCase().fold(
+                onSuccess = {
+                    _creditProductCatalog.value = it
+                    _creditCatalogError.value = null
+                },
+                onFailure = { _creditCatalogError.value = it.message ?: "No se pudo cargar el catálogo de tasas" },
+            )
+        }
+    }
+
+    fun updatePersonalTea(cardId: CardId, teaBps: Int?) {
+        viewModelScope.launch {
+            updatePersonalTeaUseCase(cardId, teaBps).fold(
+                onSuccess = { _eventChannel.send(AccountUiEvent.ShowMessage("TEA personal guardada y en cola de sincronización")) },
+                onFailure = { _eventChannel.send(AccountUiEvent.Error(it.message ?: "No se pudo guardar la TEA")) },
+            )
+        }
+    }
+
+    fun confirmCreditPurchase(
+        cardId: CardId,
+        amount: Money,
+        merchant: String,
+        effectiveAt: Instant,
+        installments: Int,
+    ) {
+        viewModelScope.launch {
+            confirmCreditPurchaseUseCase(cardId, amount, merchant, effectiveAt, installments).fold(
+                onSuccess = { _eventChannel.send(AccountUiEvent.ShowMessage("Compra registrada; pendiente de sincronización")) },
+                onFailure = { _eventChannel.send(AccountUiEvent.Error(it.message ?: "No se pudo confirmar la compra")) },
+            )
+        }
+    }
+
     val dashboardUiState: StateFlow<DashboardUiState> = combine(
         observeFinancialDashboard(),
         _isMasked,
     ) { dashboardData, masked ->
-        val alerts = dashboardData.creditCards.flatMap { summary ->
-            checkUtilizationThresholds.getActiveAlerts(summary.card, summary.debt.minorUnits)
-        }
         DashboardUiState(
             isLoading = false,
             dashboardData = dashboardData,
-            activeAlerts = alerts,
+            activeAlerts = emptyList(),
             isMasked = masked,
             errorMessage = null,
         )

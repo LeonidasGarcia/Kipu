@@ -81,6 +81,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.dashboardUiState.collectAsState()
     val instruments by viewModel.instrumentsUiState.collectAsState()
+    val creditNotifications by viewModel.creditNotifications.collectAsState()
     var showAddInstrumentSheet by remember { mutableStateOf(false) }
     var showQuotaSelection by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -91,6 +92,7 @@ fun DashboardScreen(
             onFeedbackConsumed()
         }
     }
+    LaunchedEffect(viewModel) { viewModel.refreshCreditUtilizationNotifications() }
 
     Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -171,9 +173,20 @@ fun DashboardScreen(
                             )
                         }
 
-                        if (state.activeAlerts.isNotEmpty()) {
-                            items(state.activeAlerts, key = { "${it.cardId.value}_${it.threshold.name}" }) { alert ->
-                                com.kipu.app.feature.accounts.presentation.components.UtilizationAlertBanner(alert = alert)
+                        if (creditNotifications.isNotEmpty()) {
+                            items(creditNotifications, key = { it.id }) { notification ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onCardClick(notification.cardId) },
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                                ) {
+                                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(notification.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                        Text(notification.body, style = MaterialTheme.typography.bodySmall)
+                                        Text("Aviso de utilización · ${notification.createdAt}", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
                             }
                         }
 

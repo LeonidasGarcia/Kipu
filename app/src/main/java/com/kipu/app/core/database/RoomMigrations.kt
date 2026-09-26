@@ -516,3 +516,122 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
+/**
+ * Migration 10 -> 11: adds the local projections required by confirmed credit schedules,
+ * immutable payment allocations and canonical card transaction metadata.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `cards` ADD COLUMN `personal_tea_bps` INTEGER")
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `card_id` TEXT")
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `operation_kind` TEXT")
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `installment_count` INTEGER")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_user_id_card_id_occurred_at` ON `transactions` (`user_id`, `card_id`, `occurred_at`)")
+
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `credit_installments` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `transaction_id` TEXT NOT NULL,
+                `installment_number` INTEGER NOT NULL,
+                `due_date` INTEGER NOT NULL,
+                `principal_minor` INTEGER NOT NULL,
+                `interest_minor` INTEGER NOT NULL,
+                `status` TEXT NOT NULL,
+                `revision` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `updated_at` INTEGER NOT NULL,
+                `deleted_at` INTEGER,
+                PRIMARY KEY(`user_id`, `id`),
+                FOREIGN KEY(`user_id`, `transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )""".trimIndent(),
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_credit_installments_user_id_transaction_id_installment_number` ON `credit_installments` (`user_id`, `transaction_id`, `installment_number`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_credit_installments_user_id_due_date_status` ON `credit_installments` (`user_id`, `due_date`, `status`)")
+
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `credit_payment_allocations` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `payment_transaction_id` TEXT NOT NULL,
+                `installment_id` TEXT NOT NULL,
+                `allocated_minor` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`user_id`, `id`),
+                FOREIGN KEY(`user_id`, `payment_transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`user_id`, `installment_id`) REFERENCES `credit_installments`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )""".trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_credit_payment_allocations_user_id_payment_transaction_id` ON `credit_payment_allocations` (`user_id`, `payment_transaction_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_credit_payment_allocations_user_id_installment_id` ON `credit_payment_allocations` (`user_id`, `installment_id`)")
+
+        // Reclassify legacy cash-side card-payment transactions as transfers. The cash
+        // ledger debit remains intact, while the old liability movement is folded into
+        // a single opening liability below so the balance is not counted twice. Legacy
+        // cash transactions use `legacy:<movement id>` as their local transaction ID.
+        db.execSQL("""
+            UPDATE `transactions`
+            SET `type` = 'TRANSFER',
+                `card_id` = (
+                    SELECT liability.`card_id`
+                    FROM `financial_movements` cash
+                    JOIN `financial_movements` liability
+                      ON liability.`user_id` = cash.`user_id`
+                     AND liability.`operation_id` = cash.`operation_id`
+                     AND liability.`kind` = 'CARD_PAYMENT_LIABILITY'
+                    WHERE cash.`user_id` = `transactions`.`user_id`
+                      AND 'legacy:' || cash.`id` = `transactions`.`id`
+                      AND cash.`kind` = 'CARD_PAYMENT_CASH'
+                    LIMIT 1
+                ),
+                `operation_kind` = 'CARD_PAYMENT',
+                `installment_count` = 1
+            WHERE `legacy_kind` = 'CARD_PAYMENT_CASH'
+        """.trimIndent())
+
+        // Carry forward the exact net debt the previous app displayed. The old model did
+        // not retain purchase schedule details, so use one non-expense opening liability
+        // and one principal installment. Future card purchases create normal schedules.
+        db.execSQL("""
+            INSERT INTO `transactions` (
+                `id`,`user_id`,`type`,`amount_minor`,`currency_code`,`occurred_at`,`note`,
+                `status`,`sync_status`,`created_at`,`updated_at`,`card_id`,`operation_kind`,`installment_count`
+            )
+            SELECT 'legacy-credit-balance:' || debt.`user_id` || ':' || debt.`card_id`,
+                   debt.`user_id`, 'TRANSFER', debt.`balance_minor`, debt.`currency_code`,
+                   debt.`last_effective_at` / 1000, 'Saldo de crédito anterior conservado',
+                   'ACTIVE', 'MIGRATED_LOCAL', debt.`last_effective_at` / 1000,
+                   debt.`last_effective_at` / 1000, debt.`card_id`, 'LEGACY_CREDIT_BALANCE', 1
+            FROM (
+                SELECT fm.`user_id`, fm.`card_id`, cards.`currency` AS `currency_code`,
+                       SUM(fm.`amount_minor_units`) AS `balance_minor`, MAX(fm.`effective_at`) AS `last_effective_at`
+                FROM `financial_movements` fm
+                JOIN `cards` cards ON cards.`user_id` = fm.`user_id` AND cards.`id` = fm.`card_id`
+                WHERE cards.`type` = 'CREDIT' AND fm.`status` = 'POSTED'
+                GROUP BY fm.`user_id`, fm.`card_id`, cards.`currency`
+                HAVING SUM(fm.`amount_minor_units`) > 0
+            ) debt
+            WHERE NOT EXISTS (
+                SELECT 1 FROM `transactions` existing
+                WHERE existing.`user_id` = debt.`user_id`
+                  AND existing.`id` = 'legacy-credit-balance:' || debt.`user_id` || ':' || debt.`card_id`
+            )
+        """.trimIndent())
+        db.execSQL("""
+            INSERT INTO `credit_installments` (
+                `id`,`user_id`,`transaction_id`,`installment_number`,`due_date`,`principal_minor`,
+                `interest_minor`,`status`,`revision`,`created_at`,`updated_at`
+            )
+            SELECT 'legacy-credit-balance-installment:' || t.`user_id` || ':' || t.`card_id`,
+                   t.`user_id`, t.`id`, 1,
+                   CAST(julianday(date(t.`occurred_at` / 1000, 'unixepoch')) - 2440587.5 AS INTEGER),
+                   t.`amount_minor`, 0, 'PENDING', 1, t.`created_at`, t.`updated_at`
+            FROM `transactions` t
+            WHERE t.`operation_kind` = 'LEGACY_CREDIT_BALANCE'
+              AND NOT EXISTS (
+                  SELECT 1 FROM `credit_installments` i WHERE i.`user_id` = t.`user_id` AND i.`transaction_id` = t.`id`
+              )
+        """.trimIndent())
+    }
+}
+

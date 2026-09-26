@@ -51,6 +51,34 @@ object CreditCalculations {
     }
 
     /**
+     * Resolves the first installment due date from a purchase's billing cycle.
+     * The closing day is inclusive. The first due date is the earliest effective due day
+     * strictly after that cycle's effective close date.
+     */
+    fun calculateFirstInstallmentDueDate(
+        purchaseDate: LocalDate,
+        preferredClosingDay: Int,
+        preferredDueDay: Int,
+    ): LocalDate {
+        require(preferredClosingDay in 1..31) { "Closing day must be between 1 and 31: $preferredClosingDay" }
+        require(preferredDueDay in 1..31) { "Due day must be between 1 and 31: $preferredDueDay" }
+
+        val effectiveCloseThisMonth = calculateEffectiveDate(
+            preferredClosingDay,
+            purchaseDate.year,
+            purchaseDate.month,
+        )
+        val cycleClose = if (!purchaseDate.isAfter(effectiveCloseThisMonth)) {
+            effectiveCloseThisMonth
+        } else {
+            val nextMonth = purchaseDate.plusMonths(1)
+            calculateEffectiveDate(preferredClosingDay, nextMonth.year, nextMonth.month)
+        }
+
+        return calculateNextDate(preferredDueDay, cycleClose.plusDays(1))
+    }
+
+    /**
      * Calculates credit utilization and available limits.
      */
     fun calculateCreditMetrics(
