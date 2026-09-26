@@ -29,10 +29,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,26 +41,51 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Currency
+import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.domain.model.RateReference
-import com.kipu.app.feature.accounts.domain.usecase.GetReferentialRates
-import com.kipu.app.feature.accounts.domain.usecase.UpdatePersonalTea
-import kotlinx.coroutines.launch
+import com.kipu.app.feature.accounts.presentation.AccountUiEvent
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RateCatalogScreen(
     cardId: CardId?,
+    products: List<CreditProductReference>,
+    catalogError: String?,
+    events: Flow<AccountUiEvent>,
+    onLoadCatalog: () -> Unit,
+    onUpdatePersonalTea: (CardId, Int?) -> Unit,
     onNavigateBack: () -> Unit,
-    getReferentialRates: GetReferentialRates = GetReferentialRates(),
-    updatePersonalTea: UpdatePersonalTea = UpdatePersonalTea(),
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
     var selectedCurrency by remember { mutableStateOf<Currency?>(null) }
     var personalTeaInput by remember { mutableStateOf("") }
-    val rates = remember(selectedCurrency) { getReferentialRates(selectedCurrency) }
+    var personalTeaError by remember { mutableStateOf<String?>(null) }
+    val rates = remember(selectedCurrency, products) {
+        products.filter { product ->
+            when (selectedCurrency) {
+                Currency.PEN -> product.penTeaMinBps != null || product.penTeaMaxBps != null || product.publishedTeaSummary != null
+                Currency.USD -> product.usdTeaMinBps != null || product.usdTeaMaxBps != null || product.publishedTeaSummary != null
+                null -> true
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) { onLoadCatalog() }
+    LaunchedEffect(events) {
+        events.collect { event ->
+            snackbarHostState.showSnackbar(
+                when (event) {
+                    is AccountUiEvent.ShowMessage -> event.message
+                    is AccountUiEvent.Error -> event.message
+                },
+            )
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -136,22 +161,24 @@ fun RateCatalogScreen(
                             ) {
                                 OutlinedTextField(
                                     value = personalTeaInput,
-                                    onValueChange = { personalTeaInput = it },
+                                    onValueChange = { personalTeaInput = it; personalTeaError = null },
                                     label = { Text("TEA (%)") },
                                     placeholder = { Text("Ej. 45.50") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
+                                    isError = personalTeaError != null,
+                                    supportingText = personalTeaError?.let { message -> { Text(message) } },
                                     modifier = Modifier.weight(1f),
                                 )
                                 Button(
                                     onClick = {
                                         val teaDouble = personalTeaInput.trim().replace(",", ".").toDoubleOrNull()
                                         if (teaDouble != null && teaDouble in 0.0..1000.0) {
-                                            val bps = (teaDouble * 100).toInt()
-                                            updatePersonalTea(cardId, bps)
-                                            scope.launch {
-                                                snackbarHostState.showSnackbar("TEA personalizada guardada: $teaDouble%")
-                                            }
+                                            val bps = (teaDouble * 100.0).roundToInt()
+                                            onUpdatePersonalTea(cardId, bps)
+                                            personalTeaError = null
+                                        } else {
+                                            personalTeaError = "Ingresa una TEA entre 0% y 1000%."
                                         }
                                     },
                                     enabled = personalTeaInput.isNotBlank(),
@@ -171,6 +198,15 @@ fun RateCatalogScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                Text(
+                    text = "Tasa referencial al 24/09/2026",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                catalogError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                if (products.isEmpty() && catalogError == null) {
+                    Text("Cargando los productos oficiales...", style = MaterialTheme.typography.bodyMedium)
+                }
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
@@ -204,31 +240,28 @@ fun RateCatalogScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "${rate.institution} - ${rate.productName}",
+                                text = "${rate.institutionName} - ${rate.productName}",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                             )
-                            Text(
-                                text = rate.currency.name,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            rate.cardNetwork?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = "Rango TEA: %.2f%% - %.2f%%".format(rate.minTeaPercentage, rate.maxTeaPercentage),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                text = "Verificado: ${rate.verifiedAt}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        }
+                        Text("TEA soles: ${formatTeaRange(rate.penTeaMinBps, rate.penTeaMaxBps)}", style = MaterialTheme.typography.bodyMedium)
+                        Text("TEA dólares: ${formatTeaRange(rate.usdTeaMinBps, rate.usdTeaMaxBps)}", style = MaterialTheme.typography.bodyMedium)
+                        rate.publishedTeaSummary?.let { Text("Tarifario TEA: $it", style = MaterialTheme.typography.bodySmall) }
+                        rate.publishedTceaSummary?.let { Text("TCEA publicada: $it", style = MaterialTheme.typography.bodySmall) }
+                        rate.membershipCondition?.let { Text("Membresía: $it", style = MaterialTheme.typography.bodySmall) }
+                        Text(
+                            "Membresía publicada: ${formatCatalogFee(rate.membershipFeePenMinor, "S/")} · ${formatCatalogFee(rate.membershipFeeUsdMinor, "US$ ")}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "Verificación: ${rate.verificationStatus ?: "sin dato"} · Vigencia sin caducidad automática",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                        rate.sourceUrl?.let { Text("Fuente: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) }
                     }
                 }
             }
@@ -239,3 +272,13 @@ fun RateCatalogScreen(
         }
     }
 }
+
+private fun formatTeaRange(minBps: Int?, maxBps: Int?): String = when {
+    minBps != null && maxBps != null -> "%.2f%% – %.2f%%".format(minBps / 100.0, maxBps / 100.0)
+    minBps != null -> "desde %.2f%%".format(minBps / 100.0)
+    maxBps != null -> "hasta %.2f%%".format(maxBps / 100.0)
+    else -> "No publicado numéricamente"
+}
+
+private fun formatCatalogFee(amountMinor: Long?, symbol: String): String =
+    amountMinor?.let { "$symbol${"%.2f".format(it / 100.0)}" } ?: "No publicado"

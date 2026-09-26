@@ -29,19 +29,38 @@ data class RateReference(
     companion object {
         const val DISCLAIMER: String =
             "Las tasas mostradas son referenciales y provienen de tarifarios públicos de entidades reguladas por la SBS. La tasa real de tu tarjeta depende exclusivamente de tu contrato con la entidad emisora."
-
-        val DEFAULT_PERU_CATALOG: List<RateReference> = listOf(
-            RateReference("bcp-classic-pen", "BCP", "Visa Clásica", Currency.PEN, 2990, 8990, LocalDate.of(2026, 1, 15)),
-            RateReference("bcp-gold-pen", "BCP", "Visa Oro", Currency.PEN, 2690, 7990, LocalDate.of(2026, 1, 15)),
-            RateReference("bbva-zero-pen", "BBVA", "Visa Cero", Currency.PEN, 3500, 8490, LocalDate.of(2026, 2, 1)),
-            RateReference("bbva-signature-pen", "BBVA", "Visa Signature", Currency.PEN, 2190, 6990, LocalDate.of(2026, 2, 1)),
-            RateReference("ibk-benefit-pen", "Interbank", "Visa Benefit", Currency.PEN, 3100, 8600, LocalDate.of(2026, 1, 20)),
-            RateReference("scotia-smart-pen", "Scotiabank", "Mastercard Smart", Currency.PEN, 2800, 8200, LocalDate.of(2026, 2, 10)),
-            RateReference("bcp-classic-usd", "BCP", "Visa Clásica USD", Currency.USD, 1990, 4990, LocalDate.of(2026, 1, 15)),
-            RateReference("bbva-gold-usd", "BBVA", "Visa Oro USD", Currency.USD, 1890, 4590, LocalDate.of(2026, 2, 1)),
-        )
     }
 }
+
+data class CreditProductReference(
+    val id: String,
+    val institutionCode: String,
+    val institutionName: String,
+    val productName: String,
+    val cardNetwork: String?,
+    val penTeaMinBps: Int?,
+    val penTeaMaxBps: Int?,
+    val usdTeaMinBps: Int?,
+    val usdTeaMaxBps: Int?,
+    val publishedTeaSummary: String?,
+    val publishedTceaSummary: String?,
+    val membershipFeePenMinor: Long?,
+    val membershipFeeUsdMinor: Long?,
+    val membershipCondition: String?,
+    val sourceUrl: String?,
+    val verificationStatus: String?,
+    val catalogAsOf: LocalDate?,
+    val effectiveTo: LocalDate?,
+)
+
+data class CreditUtilizationNotification(
+    val id: String,
+    val cardId: String,
+    val title: String,
+    val body: String,
+    val eventKey: String?,
+    val createdAt: String,
+)
 
 data class PersonalTea(
     val cardId: CardId,

@@ -1,6 +1,6 @@
 # Data Model: EP-CTA - Cuentas y Tarjetas
 
-**Date**: 2026-09-21  
+**Date**: 2026-09-24
 **Spec**: [spec.md](spec.md)  
 **Plan**: [plan.md](plan.md)
 
@@ -201,6 +201,7 @@ Primary key `(user_id, id)`. Indexes: `(user_id, is_archived)`, `(user_id, type)
 | `last_four_digits` | TEXT | exactly `[0-9]{4}` |
 | `credit_limit_minor_units` | INTEGER? | required for CREDIT; null for DEBIT |
 | `billing_day`, `due_day` | INTEGER? | CREDIT `1..31`; null for DEBIT |
+| `personal_tea_bps` | INTEGER? | optional nonnegative basis points; null when no personal rate is configured |
 | `preset_id`, `color`, `icon` | TEXT | appearance |
 | `is_archived` | INTEGER | Boolean |
 | `remote_revision` | INTEGER | `>= 0` |
@@ -387,15 +388,15 @@ Canonical projections mirror domain semantics, not Room annotations:
 
 - `public.accounts`
 - `public.cards`
-- `public.financial_movements` or the recovered canonical transaction projection
+- `public.transactions` as the canonical remote transaction projection; local `financial_movements` must map to this transaction/ledger contract and cannot be a competing remote authority
 - `internal.ledger_entries`
 - `internal.command_receipts`
 - `internal.sync_changes`
 - `private.financial_user_heads`
 
-Before final naming, the recovered baseline must be compared with this model. Renames happen only in a forward migration.
+Before final naming, the checked-in baseline must be clean-reset and compared with this model. Renames happen only in a forward migration.
 
-Observed linked-project schema is recovery evidence, not an accepted target. At inspection time it materially differs: `public.accounts` lacks opening/snapshot fields; `public.cards` uses `is_credit`, requires `account_id`, permits nullable/non-ASCII-unchecked last4 and a broader network set; `public.transactions` has positive amounts but no `OPENING` or operation sequence; `internal.ledger_entries` rejects zero; and observed financial FKs are ID-only rather than owner-composite. Existing `command_receipts` also uses text idempotency keys without the contract-versioned receipt identity below. Implementation remains blocked until the missing migrations are recovered and these differences are reconciled forward-only.
+Observed linked-project schema is comparison evidence, not an accepted target. T075 confirmed that its migration history and schema drift from the checked-in local baseline: remote `cards` retains legacy alias columns, remote `app_notifications` has `deleted_at`, and remote `internal.sync_changes` uses `occurred_at` while local uses `created_at`. Canonical `credit_products`, `credit_installments` and `credit_payment_allocations` are present in both. Purchase/payment RPCs still use the legacy movement path and must be reconciled through new forward-only migrations; preserve remote rows/history and do not edit applied migration files.
 
 Remote-only rules:
 
@@ -423,17 +424,22 @@ Remote revision rules: create/register accepts expected absence and returns revi
 
 ## Sprint 3 Additions
 
-These extend, not replace, Sprint 2:
+The following are projections/uses of existing canonical entities, not additional parallel remote tables:
 
-- `credit_threshold_states(card_id, threshold, is_armed, last_crossed_at)`.
-- `credit_alerts` internal/user projection.
-- `rate_catalog_products` with `verified_at`, `stale_after`, source and disclaimer.
-- `personal_rate_history` effective-dated; never overwrites past simulations.
-- `credit_limit_history` effective-dated with an idempotent line-change command; reducing a line never rewrites debt.
-- `installment_simulations` snapshot of rate source and deterministic schedule.
-- Payment/purchase command kinds and movement pairs.
+- `public.credit_products` is the sole reference catalog. Reconcile the official `KIPU_CATALOGO_TARJETAS_CREDITO_PERU_2026.md` snapshot dated `2026-09-24` into this canonical table: 44 confirmed products (BCP 18, BBVA 10, Interbank 16). Extend the existing table only where fields are missing: `reference_tea_pen_min_bps`, `reference_tea_pen_max_bps`, `reference_tea_usd_min_bps`, `reference_tea_usd_max_bps` (nullable integer basis points); `membership_fee_pen_minor` and `membership_fee_usd_minor` (nullable `BIGINT`); `membership_terms`; `catalog_as_of_date`; `source_reference`; `source_status`; and `source_notes`. Preserve published ranges and source caveats. An unpublished or conflicted value is explicit, never inferred. Keep the legacy `reference_tea_bps` only for compatibility; do not use it as a currency-specific estimate unless its currency and source are explicit. `effective_to` is populated only for a source-published end date; software does not mark the snapshot stale by age. The UI label is `Tasa referencial al 24/09/2026`.
+- `public.cards.personal_tea_bps` stores the user's per-card rate. `CardEntity` must persist the same nullable integer in Room; changing it affects future simulations only.
+- `public.credit_installments` is the persisted confirmed-purchase schedule. Its local Room projection uses owner-scoped UUIDs, `transaction_id`, installment number, due date, `principal_minor: Long`, `interest_minor: Long`, status and revision. It does not persist a draft simulation.
+- `public.credit_payment_allocations` is the immutable relation between a payment transaction and installments. Its Room projection uses `allocated_minor: Long > 0` and owner-composite references. Allocate only outstanding installment principal in ascending `due_date`; for equal dates, order by purchase occurrence time, installment number and stable installment ID. A partial allocation reduces the oldest installment's principal and its status becomes `PARTIALLY_PAID`; do not advance to a later installment while the older one has a balance. The allocation sum equals the payment transaction amount. Allocation rows and installment status changes are applied atomically with the payment transaction.
+- Existing `public.app_notifications` remains the notification-center projection owned by EP-NOT. EP-CTA produces an idempotent threshold-crossing event; it does not add `credit_alerts` or another notifications table.
+- Simulated schedules are transient domain/UI values. They do not require an `installment_simulations` table or ledger entries. A confirmed purchase stores only its confirmed transaction and canonical installment rows.
 
-Default rate freshness is 90 days unless a source declares an earlier expiry. Stale references remain labeled and cannot be presented as current.
+No separate `credit_limit_history` table is added in this sprint. A line reduction changes future available-credit calculations and never truncates existing debt. Any effective-dated line-history requirement must be explicitly approved before it expands this Sprint 3 scope.
+
+### Room projections for Sprint 3
+
+Add the missing local projections for `credit_installments` and `credit_payment_allocations` in the next Room schema version. Use Kotlin `Long` for every minor-unit value, validate amounts/ranges in domain mappers, index all queries by `(user_id, ...)`, and use owner-composite foreign keys. Do not persist a second current debt or available-credit balance; derive both from confirmed ledger effects and the configured credit limit.
+
+Threshold state remains derived from consecutive committed utilization values. Emit a stable event identity from the operation that crosses a threshold; retries of that operation cannot emit a duplicate. A fall below a threshold re-arms the next crossing. Persist/present the event only through the agreed EP-NOT `app_notifications` contract.
 
 ## State Lifecycles
 
@@ -467,19 +473,21 @@ Capture validation covers source/reference and confidence presence, cross-source
 
 ## Migration Plan
 
-### Room 2 -> 3
+### Room 10 -> 11 (planned from the checked-in database baseline)
 
-1. Create four EP-CTA tables, indices, FKs and checks.
-2. Do not backfill invented financial instruments from profile/plans.
-3. Preserve all nine existing v2 tables and rows.
-4. Register `MIGRATION_2_3`; export `3.json`.
-5. Test representative v2 data and complete `1 -> 2 -> 3` chain.
+1. Confirm the checked-in Room database is still version 10 immediately before migration authoring.
+2. Add the two canonical credit projections plus the `personal_tea_bps` card field; do not add parallel debt, rate-catalog, simulation or notification tables.
+3. Preserve all existing version-10 rows and relationships; do not backfill invented financial records.
+4. Register the next forward migration and export the matching schema JSON (expected `11.json`).
+5. Test representative v10 data, reopen/restart behavior, owner isolation and exact minor-unit round trips.
 
 ### Supabase
 
-1. Recover missing original baseline migrations.
-2. Validate clean PostgreSQL 17 reconstruction.
-3. Compare schema-only result with linked project; classify drift.
-4. Add forward-only EP-CTA/hardening migration.
-5. Add pgTAP for schema, commands, receipts, ledger, sync, RLS/grants and privacy.
-6. Run security/performance advisors; release-blocking findings must be resolved.
+1. Validate the checked-in versioned financial baseline with a clean PostgreSQL 17 reconstruction.
+2. Compare the rebuilt schema with the linked project; classify and review drift.
+3. Add forward-only EP-CTA/hardening migration(s); do not invent a replacement baseline or edit applied history.
+4. Reconcile `referential_rate_catalog` and the dated 44-product official snapshot into canonical `credit_products`; add only missing per-currency TEA/range, membership, snapshot, source-reference and source-status columns. Do not apply age-based expiration.
+5. After the clean-reset baseline gate, extend canonical `register_transaction_v1` for `CARD_PURCHASE` and add canonical `allocate_credit_payment_v1` with FIFO partial allocation. Reconcile `confirm_credit_purchase_v1` and `pay_credit_card_v1` as delegates or retire them. Both canonical commands use receipts/idempotency, `credit_installments`, `credit_payment_allocations`, `internal.ledger_entries`, and owner-scoped sync changes.
+6. Align preferred closing/due day constraints to 1..31 and retain effective-day clamping without changing stored preferences.
+7. Add pgTAP for schema, commands, receipts, ledger, installment sums, allocations, sync, RLS/grants and privacy.
+8. Run security/performance advisors; release-blocking findings must be resolved.

@@ -5,9 +5,10 @@ import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.feature.accounts.domain.model.InstallmentScheduleItem
 import com.kipu.app.feature.accounts.domain.model.InstallmentSimulation
 import com.kipu.app.feature.accounts.domain.model.RateSource
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 import kotlin.math.pow
-import kotlin.math.roundToLong
 
 object InstallmentCalculator {
 
@@ -37,36 +38,70 @@ object InstallmentCalculator {
 
         val hasApplicableRate = teaBps != null && teaBps > 0 && installmentsCount > 1
 
-        val (totalFinancedMinor, totalInterestMinor, appliedTem) = if (!hasApplicableRate) {
-            Triple(principal.minorUnits, 0L, null)
+        val teaDecimal = if (hasApplicableRate) teaBps / 10_000.0 else 0.0
+        val temDecimal = if (hasApplicableRate) (1.0 + teaDecimal).pow(1.0 / 12.0) - 1.0 else 0.0
+        val n = installmentsCount.toDouble()
+        val exactPaymentMinor = if (hasApplicableRate) {
+            principal.minorUnits.toDouble() * temDecimal / (1.0 - (1.0 + temDecimal).pow(-n))
         } else {
-            val teaDecimal = teaBps / 10000.0
-            val temDecimal = (1.0 + teaDecimal).pow(1.0 / 12.0) - 1.0
-            val n = installmentsCount.toDouble()
-            val factor = (temDecimal * (1.0 + temDecimal).pow(n)) / ((1.0 + temDecimal).pow(n) - 1.0)
-            val rawMonthlyPayment = principal.minorUnits * factor
-            val roundedMonthly = rawMonthlyPayment.roundToLong()
-            val computedTotalFinanced = Math.multiplyExact(roundedMonthly, installmentsCount.toLong())
-            val computedTotalInterest = Math.max(0L, Math.subtractExact(computedTotalFinanced, principal.minorUnits))
-            val finalTotalFinanced = Math.addExact(principal.minorUnits, computedTotalInterest)
-            Triple(finalTotalFinanced, computedTotalInterest, temDecimal * 100.0)
+            principal.minorUnits.toDouble() / n
         }
 
-        val totalFinanced = Money(totalFinancedMinor, principal.currency)
-        val totalInterest = Money(totalInterestMinor, principal.currency)
+        require(exactPaymentMinor.isFinite() && exactPaymentMinor > 0.0) {
+            "Installment estimate is outside the supported range"
+        }
 
-        // Cent distribution: totalFinancedMinor / installmentsCount with remainder distributed to first installments
-        val baseInstallmentAmount = totalFinancedMinor / installmentsCount
-        val remainderCents = (totalFinancedMinor % installmentsCount).toInt()
+        // Round the total once, then assign any indivisible minor-unit remainder to installment 1.
+        val totalFinancedMinor = roundMinorUnits(exactPaymentMinor * n)
+        val totalInterestMinor = Math.subtractExact(totalFinancedMinor, principal.minorUnits)
+        require(totalInterestMinor >= 0L) { "Estimated interest cannot be negative" }
+        // Keep the recurring installments at or below the theoretical amount so the
+        // whole rounding remainder is assigned to installment 1. This also handles
+        // amounts smaller than the installment count (for example S/ 0.01 over 36).
+        val regularInstallmentMinor = floorMinorUnits(exactPaymentMinor)
+        val regularInstallmentTotal = Math.multiplyExact(regularInstallmentMinor, (installmentsCount - 1).toLong())
+        val firstInstallmentMinor = Math.subtractExact(totalFinancedMinor, regularInstallmentTotal)
+        require(firstInstallmentMinor > 0L) { "Rounded first installment must remain positive" }
 
-        val basePrincipal = principal.minorUnits / installmentsCount
-        val principalRemainder = (principal.minorUnits % installmentsCount).toInt()
+        // The French method has a fixed theoretical payment and a declining interest share.
+        // Round each principal share to minor units, then reconcile the rounding residual in
+        // the first installment so the principal schedule remains exact.
+        val rawPrincipalPortions = if (hasApplicableRate) {
+            val remaining = principal.minorUnits.toDouble()
+            var outstanding = remaining
+            val portions = mutableListOf<Double>()
+            repeat(installmentsCount) { index ->
+                val principalPortion = if (index == installmentsCount - 1) {
+                    outstanding
+                } else {
+                    val interest = outstanding * temDecimal
+                    (exactPaymentMinor - interest).coerceIn(0.0, outstanding)
+                }
+                portions += principalPortion
+                outstanding = (outstanding - principalPortion).coerceAtLeast(0.0)
+            }
+            portions
+        } else {
+            val basePrincipal = principal.minorUnits / installmentsCount
+            val principalRemainder = (principal.minorUnits % installmentsCount).toInt()
+            (0 until installmentsCount).map { index ->
+                (basePrincipal + if (index == 0) principalRemainder.toLong() else 0L).toDouble()
+            }
+        }
+
+        val roundedPrincipalPortions = rawPrincipalPortions.map(::roundMinorUnits).toMutableList()
+        val roundedPrincipalTotal = roundedPrincipalPortions.fold(0L, Math::addExact)
+        val principalResidual = Math.subtractExact(principal.minorUnits, roundedPrincipalTotal)
+        roundedPrincipalPortions[0] = Math.addExact(roundedPrincipalPortions[0], principalResidual)
 
         val schedule = (0 until installmentsCount).map { index ->
             val installmentNum = index + 1
-            val itemAmountMinor = baseInstallmentAmount + if (index < remainderCents) 1L else 0L
-            val itemPrincipalMinor = basePrincipal + if (index < principalRemainder) 1L else 0L
-            val itemInterestMinor = Math.max(0L, Math.subtractExact(itemAmountMinor, itemPrincipalMinor))
+            val itemAmountMinor = if (index == 0) firstInstallmentMinor else regularInstallmentMinor
+            val itemPrincipalMinor = roundedPrincipalPortions[index]
+            val itemInterestMinor = Math.subtractExact(itemAmountMinor, itemPrincipalMinor)
+            require(itemPrincipalMinor >= 0L && itemInterestMinor >= 0L) {
+                "Rounded French schedule produced a negative installment component"
+            }
 
             val targetDate = firstDueDate.plusMonths(index.toLong())
             val effectiveDate = CreditCalculations.calculateEffectiveDate(dueDay, targetDate.year, targetDate.month)
@@ -79,6 +114,13 @@ object InstallmentCalculator {
                 interestPortion = Money(itemInterestMinor, principal.currency),
             )
         }
+
+        check(schedule.sumOf { it.principalPortion.minorUnits } == principal.minorUnits)
+        check(schedule.sumOf { it.interestPortion.minorUnits } == totalInterestMinor)
+        check(schedule.sumOf { it.amount.minorUnits } == totalFinancedMinor)
+
+        val totalFinanced = Money(totalFinancedMinor, principal.currency)
+        val totalInterest = Money(totalInterestMinor, principal.currency)
 
         val disclaimer = if (hasApplicableRate) {
             InstallmentSimulation.DISCLAIMER_WITH_RATE
@@ -93,11 +135,21 @@ object InstallmentCalculator {
             installmentsCount = installmentsCount,
             rateSource = rateSource,
             appliedTeaBps = if (hasApplicableRate) teaBps else null,
-            appliedTemPercentage = appliedTem,
+            appliedTemPercentage = if (hasApplicableRate) temDecimal * 100.0 else null,
             totalInterest = totalInterest,
             totalFinanced = totalFinanced,
             schedule = schedule,
             disclaimer = disclaimer,
         )
+    }
+
+    private fun roundMinorUnits(value: Double): Long {
+        require(value.isFinite() && value >= 0.0) { "Installment component is outside the supported range" }
+        return BigDecimal.valueOf(value).setScale(0, RoundingMode.HALF_UP).longValueExact()
+    }
+
+    private fun floorMinorUnits(value: Double): Long {
+        require(value.isFinite() && value >= 0.0) { "Installment component is outside the supported range" }
+        return BigDecimal.valueOf(value).setScale(0, RoundingMode.DOWN).longValueExact()
     }
 }

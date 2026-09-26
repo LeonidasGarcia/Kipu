@@ -34,6 +34,46 @@ class CreditMetricsTest {
     }
 
     @Test
+    fun `first installment follows inclusive closing day and the next due day`() {
+        assertEquals(
+            LocalDate.of(2026, Month.SEPTEMBER, 20),
+            CreditCalculations.calculateFirstInstallmentDueDate(
+                purchaseDate = LocalDate.of(2026, Month.SEPTEMBER, 15),
+                preferredClosingDay = 15,
+                preferredDueDay = 20,
+            ),
+        )
+        assertEquals(
+            LocalDate.of(2026, Month.OCTOBER, 20),
+            CreditCalculations.calculateFirstInstallmentDueDate(
+                purchaseDate = LocalDate.of(2026, Month.SEPTEMBER, 16),
+                preferredClosingDay = 15,
+                preferredDueDay = 20,
+            ),
+        )
+    }
+
+    @Test
+    fun `first installment clamps short closing and due months without changing preferences`() {
+        assertEquals(
+            LocalDate.of(2024, Month.MARCH, 31),
+            CreditCalculations.calculateFirstInstallmentDueDate(
+                purchaseDate = LocalDate.of(2024, Month.FEBRUARY, 29),
+                preferredClosingDay = 31,
+                preferredDueDay = 31,
+            ),
+        )
+        assertEquals(
+            LocalDate.of(2026, Month.MAY, 5),
+            CreditCalculations.calculateFirstInstallmentDueDate(
+                purchaseDate = LocalDate.of(2026, Month.APRIL, 1),
+                preferredClosingDay = 31,
+                preferredDueDay = 5,
+            ),
+        )
+    }
+
+    @Test
     fun `calculateNextDate correctly advances to next month if reference date is past day`() {
         val refDate = LocalDate.of(2024, Month.JANUARY, 20)
         // Day 15 has passed in January, so next occurrence is Feb 15

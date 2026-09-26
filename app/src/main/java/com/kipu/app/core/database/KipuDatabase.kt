@@ -7,6 +7,9 @@ import com.kipu.app.feature.accounts.data.local.AccountDao
 import com.kipu.app.feature.accounts.data.local.AccountEntity
 import com.kipu.app.feature.accounts.data.local.CardDao
 import com.kipu.app.feature.accounts.data.local.CardEntity
+import com.kipu.app.feature.accounts.data.local.CreditDao
+import com.kipu.app.feature.accounts.data.local.CreditInstallmentEntity
+import com.kipu.app.feature.accounts.data.local.CreditPaymentAllocationEntity
 import com.kipu.app.feature.accounts.data.local.FinancialMovementDao
 import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.accounts.data.local.InstrumentSyncDao
@@ -68,8 +71,10 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         MovementOutboxEntity::class,
         BalanceProjectionEntity::class,
         MovementSyncCheckpointEntity::class,
+        CreditInstallmentEntity::class,
+        CreditPaymentAllocationEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -87,4 +92,5 @@ abstract class KipuDatabase : RoomDatabase() {
     abstract fun categoryDao(): CategoryDao
     abstract fun merchantCatalogDao(): MerchantCatalogDao
     abstract fun movementDao(): MovementDao
+    abstract fun creditDao(): CreditDao
 }

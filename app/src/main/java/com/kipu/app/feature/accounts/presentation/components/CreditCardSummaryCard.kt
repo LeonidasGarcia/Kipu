@@ -126,9 +126,14 @@ fun CreditCardSummaryCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Línea: ",
+                    text = "Línea de crédito: ",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
+                )
+                MoneyText(
+                    money = com.kipu.app.core.finance.domain.model.Money(card.creditLimitMinorUnits, card.currency),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))

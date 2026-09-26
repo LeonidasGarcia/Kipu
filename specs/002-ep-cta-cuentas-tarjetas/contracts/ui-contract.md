@@ -124,3 +124,13 @@ Onboarding completion and restored authenticated sessions land on dashboard. Loc
 - Presets expose selected state; archive/sync/error use text plus semantics.
 - Focus order follows visual order; IME never hides focused field or Save.
 - TalkBack, switch access, keyboard, landscape, RTL-safe icons and 200% font are validated.
+
+## Sprint 3 Credit Flows (HU-09..HU-13)
+
+- The Card Preview remains in the upper third of the credit-card form and updates with issuer preset, palette, alias and last four digits. It never displays or accepts a full PAN, expiry date or CVV/CVC.
+- The dashboard labels the credit section separately from liquid assets. It shows line, used credit, available credit and utilization; available credit is explicitly described as borrowing capacity, not money owned. A zero limit shows utilization as unavailable, and debt above the limit remains visible without negative available credit.
+- Credit and installment amounts use PEN/S/ formatting, `MoneyText`, tabular numerals and the existing masking behavior. Alert state uses label/icon plus text, never color alone.
+- The card detail/form shows preferred closing and due days. The selected preferred day remains unchanged while effective dates clamp to the final calendar day in short months.
+- HU-13 previews show installment count, method, rate and source, principal, estimated interest, total, every due date and amount, plus an explicit estimate warning. A no-rate preview shows principal-only distribution and invents no interest.
+- HU-12 clearly presents the source bank account, card debt and payment amount before confirmation. It labels the operation as a payment/transfer and does not classify it as a purchase or expense.
+- HU-10 threshold events remain visible within Kipu even when OS notification permission is denied. HU-42 owns the shared notification center and read state.

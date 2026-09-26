@@ -1,6 +1,6 @@
 # Research: EP-CTA - Cuentas y Tarjetas
 
-**Date**: 2026-09-21  
+**Date**: 2026-09-24
 **Spec**: [spec.md](spec.md)  
 **Plan**: [plan.md](plan.md)
 
@@ -106,11 +106,11 @@
 - Dispatcher RPC JSON generico: demasiado privilegiado y dificil de validar.
 - Edge Function como autoridad financiera: no puede reemplazar la transaccion PostgreSQL.
 
-## R-009 - Supabase Baseline Recovery
+## R-009 - Supabase Baseline Reproducibility and Drift
 
-**Decision**: Recuperar las migraciones financieras originales antes de una migracion EP-CTA forward-only; comparar reconstruccion limpia contra el esquema vinculado.
+**Decision**: Keep the checked-in PostgreSQL 17 baseline as the reproducible local source of truth and reconcile the linked Kipu project only with new forward-only migrations. T075 was approved on 2026-09-24 after a clean local reset, a zero-diff comparison of `public,internal` against the checked-in migrations, and a read-only linked-project comparison. Never reset or rewrite the linked project's migration history.
 
-**Rationale**: `20260920162500_align_domain_schema_names.sql` altera tablas que ninguna migracion versionada crea. Agregar otra migracion no arregla clones limpios.
+**Rationale**: The local chain is reproducible, while the linked project has a distinct, longer migration history and additive schema/policy drift. Production changes therefore must preserve remote data and legacy clients while converging through additive, compatibility-preserving migrations.
 
 **Alternatives considered**:
 
@@ -118,11 +118,15 @@
 - Editar migraciones aplicadas: rechazado porque rompe historia.
 - Baseline consolidado nuevo: ultimo recurso que exige aprobacion y reconciliacion explicita de historial.
 
-**Linked-schema evidence**: La inspeccion del proyecto vinculado confirma que existe un modelo financiero remoto no reproducible desde las migraciones locales, pero no equivale al modelo objetivo: `accounts` no conserva apertura/snapshot, `cards` usa `is_credit` y `account_id NOT NULL`, `transactions` no tiene `OPENING` ni identidad de operacion, `ledger_entries` exige importe distinto de cero, y las referencias financieras observadas no son owner-composite. La migracion EP-CTA debe reconciliar estas diferencias forward-only despues de recuperar el baseline; no debe asumir que los nombres actuales ya cumplen el contrato.
+**T075 evidence (2026-09-24)**: `supabase db reset --local` applied all 23 checked-in migrations successfully. `supabase db diff --local --schema public,internal` returned `No schema changes found`. The linked Kipu project reports 55 applied migration records; its migration history is not a one-to-one match for the 23 checked-in files. The linked schema retains nine legacy alias columns on `public.cards` (`issuer`, `currency`, `currency_code`, `name`, `card_type`, `last_four`, `credit_limit_minor_units`, `billing_cycle_day`, `payment_due_day`), has `public.app_notifications.deleted_at`, and uses `internal.sync_changes.occurred_at` while the local baseline uses `created_at`. The canonical `credit_products`, `credit_installments` and `credit_payment_allocations` columns are present in both. Relevant RLS policies also differ; see R-010. The product owner approved preserving the remote history and using forward-only migration reconciliation.
+
+**Existing RPC compatibility**: Both inspected environments contain `confirm_credit_purchase_v1`, `pay_credit_card_v1` and `register_transaction_v1`, but their function definitions are not byte-identical. Purchase confirmation writes a `CREDIT_PURCHASE` row to `financial_movements` and does not write the canonical ledger or installment schedule. Card payment writes paired cash/liability movement rows and does not allocate installments. `register_transaction_v1` writes transactions and ledger entries for its existing types but does not recognize `CARD_PURCHASE`. Sprint 3 commands must establish one canonical accounting path and keep legacy entry points as delegating wrappers or explicitly retired compatibility endpoints.
 
 ## R-010 - RLS and Grants
 
-**Decision**: RLS habilitada/forzada, ownership estructural, `PUBLIC`/`anon` revocados, DML financiero directo revocado y grants exactos. Vistas `security_invoker`; funciones privilegiadas con owner dedicado, `search_path=''` y checks explicitos.
+**Decision**: RLS habilitada con ownership estructural y grants exactos; se revoca DML directo de `PUBLIC`/`anon`. Vistas `security_invoker`; RPC privilegiadas con `search_path=''`, validaciones explicitas y `EXECUTE` minimo.
+
+**T075 evidence**: RLS is enabled on the inspected financial tables in both environments. The remote project grants `anon` table-level SELECT/INSERT on the inspected public tables, while owner policies target `authenticated`; no anonymous row policy was found. Keep RLS as the row boundary and use forward-only revokes/minimum grants to remove unnecessary anonymous DML before relying on those tables through the Data API. The inspected RPCs are `SECURITY DEFINER`, set an empty `search_path`, deny `anon` EXECUTE and grant `authenticated` EXECUTE. Local and remote policies differ for `internal.command_receipts`, `internal.ledger_entries`, `internal.sync_changes` and `public.credit_payment_allocations`; reconcile deliberately without changing historical migrations.
 
 **Rationale**: `TO authenticated` solo autentica; no autoriza filas. La Constitucion exige objeto correcto, y Supabase ya no expone automaticamente tablas nuevas.
 
@@ -193,7 +197,65 @@
 
 - Confiar en mocks/documentos: prohibido por Constitucion IX.
 
-## Resolved Unknowns
+## Decisions Added During Sprint 3 Refinement
+
+## R-016 - Credit Cycle Dates
+
+**Decision**: Keep preferred closing_day and due_day values in the inclusive range 1..31. For each month, compute the effective day as the smaller of the preference and the month's last calendar day. A purchase on the effective closing date belongs to that cycle; a purchase after it belongs to the next cycle. The first installment is due on the earliest effective due_day strictly after the selected cycle's effective closing date; later installments are monthly and independently clamp in short months.
+
+**Rationale**: This records the user's clarification for HU-13.8 and preserves the user's preferred day when February or another short month requires a temporary adjustment. It matches RF-C04/RF-C12 and the official backlog's 1..31 preference.
+
+**Alternatives considered**: Mutating the stored preference to 28; assigning purchases on the closing date to the following cycle; choosing a fixed offset from purchase date. These do not match the accepted cycle rule.
+
+## R-017 - Fixed-Installment Interest Estimate and Minor-Unit Rounding
+
+**Decision**: Use the French fixed-payment estimate. Convert a rate in basis points to decimal TEA by dividing by 10,000, calculate TEM = (1 + TEA)^(1/12) - 1, then calculate fixed payment A = P * TEM / (1 - (1 + TEM)^(-n)). When TEM is zero, use P/n. Round displayed monetary values to integer minor units deterministically and assign the principal-split residual to installment 1. A simulation is an estimate only and creates no ledger entry.
+
+**Rationale**: This records the user's clarification and the exact formula now required by RF-C12. It keeps financial authority in integer minor units while permitting a display-only rate estimate.
+
+**Alternatives considered**: Equal principal plus simple interest, annuity due, or treating each simulation as a posted obligation. The French fixed-payment method is the accepted answer; simulations remain non-posting.
+
+**Acceptance fixture**: PEN 100.00 with three zero-interest installments is PEN 33.34, PEN 33.33 and PEN 33.33. For nonzero TEA, the displayed fixed payment is calculated with the formula above and the final displayed installment rows sum exactly to the rounded displayed total.
+
+## R-018 - Canonical Credit Catalog and Installment Data
+
+**Decision**: Reuse public.credit_products, public.cards.personal_tea_bps, public.credit_installments and public.credit_payment_allocations. Reconcile referential_rate_catalog and the movement-only payment/purchase RPCs through forward-only migrations and compatibility adapters/delegation to a single ledger command path. Add Room projections for the two existing installment relations and persist personal_tea_bps in CardEntity. Do not create rate_catalog_products, personal_rate_history, installment_simulations, credit_alerts or another notification table for this sprint.
+
+**Rationale**: The canonical entities are already present in the versioned baseline. Creating parallel tables or independent movement-only commands would split catalog or accounting truth. The checked-in app is at Room version 10, so plan the next migration from that version, not the old v3 design.
+
+**Evidence**: Kipu's financial baseline defines credit_products, credit_installments, credit_payment_allocations and app_notifications. The current repo also contains referential_rate_catalog, pay_credit_card_v1 and confirm_credit_purchase_v1, while the existing register_transaction_v1 and worker path do not yet provide the complete CTA canonical command contract. Treat this as a reconciliation gate before implementation.
+
+## R-019 - Utilization Threshold Event Contract
+
+**Decision**: Evaluate committed utilization transitions at 50%, 80% and 100%. Emit one event for each newly crossed threshold, deduplicate retries using the financial operation identity, and permit another crossing only after utilization falls below that threshold. Send an internal event to EP-NOT/HU-42 and reuse its app_notifications store and center.
+
+**Rationale**: HU-10 requires in-app visibility even when OS notification permission is denied. HU-42 is a partial dependency/integration, not permission to add a second notification model within EP-CTA.
+
+**Open integration contract**: Agree the event's stable event ID and fields with EP-NOT before implementation. EP-CTA owns the threshold crossing facts; EP-NOT owns notification persistence and presentation.
+
+## R-020 - Card Preview and Credit UI
+
+**Decision**: Preserve the existing interactive Card Preview in the upper third of the create/edit form. It reflects selected issuer preset, palette, alias and only the last four digits. Show available credit and used credit in the credit-card section, separate from liquid balances. Format all values in PEN with S/ and tabular numerals; keep masking semantics. Never add PAN, expiry or CVV fields.
+
+**Rationale**: The product screen references specify the interactive preview, progressive credit-only fields, real-money/credit separation and Peruvian currency formatting.
+
+**Sources reviewed**: KipuApp/Prototipo/Stich Prompts.md (Prompt 3, Screens 4-6; Prompt 5, Screen 11) and KipuApp/Prototipo/Esquema de pantallas relacionadas con las HU.md (Module 2, HU-09..HU-13; Module 4). The prompts identify BCP, BBVA, Interbank and Scotiabank presets; Banco de la Nación must use the approved generic fallback until brand tokens are approved.
+
+## R-021 - HU-12 FIFO Partial-Payment Allocation
+
+**Decision**: Allocate card payments by strict FIFO on `due_date` ascending. A partial payment reduces the outstanding principal of the oldest installment and does not advance to a later installment while the older one has a balance. For equal due dates, use purchase occurrence time, installment number and stable installment ID as deterministic tie-breaks.
+
+**Evidence**: The official Product Backlog and architecture did not choose an installment allocation priority. The FIFO rule is an explicit product decision approved for Sprint 3 on 2026-09-24 and is recorded in `spec.md`, `plan.md`, `data-model.md` and `contracts/credit-commands.md`. It does not change historical purchase principal or create a second expense.
+
+## R-022 - Official Credit-Card Catalog Snapshot
+
+**Decision**: Use `KipuApp/Tasas de Bancos del Peru/KIPU_CATALOGO_TARJETAS_CREDITO_PERU_2026.md` as the official snapshot with cut-off date 2026-09-24. Import exactly 44 confirmed products into canonical `credit_products`: BCP 18, BBVA 10 and Interbank 16. Preserve source-supported purchase TEA by PEN/USD, ranges/profile conditions, membership costs/terms, references and source status. Display `Tasa referencial al 24/09/2026`; elapsed time alone does not expire the snapshot.
+
+**Rationale**: This fixes the release coverage and presentation date while avoiding unsupported current-rate claims. Missing or conflicting source information remains visible as such and cannot be silently normalized into an estimate rate.
+
+**Evidence and caveats**: The catalog's institutional coverage table reports 18 BCP, 10 BBVA and 16 confirmed Interbank products. The Interbank `American Express Benefit / Blue` candidate is marked pending and excluded from the confirmed count. BCP Visa iO has conflicting official rate statements; preserve those statements and do not select an ambiguous TEA for simulation.
+
+## Earlier S2 Decisions Retained
 
 - Maximo monetario: `99_999_999_999_999` minor units.
 - Moneda de tarjeta: obligatoria; debito derivada, credito explicita.
@@ -201,5 +263,5 @@
 - Status solicitado: tres estados de UI derivados de una maquina interna exhaustiva.
 - API remota: SELECT owner-scoped + RPC tipadas; no Edge Function obligatoria.
 - Deletion: cuenta confirmada archive-only; tarjeta vacia puede hard-delete con tombstone.
-- Freshness de tasas: Sprint 3 adopta 90 dias por defecto editorial; siempre muestra `verifiedAt` y puede marcar stale antes si la fuente lo exige.
+- Catalog snapshot: show the source and verification date for the 2026-09-24 snapshot; elapsed time alone does not expire it. Preserve explicit source end dates, conflicts and pending/unpublished statuses as source data (R-022).
 - Pantallas 4/5 sin asset Stitch: tokens/documento local son autoridad; no se afirma pixel fidelity sin IDs aprobados.

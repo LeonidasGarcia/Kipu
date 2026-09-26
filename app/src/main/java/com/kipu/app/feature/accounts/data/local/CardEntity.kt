@@ -64,4 +64,6 @@ data class CardEntity(
     val createdAt: Long,
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long,
+    @ColumnInfo(name = "personal_tea_bps")
+    val personalTeaBps: Int? = null,
 )

@@ -87,13 +87,70 @@ class InstallmentSimulationTest {
         val scheduleSum = simulation.schedule.sumOf { it.amount.minorUnits }
         assertEquals(simulation.totalFinanced.minorUnits, scheduleSum)
 
-        // Verify each installment is within 1 cent of the others
-        val amounts = simulation.schedule.map { it.amount.minorUnits }
-        val maxAmount = amounts.maxOrNull()!!
-        val minAmount = amounts.minOrNull()!!
-        assertTrue(maxAmount - minAmount <= 1L)
+        assertRemainderIsAssignedToFirstInstallment(simulation)
 
         assertEquals(InstallmentSimulation.DISCLAIMER_WITH_RATE, simulation.disclaimer)
+    }
+
+    @Test
+    fun `French estimate keeps fixed installments and amortizes declining interest`() {
+        val simulation = InstallmentCalculator.simulate(
+            cardId = cardId,
+            principal = Money(150000, Currency.PEN),
+            installmentsCount = 6,
+            firstDueDate = LocalDate.of(2026, 3, 10),
+            dueDay = 10,
+            teaBps = 3500,
+            rateSource = RateSource.PERSONAL_TEA,
+        )
+
+        val amounts = simulation.schedule.map { it.amount.minorUnits }
+        val interest = simulation.schedule.map { it.interestPortion.minorUnits }
+        val principalParts = simulation.schedule.map { it.principalPortion.minorUnits }
+
+        assertRemainderIsAssignedToFirstInstallment(simulation)
+        assertTrue(interest.first() > interest.last())
+        assertTrue(principalParts.first() < principalParts.last())
+        assertEquals(150000L, principalParts.sum())
+        assertEquals(simulation.totalInterest.minorUnits, interest.sum())
+        assertEquals(simulation.totalFinanced.minorUnits, amounts.sum())
+    }
+
+    @Test
+    fun `deterministic amount and count matrix preserves exact total at supported boundaries`() {
+        val amountsMinor = listOf(1L, 2L, 17L, 99L, 100L, 10_001L, 1_234_567L, 10_000_000L)
+        amountsMinor.forEach { amount ->
+            for (count in 1..36) {
+                val simulation = InstallmentCalculator.simulate(
+                    cardId = cardId,
+                    principal = Money(amount, Currency.PEN),
+                    installmentsCount = count,
+                    firstDueDate = LocalDate.of(2026, 1, 31),
+                    dueDay = 31,
+                    teaBps = null,
+                )
+                assertEquals("amount=$amount count=$count", amount, simulation.schedule.sumOf { it.amount.minorUnits })
+                assertEquals("amount=$amount count=$count", amount, simulation.schedule.sumOf { it.principalPortion.minorUnits })
+                assertEquals("amount=$amount count=$count", 0L, simulation.totalInterest.minorUnits)
+                if (count >= 2) {
+                    assertEquals("amount=$amount count=$count", LocalDate.of(2026, 2, 28), simulation.schedule[1].dueDate)
+                }
+                assertRemainderIsAssignedToFirstInstallment(simulation)
+            }
+        }
+
+        val maximum = InstallmentCalculator.simulate(
+            cardId = cardId,
+            principal = Money(10_000_000L, Currency.PEN), // S/ 100,000.00
+            installmentsCount = 36,
+            firstDueDate = LocalDate.of(2026, 1, 31),
+            dueDay = 31,
+            teaBps = 3500,
+        )
+        assertEquals(10_000_000L, maximum.schedule.sumOf { it.principalPortion.minorUnits })
+        assertEquals(maximum.totalFinanced.minorUnits, maximum.schedule.sumOf { it.amount.minorUnits })
+        assertEquals(maximum.totalInterest.minorUnits, maximum.schedule.sumOf { it.interestPortion.minorUnits })
+        assertRemainderIsAssignedToFirstInstallment(maximum)
     }
 
     @Test
@@ -164,6 +221,20 @@ class InstallmentSimulationTest {
             amount = Money(0, Currency.PEN),
             merchant = "Metro",
             occurredAt = Instant.now()
+        )
+    }
+
+    private fun assertRemainderIsAssignedToFirstInstallment(simulation: InstallmentSimulation) {
+        val firstAmount = simulation.schedule.first().amount.minorUnits
+        if (simulation.installmentsCount == 1) {
+            assertEquals(simulation.totalFinanced.minorUnits, firstAmount)
+            return
+        }
+        val regularAmount = simulation.schedule[1].amount.minorUnits
+        assertTrue(simulation.schedule.drop(1).all { it.amount.minorUnits == regularAmount })
+        assertEquals(
+            simulation.totalFinanced.minorUnits - regularAmount * (simulation.installmentsCount - 1),
+            firstAmount,
         )
     }
 }

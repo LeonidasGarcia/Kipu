@@ -67,6 +67,20 @@
 - [ ] CHK037 - Are conflict resolution rules specified to prevent silent balance rewriting, data resurrection, or last-write-wins on financial transactions? [Completeness, Spec §RT-03, Constitution §II]
 - [ ] CHK038 - Does the spec guarantee that exceeding Free tier limits or changing subscription state never deletes or excludes valid historical financial transactions? [Consistency, Spec §RN-CTA-03, Constitution §V]
 
+## 8. Sprint 3 Readiness and Canonical Contracts (HU-09..HU-13)
+
+- [ ] CHK039 - Are all authoritative principal, interest, allocation and credit-limit values represented in integer minor units with an explicit Kotlin Long/PostgreSQL BIGINT mapping and overflow rule? [Clarity, Spec §RT-05, Data Model §Type Conventions]
+- [ ] CHK040 - Does the data model identify credit_installments and credit_payment_allocations as projections of the existing canonical relations, with owner-composite references and atomic updates? [Consistency, Data Model §Sprint 3 Additions]
+- [ ] CHK041 - Does the spec distinguish a confirmed CARD_PURCHASE expense from a CARD_PAYMENT transfer and prohibit recognizing purchase principal or estimated interest a second time? [Consistency, Spec §RN-06, §RN-15, Contract §Purchase/Payment]
+- [ ] CHK042 - Is the minor-unit residual rule precise and does the S/100 three-installment example resolve to S/33.34, S/33.33 and S/33.33? [Measurability, Spec §RF-C12, HU-13.2/HU-13.6]
+- [ ] CHK043 - Are closing-day inclusion, the first due date, monthly subsequent due dates and short-month clamping all specified without mutating the user's preferred day? [Clarity, Spec §HU-13.8, R-016]
+- [ ] CHK044 - Does the interest simulation specify basis-point conversion, TEA-to-TEM conversion, French fixed-payment formula, zero-rate behavior, rounding and the no-ledger/no-debt invariant? [Completeness, Spec §RF-C12, R-017]
+- [ ] CHK045 - Are rate source, verification date, disclaimer and stale classification defined without an unapproved freshness cutoff? [Clarity, Spec §RF-C08, Contract §Reference rates]
+- [ ] CHK046 - Are 50%, 80% and 100% crossing, per-threshold re-arming, multi-threshold jumps, retry idempotency and the HU-42 event owner contract specified? [Completeness, Spec §RF-C07, Contract §Utilization event]
+- [ ] CHK047 - Is the allocation order for partial card payments defined by an authoritative Kipu source before the allocator is implemented? [Clarity, Spec §RF-C10, Contract §Card payment]
+- [ ] CHK048 - Are the Sprint 2 dependency gates HU-07/HU-08 and external HU-18/HU-19/HU-23 explicit, with no HU from a later sprint pulled into this increment? [Scope, Spec §Dependencies, Plan §Sprint 3]
+- [ ] CHK049 - Does the plan reconcile legacy movement-only RPCs and referential_rate_catalog into one canonical ledger/catalog path without duplicate financial or notification entities? [Consistency, Plan §Sprint 3 canonical model, R-018]
+
 ## Notes
 
 - Mark items `[x]` only after review confirms the requirement-quality criterion is satisfied

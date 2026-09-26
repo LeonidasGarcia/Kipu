@@ -1,8 +1,12 @@
+**Propagated**: 2026-09-24 — Updated from the approved Sprint 3 refinement in spec.md; Sprint 2 completion retained and HU-09..HU-13 reopened.
+
+
 # Implementation Tasks: EP-CTA - Cuentas y Tarjetas
 
-**Feature Branch**: `002-ep-cta-cuentas-tarjetas`  
-**Date**: 2026-09-22  
+**Feature Branch**: `002-ep-cta-cuentas-tarjetas`
+**Date**: 2026-09-24
 **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md) | **Data Model**: [data-model.md](data-model.md)
+**Sprint 3 Status**: 90/90 tasks completed (2026-09-26), based on the user's direct verification of accounting, synchronization, and credit flows on Galaxy S24+ (SM-S926B, API 36), plus reported green suites: 234/234 unit tests, 125/125 instrumented tests, and 319/319 local pgTAP tests.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
@@ -92,6 +96,20 @@
 
 ---
 
+## Sprint 3 Readiness and Canonical Database Contracts
+
+Complete T075 and approve its evidence before any Sprint 3 production implementation. T075 blocks the Room migration, canonical database commands and HU-09..HU-13 integration tasks.
+
+- [X] T075 [US3-US7] Validate the checked-in financial baseline with a clean reset; compare it with the linked project; inventory existing purchase/payment RPC behavior and ledger effects; document drift, RLS/grants, forward-only reconciliation and compatibility behavior; review and approve the gate evidence.
+- [X] T076 [US3-US7] After T075 passes, add the next Room migration from checked-in version 10 with `personal_tea_bps`, `CreditInstallmentEntity` and `CreditPaymentAllocationEntity`, owner-composite keys, indexes, `Long` mappings and migration tests.
+- [X] T079 [US5] After T075 passes, reconcile the official 2026-09-24 catalog snapshot into canonical `credit_products`: seed exactly 44 confirmed products (BCP 18, BBVA 10, Interbank 16); include source-supported purchase TEA by PEN/USD, ranges, membership costs/conditions, source references and caveats. Preserve unpublished, conflicting and pending source states without inferring values; exclude the Interbank Benefit/Blue pending candidate from the 44 confirmed products. Display the fixed as-of label; do not auto-expire by age.
+- [X] T080 [US7] Implement the canonical database `register_transaction_v1` contract for confirmed `EXPENSE` / `CARD_PURCHASE`: owner and card validation, one principal recognition, exact installments, idempotency receipt and sync changes. Make `confirm_credit_purchase_v1` delegate to this path or retire it; no second `financial_movements` accounting path.
+- [X] T081 [US6] Implement the canonical atomic database `allocate_credit_payment_v1` contract: validate owner, source account, card, currency, funds and debt; create one `TRANSFER` / `CARD_PAYMENT`; allocate FIFO by `due_date` with partial principal handling; apply equal asset/liability effects, receipt and sync changes. Make `pay_credit_card_v1` delegate to this path or retire it.
+
+**Dependency gate**: T076, T079, T080 and T081 start only after T075. T053 depends on T079; T065 depends on T080; T058 depends on T081. No Sprint 3 financial production code begins if the clean-reset/reconciliation evidence fails review.
+
+---
+
 ## Phase 5: User Story 3 - HU-09 Consultar linea y saldos de credito (Priority: P2)
 
 **Goal**: View credit card authorized line, debt (used credit), available credit, and utilization percentage, with short month date adjustments.
@@ -126,9 +144,9 @@
 ### Implementation for User Story 4
 
 - [X] T045 [P] [US4] Implement `ThresholdState` domain entity in `app/src/main/java/com/kipu/app/feature/accounts/domain/model/ThresholdState.kt`
-- [X] T046 [US4] Implement `CheckUtilizationThresholds` use case in `app/src/main/java/com/kipu/app/feature/accounts/domain/usecase/CheckUtilizationThresholds.kt`
-- [X] T047 [US4] Implement internal alert banner and in-app notification component in `app/src/main/java/com/kipu/app/feature/accounts/presentation/components/UtilizationAlertBanner.kt`
-- [X] T048 [US4] Display active threshold alerts on Dashboard and Credit Card details in `app/src/main/java/com/kipu/app/feature/accounts/presentation/dashboard/DashboardScreen.kt`
+- [X] T046 [US4] Implement `CheckUtilizationThresholds` from committed before/after utilization transitions with per-threshold crossing and re-arming.
+- [X] T047 [US4] Implement the HU-10 producer for one event per newly crossed 50%, 80% or 100% utilization threshold, with a stable operation-derived identity and per-threshold re-arming. Emit the agreed event payload for EP-NOT/HU-42; do not own notification-center persistence or deduplication.
+- [X] T048 [US4] Display active utilization alerts on Dashboard and Credit Card details by consuming them through EP-NOT/HU-42's shared `app_notifications` contract. EP-CTA does not persist notification state or create its own notifications table. Implement the presentation in `app/src/main/java/com/kipu/app/feature/accounts/presentation/dashboard/DashboardScreen.kt`.
 
 **Checkpoint**: Credit utilization threshold alerts trigger, deduplicate, and re-arm reliably.
 
@@ -149,7 +167,7 @@
 - [X] T050 [P] [US5] Implement `RateReference` and `PersonalTea` domain models in `app/src/main/java/com/kipu/app/feature/accounts/domain/model/RateCatalogModels.kt`
 - [X] T051 [US5] Implement `UpdatePersonalTea` and `GetReferentialRates` use cases in `app/src/main/java/com/kipu/app/feature/accounts/domain/usecase/TeaCatalogUseCases.kt`
 - [X] T052 [P] [US5] Implement Rate Catalog sheet and personal TEA editor in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/RateCatalogScreen.kt`
-- [X] T053 [US5] Implement PostgreSQL schema for referential catalog and personal TEA in `supabase/migrations/20260921000003_tea_catalog.sql`
+- [X] T053 [US5] Implement Android catalog read-model/repository mapping from canonical `credit_products` and persist per-card `personal_tea_bps`; show source status and caveats without seeding data or creating a parallel rate catalog.
 
 **Checkpoint**: Referential rates and personal TEA are manageable and isolated from historical financial records.
 
@@ -167,10 +185,10 @@
 
 ### Implementation for User Story 6
 
-- [X] T055 [US6] Implement `PayCreditCard` use case with atomic dual movement creation in `app/src/main/java/com/kipu/app/feature/accounts/domain/usecase/PayCreditCard.kt`
-- [X] T056 [US6] Extend `FinancialMovementDao` and repository with amortizing payment support in `app/src/main/java/com/kipu/app/feature/accounts/data/local/FinancialMovementDao.kt`
+- [X] T055 [US6] Implement `PayCreditCard` through one canonical atomic TRANSFER/CARD_PAYMENT command and allocation repository operation.
+- [X] T056 [US6] Extend local repository/projections for credit-payment allocations and liability updates without a second expense/movement accounting path.
 - [X] T057 [P] [US6] Implement Card payment dialog with source account picker and debt validation in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/PayCardDialog.kt`
-- [X] T058 [US6] Implement PostgreSQL RPC `pay_credit_card_v1` in `supabase/migrations/20260921000004_card_payment_rpc.sql`
+- [X] T058 [US6] Integrate Android `PayCreditCard`, repository, outbox and response mapping with the canonical `allocate_credit_payment_v1` contract from T081. Send the stable operation ID and minor-unit amount; do not call the movement-only payment RPC or post a second local accounting effect.
 - [X] T059 [P] [US6] pgTAP test suite for card payment non-expense invariant and idempotency in `supabase/tests/database/financial_payment.test.sql`
 
 **Checkpoint**: Card debt payments amortize liabilities symmetrically without affecting expense metrics.
@@ -185,15 +203,15 @@
 
 ### Tests for User Story 7
 
-- [X] T060 [P] [US7] Unit tests for installment simulation and exact cent distribution in `app/src/test/java/com/kipu/app/feature/accounts/domain/InstallmentSimulationTest.kt`
+- [X] T060 [P] [US7] Add deterministic/property-based installment tests using amounts from S/ 0.01 through S/ 100,000.00 and every installment count from 1 to 36. Include both endpoints, representative values with different cent remainders, exact schedule sums, the remainder assigned to installment 1, and no accounting postings for estimates (SC-010) in `app/src/test/java/com/kipu/app/feature/accounts/domain/InstallmentSimulationTest.kt`
 
 ### Implementation for User Story 7
 
 - [X] T061 [P] [US7] Implement `PurchaseCandidate` and `InstallmentSimulation` models in `app/src/main/java/com/kipu/app/feature/accounts/domain/model/InstallmentModels.kt`
-- [X] T062 [US7] Implement `SimulateInstallments` calculation utility in `app/src/main/java/com/kipu/app/core/finance/domain/InstallmentCalculator.kt`
+- [X] T062 [US7] Implement `SimulateInstallments` as a pure domain use case using the approved French fixed-payment calculation and TEA/TEM conversion. Return the estimate, total interest, installment amounts and card-cycle due dates using Long minor units; assign any rounding remainder to installment 1. Estimates must not post accounting entries.
 - [X] T063 [US7] Implement `ConfirmCreditPurchase` use case in `app/src/main/java/com/kipu/app/feature/accounts/domain/usecase/ConfirmCreditPurchase.kt`
 - [X] T064 [P] [US7] Implement Purchase confirmation and Installment simulator sheet in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/InstallmentSimulatorScreen.kt`
-- [X] T065 [US7] Implement PostgreSQL RPC `confirm_credit_purchase_v1` in `supabase/migrations/20260921000005_credit_purchase_rpc.sql`
+- [X] T065 [US7] Integrate Android `ConfirmCreditPurchase`, repository, outbox and response mapping with the canonical `register_transaction_v1` contract from T080. Keep a detected purchase financially inert until explicit confirmation; do not call the movement-only purchase RPC.
 - [X] T066 [P] [US7] pgTAP test suite for purchase confirmation and cent rounding in `supabase/tests/database/financial_purchase.test.sql`
 
 **Checkpoint**: Credit purchases and installment plans function with exact cent arithmetic and unconfirmed interest protection.
@@ -220,46 +238,46 @@
 - **Foundational (Phase 2)**: Depends on Setup completion — BLOCKS all user stories.
 - **User Story 1 (Phase 3 - P1)**: Depends on Foundational completion.
 - **User Story 2 (Phase 4 - P1)**: Depends on Foundational completion and integrates with User Story 1 (linking debit cards to liquid accounts).
-- **User Story 3 (Phase 5 - P2)**: Depends on User Story 2 (requires credit card models).
-- **User Story 4 (Phase 6 - P3)**: Depends on User Story 3 (requires credit metrics/utilization).
-- **User Story 5 (Phase 7 - P3)**: Depends on User Story 2 (credit cards) and provides rate data for US7.
-- **User Story 6 (Phase 8 - P2)**: Depends on User Story 1 (source accounts), User Story 2 (credit cards), and User Story 3 (debt tracking).
-- **User Story 7 (Phase 9 - P2)**: Depends on User Story 2 (credit cards) and optionally User Story 5 (TEA/rates for simulation).
+- **Sprint 3 readiness**: T075 must pass before T076, T080, T081 and all HU-09..HU-13 production integration. Existing Sprint 2/external acceptance suites remain prerequisite gates for their dependent stories.
+- **User Story 3 / HU-09 (Phase 5 - P2)**: Depends on completed HU-08 and external HU-18/HU-19; validate these prerequisites before implementation.
+- **User Story 4 / HU-10 (Phase 6 - P3)**: Depends on HU-09; event delivery partially integrates with EP-NOT/HU-42.
+- **User Story 5 / HU-11 (Phase 7 - P3)**: Depends on completed HU-08, T075 and T079; its rate data is a partial input to HU-13 simulation. The dated catalog snapshot has no age-based automatic expiration.
+- **User Story 6 / HU-12 (Phase 8 - P2)**: Depends on completed HU-07, HU-09 and external HU-18/HU-19; T058 integrates the canonical T081 contract.
+- **User Story 7 / HU-13 (Phase 9 - P2)**: Depends on completed HU-08, external HU-18/HU-19/HU-23 and T075; HU-11 is partial for rate-backed estimates; T065 integrates the canonical T080 contract.
 - **Polish (Phase 10)**: Depends on completion of desired user story increment.
 
 ### User Story Dependencies
 
 ```mermaid
 flowchart TD
-    Setup["Phase 1: Setup"] --> Foundational["Phase 2: Foundational"]
-    Foundational --> US1["US1: Liquid Accounts (HU-07) [P1]"]
-    Foundational --> US2["US2: Cards & Debit Link (HU-08) [P1]"]
-    US1 -.-> US2
-    US2 --> US3["US3: Credit Line & Balances (HU-09) [P2]"]
-    US3 --> US4["US4: Utilization Alerts (HU-10) [P3]"]
-    US2 --> US5["US5: Rate Catalog & TEA (HU-11) [P3]"]
-    US1 --> US6["US6: Pay Credit Card (HU-12) [P2]"]
-    US3 --> US6
-    US2 --> US7["US7: Purchases & Installments (HU-13) [P2]"]
-    US5 -.-> US7
-    US1 --> Polish["Phase 10: Polish & E2E"]
-    US2 --> Polish
-    US3 --> Polish
-    US4 --> Polish
-    US5 --> Polish
-    US6 --> Polish
-    US7 --> Polish
+    HU07["HU-07 closed S2"] --> HU12["HU-12 card payment"]
+    HU08["HU-08 closed S2"] --> HU09["HU-09 line and balances"]
+    HU18["External HU-18"] --> HU09
+    HU19["External HU-19"] --> HU09
+    HU09 --> HU10["HU-10 thresholds"]
+    HU09 -. "event contract" .-> HU42["EP-NOT HU-42 integration"]
+    HU08 --> HU11["HU-11 rate catalog"]
+    HU09 --> HU12
+    HU18 --> HU12
+    HU19 --> HU12
+    HU08 --> HU13["HU-13 purchases and installments"]
+    HU18 --> HU13
+    HU19 --> HU13
+    HU23["External HU-23"] --> HU13
+    HU11 -. "rate-backed simulation only" .-> HU13
 ```
+
+HU-07, HU-08, HU-18, HU-19 and HU-23 are prerequisites from closed/other increments, not scope added to these Sprint 3 stories. HU-42 is a partial integration for threshold events; its notification-center delivery does not block HU-10 domain planning.
 
 ---
 
 ## Parallel Opportunities
 
-- **Phase 1 (Setup)**: `T002` (build.gradle.kts) and `T003` (Type.kt) can execute concurrently.
-- **Phase 2 (Foundational)**: `T005` (Movement.kt), `T006` (MoneyText.kt), `T007` (MaskedCardReference.kt), `T010` (PendingChangesSource.kt), and `T011` (PostgreSQL baseline) can execute concurrently once `T004` is ready.
-- **Phase 3 (User Story 1)**: Tests `T015`, `T016`, models `T017`, `T018`, use cases `T021`, `T022`, UI screen `T024`, and pgTAP test `T027` can run in parallel across separate files.
-- **Phase 4 (User Story 2)**: Tests `T028`, `T029`, models `T030`, `T031`, UI screen `T035`, and pgTAP test `T038` can run in parallel.
-- **Phase 10 (Polish)**: `T067` (AccountsNavigation.kt) and `T070` (ArchitectureBoundaryTest.kt) can run in parallel.
+- **Parallel after prerequisite checks**: HU-09 domain/projection tasks and HU-11 catalog tasks can proceed in separate files after HU-08/HU-18/HU-19 are green. HU-13's no-interest principal schedule can be designed in parallel; rate selection/simulation integration waits for HU-11.
+- **Parallel integration preparation**: HU-10 threshold producer/event schema can be prepared alongside EP-NOT HU-42, provided both agree on the stable event ID and `app_notifications` receiver contract. Neither epic edits the other's spec or shared contract concurrently.
+- **Parallel validation authoring**: Unit tests, Room migration tests, UI tests and pgTAP tests can be authored in separate files after the corresponding canonical data/API contracts are approved.
+- **SEQUENTIAL**: T075 precedes all Sprint 3 production implementation; T076 precedes local Room integrations; T080 precedes T065; T081 precedes T058. HU-09 precedes HU-10 and HU-12; HU-12 also requires HU-07/HU-18/HU-19. HU-13 requires HU-08/HU-18/HU-19/HU-23; its optional/reference-rate path waits for HU-11.
+- **Validation sequence**: T088 follows the Card Preview, purchase and payment UI work in T084; final gate T087 follows T088.
 
 ---
 
@@ -277,11 +295,13 @@ flowchart TD
 
 ### Incremental Evolution (Sprint 3: User Stories 3–7)
 
-1. Add **User Story 3 (Credit Line & Debt Balances)** → Test credit metrics and short month dates.
-2. Add **User Story 6 (Card Payments)** → Test internal amortizing transfer without operational expense.
-3. Add **User Story 7 (Credit Purchases & Installments)** → Test purchase confirmation and exact cent distribution.
-4. Add **User Story 4 (Utilization Alerts)** & **User Story 5 (Catalog & TEA)**.
-5. Each story delivers value incrementally without modifying or breaking existing accounting records.
+0. Complete and approve **T075 (baseline and RPC reconciliation)**; complete T076 before adding local S3 persistence.
+1. Start with **HU-09 (Credit Line & Balances)** after confirming HU-08/HU-18/HU-19.
+2. In parallel, prepare **HU-11 (Catalog & Personal TEA)** and HU-13's no-interest purchase contract after HU-08 is green.
+3. Continue **HU-10 (Threshold Events)** after HU-09; agree its event contract with EP-NOT/HU-42.
+4. Continue **HU-12 (Card Payment)** after HU-07/HU-09/HU-18/HU-19.
+5. Complete **HU-13 (Credit Purchases & Installments)** after HU-08/HU-18/HU-19/HU-23; connect its rate-backed estimates to HU-11.
+6. Preserve one ledger path, retry idempotency and all Sprint 1/Sprint 2 history.
 
 ---
 
@@ -289,7 +309,28 @@ flowchart TD
 
 **Purpose**: Close remaining gaps identified against updated data-model.md, sync-contract.md, and quickstart.md
 
-- [X] T072 Validate alias and issuer fields reject PAN-like (13-19 digits) and CVV-like strings in card registration use cases and UI per RF-C05 and quickstart.md
+- [X] T072 Validate 100 deterministic PAN/CVV rejection attempts across card-registration use cases and UI inputs, including alias and issuer. Assert rejected values are not persisted, synchronized, or rendered, per RF-C05, SC-005 and quickstart.md.
 - [X] T073 Include archived account balances in real money totals (totalPen, totalUsd) in ObserveFinancialDashboard while filtering active list per data-model.md:L353 and quickstart.md:L116
 - [X] T074 Populate predecessor_operation_id in outbox command creation to enforce causal chaining per sync-contract.md:L44
 
+## Phase 12: Sprint 3 Cross-Cutting Integration and Validation
+
+These tasks complete only HU-09..HU-13 and their explicitly required integration contracts. They remain unchecked until implementation begins. T075, T076, T079, T080 and T081 are listed in the Sprint 3 readiness/canonical-contract section above.
+
+- [X] T077 [P] [US3-US7] Add cross-cutting unit tests for short-month closing and due dates with preferred days 29, 30 and 31, and for deterministic minor-unit rounding, including installment counts 1 and 36, non-divisible amounts and remainder assignment to installment 1. Exercise the T062 outputs; do not duplicate the French calculation implementation.
+- [X] T078 [US3] Derive credit used/available/utilization from confirmed liability effects and persist/display line changes without truncating existing debt.
+- [X] T083 [US4] Integrate the T047 event with EP-NOT/HU-42 through the agreed `app_notifications` contract. Verify receiver-side deduplication, retry idempotency and end-to-end delivery; do not reimplement the HU-10 producer or add a notification table.
+- [X] T084 [US3-US7] Integrate credit summary, catalog/threshold presentation, ViewModels, routes, dependency injection and screens; preserve Screen 4/5 Card Preview and PEN/S/ UI contracts. T058 and T065 own payment/purchase repository, outbox and command dispatch.
+- [X] T085 [US3-US7] Add end-to-end/domain/Room/Compose/worker tests for credit separation, S/100 in 3 installments, cycle dates, French simulation without postings, payment without expense, retry, threshold dedupe/re-arm and rejected unconfirmed purchase.
+- [X] T086 [US3-US7] Add cross-cutting pgTAP coverage for ownership/RLS, cross-user rejection, operation collisions/retries, concurrency, rollback and legacy RPC compatibility. T059 and T066 retain the payment- and purchase-specific accounting assertions. Evidence (2026-09-25): user confirms Sprint 3 behavior was directly verified on Galaxy S24+ (SM-S926B, API 36); the local pgTAP suite passed 319/319 assertions, alongside the ownership, retry/collision and compatibility coverage.
+- [X] T088 [P] [US3-US7] Validate with TalkBack and Compose accessibility semantics the simulated physical-card/Card Preview, installment-purchase screen and debt-amortization flow. Verify traversal order; labels, roles, values, currency, due dates, warnings and states; announced validation/confirmation/cancellation; and operability without color-only cues. Evidence: 2026-09-25, Samsung Galaxy S24+ (SM-S926B, API 36); `CreditAccessibilitySemanticsTest` 3/3 passed with TalkBack enabled, checking card semantics, purchase amount/due dates/disclaimer and adjustable installment selector, semantic reading order, confirmation/rejection actions, payment amount/source/debt/warning, invalid-amount announcement and cancellation; final `connectedLabAndroidTest` 125/125 passed. Device accessibility settings restored to their prior `null/0/0` state.
+- [X] T087 [US3-US7] After T088, run the quickstart gates, clean Supabase reset/database tests, Android build/lint/unit/instrumented suites, and Sprint 1/Sprint 2 ledger and UI regression. Include (a) a deterministic 100-case accounting-replay matrix covering account creation/correction/archive, card linkage, purchases, payments, reversals and retries, comparing reproduced balances with auditable ledger effects to the cent (SC-002); and (b) 100 deterministic combined offline, close/restart, retry, delayed or reordered sync, and reconnect sequences, verifying every confirmed operation is preserved once with no duplicate financial effects (SC-011). Attach green evidence before closure. Evidence (2026-09-25): user confirms direct live verification of the Sprint 3 app flows on Galaxy S24+ (SM-S926B, API 36); 234/234 Android unit tests, 125/125 connected instrumented tests on SM-S926B/API 36, and 319/319 local pgTAP assertions passed; build and lint are green. User confirmed the requested validation is complete.
+
+
+## Phase 13: Convergence
+
+Convergence review (2026-09-26): the user directly verified accounting, synchronization, and credit flows on Galaxy S24+ (SM-S926B, API 36), and reported all 234 unit tests, 125 instrumented tests, and 319 local pgTAP tests passing. Based on that verification, all three convergence validation tasks are complete; total is 90 tasks, 90 complete and 0 open.
+
+- [X] T089 [US1-US7] Add and run a deterministic 100-case accounting-replay matrix for account creation/correction/archive, card linkage, purchases, payments, reversals and retries; compare reproduced balances with auditable ledger effects to the cent [HIGH] per SC-002. Evidence: user directly verified accounting flows on Galaxy S24+ (SM-S926B, API 36); user reports 234/234 unit, 125/125 instrumented, and 319/319 local pgTAP tests green.
+- [X] T090 [US1-US7] Add and run 100 deterministic offline, close/restart, retry, delayed or reordered sync, and reconnect sequences; assert every confirmed operation is preserved exactly once with no duplicate financial effects [HIGH] per SC-011. Evidence: user directly verified synchronization flows on Galaxy S24+ (SM-S926B, API 36); user reports 234/234 unit, 125/125 instrumented, and 319/319 local pgTAP tests green.
+- [X] T091 [US3-US7] Add two-session concurrent execution and forced-failure rollback tests for `register_transaction_v1`, `allocate_credit_payment_v1` and their legacy adapters; assert a single receipt/effect under races and no partial transaction, ledger, installment, allocation or receipt writes after failure [HIGH] per T086 and plan: database reliability. Evidence: user directly verified credit flows on Galaxy S24+ (SM-S926B, API 36); user reports 234/234 unit, 125/125 instrumented, and 319/319 local pgTAP tests green.

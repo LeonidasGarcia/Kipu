@@ -13,7 +13,7 @@ This guide defines the runnable evidence required after implementation. It does 
 - Docker-compatible runtime and Supabase CLI for local PostgreSQL 17.
 - `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` supplied through local properties or environment only.
 - No `service_role` or server secret in Android configuration.
-- Recovered financial baseline migrations committed before any EP-CTA migration.
+- Checked-in financial baseline and alignment migrations available; clean PostgreSQL 17 reconstruction is required before any Sprint 3 migration.
 
 ## 1. Static Artifact Validation
 
@@ -56,7 +56,7 @@ Expected:
 - No migration depends on an object absent from repository history.
 - pgTAP suites pass.
 
-If reset fails because the foundational financial schema remains missing, stop. Do not add `IF NOT EXISTS` or apply EP-CTA directly to the linked project.
+If reset fails or the rebuilt schema cannot be reconciled with the approved model, stop. Do not add `IF NOT EXISTS`, edit applied history or apply Sprint 3 changes directly to the linked project.
 
 ## 3. Android Build and Unit Tests
 
@@ -104,16 +104,17 @@ Run core migration tests as part of the full suite:
 
 Expected Room evidence:
 
-1. `MIGRATION_2_3` preserves all representative plan/profile/outbox rows.
-2. Full `1 -> 2 -> 3` path succeeds and validates exported schema 3.
-3. Account, one opening movement and outbox commit together.
-4. Injected failure rolls back all three.
-5. Retry with same operation/payload creates no duplicate; changed payload conflicts.
-6. Two concurrent fifth-instrument attempts cannot both commit.
-7. Every DAO query is owner-scoped.
-8. Debit link rejects wrong owner, currency, type or archived account.
-9. Balance equals posted movement sum after restart.
-10. Archiving an account blocks new operations and hides it from the default list without changing current or historical money totals.
+1. The registered migration chain from schema 1 through schema 10 preserves representative rows and relationships.
+2. Full `1 -> 10` path succeeds and validates exported schema 10 against the checked-in database.
+3. The planned `10 -> 11` migration preserves every schema-10 row and adds only the Sprint 3 card-rate/installment projections; verify round-trips for Long minor-unit fields, owner isolation and foreign keys.
+4. Account, one opening movement and outbox commit together.
+5. Injected failure rolls back all three.
+6. Retry with same operation/payload creates no duplicate; changed payload conflicts.
+7. Two concurrent fifth-instrument attempts cannot both commit.
+8. Every DAO query is owner-scoped.
+9. Debit link rejects wrong owner, currency, type or archived account.
+10. Balance equals posted movement sum after restart.
+11. Archiving an account blocks new operations and hides it from the default list without changing current or historical money totals.
 
 ## 5. Synchronization Worker
 
@@ -244,13 +245,51 @@ Validate on representative low/medium capability phones and a tablet/foldable pr
 - App switcher/screenshot behavior contains no unmasked test financial data.
 - UI remains responsive under 100 instruments and 10,000 movements fixture.
 
-## 10. Completion Gate
+## 10. Closed Sprint 2 Baseline
 
-EP-CTA Sprint 2 is not release-ready until:
+Sprint 2 is closed. Retain these checks as regression gates whenever Sprint 3 touches shared code, schema or ledger behavior:
 
-- All RF-C01/C02/C03/C05/C06 scenarios pass.
-- Financial/domain, Room migration, worker, Compose, navigation and pgTAP evidence is attached.
-- Clean Supabase reset is reproducible.
-- Cross-user, duplicate-effect, history-loss and PAN/CVV leakage tests have zero failures.
-- Code receives cross-review for architecture, financial integrity, privacy and requirement traceability.
-- Sprint 3 behavior is not falsely claimed as implemented.
+- All RF-C01/C02/C03/C05/C06 scenarios remain green.
+- Financial/domain, Room migration, worker, Compose, navigation and pgTAP evidence remains available.
+- Clean Supabase reset stays reproducible.
+- Cross-user, duplicate-effect, history-loss and PAN/CVV leakage tests remain green.
+- Review changes for architecture, financial integrity, privacy and requirement traceability.
+- Sprint 3 behavior is planned separately in Section 11 and is not part of the closed Sprint 2 increment.
+
+## 11. Sprint 3 EP-CTA Validation (HU-09..HU-13)
+
+Run these only after the Sprint 2 gates, external blockers HU-18/HU-19/HU-23, the clean Supabase baseline and the canonical command contracts are verified. They are validation scenarios for the planned increment; they do not imply Sprint 3 is implemented yet.
+
+### A. Credit separation and line metrics
+
+1. Register a credit card with line PEN 1,000.00, then confirm PEN 100.00 of debt. Verify liquid money does not change, used credit is PEN 100.00, available credit is PEN 900.00, and utilization is 10%.
+2. Verify zero line yields available credit zero and utilization `No disponible`.
+3. Reduce the line below existing debt. Verify debt remains unchanged, available credit stays zero and utilization can exceed 100%.
+4. Verify preferred closing/due days 29, 30 and 31 remain stored while February and other short months use the effective final day.
+
+### B. Purchase and installment schedule
+
+1. Confirm a PEN 100.00 credit purchase in three installments. Verify exactly one PEN 100.00 expense and liability increase, and installment principal values are PEN 33.34, PEN 33.33 and PEN 33.33.
+2. Verify installment principal sums to the confirmed principal for counts 1..36, including totals smaller than the count and values at monetary bounds.
+3. Verify a purchase on closing_day belongs to that cycle; a purchase after closing_day belongs to the next cycle. The first installment is due on the next due_day after the selected cycle close; later installments are monthly with independent short-month clamping.
+4. Simulate a nonzero TEA using the French fixed-payment formula. Verify the method/rate/source, dates, rounded total and explicit estimate warning; verify the simulation alone changes neither ledger, expense nor debt.
+5. Retry the same confirmed purchase operation and payload. Verify it creates no extra expense, liability effect, installment or threshold event. Reject the same operation identity with a changed payload.
+
+### C. Card payment without duplicate expense
+
+1. Start with PEN 300.00 in an active bank account and PEN 100.00 card debt. Pay PEN 100.00.
+2. Verify bank balance becomes PEN 200.00, card liability becomes zero, credit payment allocations total PEN 100.00, and operational expense does not increase.
+3. Verify insufficient funds, wrong currency, cross-user source/card, payment above debt and retry are rejected or deduplicated with no partial effects.
+
+### D. Thresholds and notification integration
+
+1. Apply a committed operation that moves utilization from below 50% to at least 100%. Verify exactly one event for each threshold 50%, 80% and 100%.
+2. Apply further operations while above each threshold; verify no duplicate crossing. Reduce utilization below one threshold and cross it again; verify one new event for that threshold.
+3. Deny OS notification permission. Verify the in-app event remains available through the shared HU-42/app_notifications contract.
+
+### E. Regression and required gates
+
+- Run unit/domain, Room migration and DAO, repository/worker, Compose/navigation, and database/pgTAP suites for affected flows.
+- Verify owner-isolated RLS, operation idempotency, rollback atomicity, and no duplicate old/new RPC path.
+- Run the project's discovered Android build and lint tasks plus Supabase reset/database tests. Confirm all Sprint 1/Sprint 2 ledger, account, card, privacy, sync and navigation regressions remain green.
+- Do not close EP-CTA while the canonical-baseline reconciliation or HU-18/HU-19/HU-23 prerequisite evidence is unresolved.

@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kipu.app.ui.component.MaskedCardReference
@@ -33,6 +35,14 @@ fun InstrumentCardPreview(
     lastFourDigits: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val accessibleDescription = buildString {
+        append("Tarjeta física simulada. ")
+        append(title.ifBlank { "Mi instrumento" })
+        append(". $instrumentType. $subtitle.")
+        if (lastFourDigits?.length == 4 && lastFourDigits.all(Char::isDigit)) {
+            append(" Termina en $lastFourDigits.")
+        }
+    }
     Card(
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -40,7 +50,8 @@ fun InstrumentCardPreview(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 132.dp)
-            .testTag("instrument_card_preview"),
+            .testTag("instrument_card_preview")
+            .semantics(mergeDescendants = true) { contentDescription = accessibleDescription },
     ) {
         Row(
             modifier = Modifier
