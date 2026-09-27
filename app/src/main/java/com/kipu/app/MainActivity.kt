@@ -179,6 +179,7 @@ class MainActivity : FragmentActivity() {
                                     },
                                 )
                                 planSelectionDestination(
+                                    navController = navController,
                                     onConfirmed = {
                                         navController.navigate(BIOMETRIC_ROUTE)
                                     },

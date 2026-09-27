@@ -87,6 +87,7 @@ fun ProfileSettingsScreen(
     onNavigateToCategories: (() -> Unit)? = null,
     onNavigateToMovements: (() -> Unit)? = null,
     onNavigateToAccounts: (() -> Unit)? = null,
+    onNavigateToPurchase: (() -> Unit)? = null,
     onSignOut: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -413,6 +414,15 @@ fun ProfileSettingsScreen(
                         icon = Icons.Default.AccountBalance,
                         title = "Mi Dinero Real / Cuentas",
                         subtitle = "Ver cuentas bancarias y tarjetas registradas",
+                        onClick = it,
+                    )
+                }
+
+                onNavigateToPurchase?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.Payments,
+                        title = "Ver ofertas Kipu Premium",
+                        subtitle = "Consulta precios localizados y condiciones en Google Play",
                         onClick = it,
                     )
                 }

@@ -37,3 +37,30 @@ The matrix must include stable connectivity, network recovery, 3-2-1 delivery, a
 - T048 remains blocked because production `LoginScreen` and `BiometricConfigScreen` destinations do not exist; therefore the required integrated navigation timing cannot be measured without creating prohibited placeholders.
 
 T052 must remain unchecked until the 40/30 matrices are executed and raw measurements are attached.
+
+## Sprint 3 — Google Play Billing matrix
+
+**Date**: 2026-09-26
+**Status**: BLOCKED; source, JVM, Edge, and database checks pass, but this host has no Android emulator/device or configured Play internal test track.
+
+| Scenario | Device/track run | Provider lookup and Kipu result | Status |
+|---|---|---|---|
+| Monthly subscription | Not run | No approved Play product/base-plan ID or license tester | BLOCKED |
+| Annual subscription and eligible trial | Not run | No approved base-plan/trial-offer ID or license tester | BLOCKED |
+| Lifetime one-time purchase | Not run | No approved in-app product ID or license tester | BLOCKED |
+| User cancels the Play sheet | Not run | No Play test track/device | BLOCKED |
+| Product unavailable | Automated empty-catalog path is covered; Play track not run | No Play test track/device | BLOCKED |
+| Pending cash payment | Edge fake and JVM/UI paths covered; Play provider not run | No license tester | BLOCKED |
+
+## Automated Sprint 3 Evidence
+
+- `testDebugUnitTest`: 244 JVM tests passed, including Billing product mapping, callback gating, purchase lifecycle, access aggregation, and ViewModel states.
+- `compileDebugAndroidTestKotlin`: passed for the purchase Compose suite; instrumented execution was not possible because `adb devices` listed no attached device and no `emulator` executable is available on `PATH` on this host.
+- The local Supabase database migration and all database suites passed: 20 files, 355 pgTAP assertions.
+- Edge Function checks passed: 13 Deno tests, `deno check`, and `deno fmt --check`.
+
+## External Blockers
+
+- Play Console has not supplied approved product IDs, recurring base-plan IDs, trial-offer IDs, internal-track entry, or a license-test account. Candidate identifiers in `research.md` are explicitly unapproved and are not seeded into the catalog.
+- No emulator or physical Android device is available for the instrumented Compose/device run.
+- The monthly, annual, Lifetime, cancelled-sheet, unavailable-product, and real server-lookup/acknowledgement evidence must be recorded here before T081 can be checked.

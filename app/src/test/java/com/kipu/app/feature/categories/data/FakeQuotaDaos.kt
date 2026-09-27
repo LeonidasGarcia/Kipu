@@ -71,4 +71,5 @@ class FakeQuotaSelectionDao : PlanQuotaSelectionDao() {
 class FakeFeatureAccessCacheDao : FeatureAccessCacheDao {
     override suspend fun get(userId: UUID): FeatureAccessCacheEntity? = null
     override fun observe(userId: UUID): Flow<FeatureAccessCacheEntity?> = flowOf(null)
+    override suspend fun putVerified(entity: FeatureAccessCacheEntity) = Unit
 }

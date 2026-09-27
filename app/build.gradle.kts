@@ -128,6 +128,7 @@ dependencies {
 
     // Platform Services
     implementation(libs.androidx.biometric)
+    implementation(libs.play.billing)
 
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))

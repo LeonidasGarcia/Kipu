@@ -1,0 +1,155 @@
+﻿openapi: 3.1.0
+info:
+  title: Kipu verified billing purchase
+  version: 1.0.0
+  description: >-
+    Server verifies ephemeral Google Play purchase tokens. The caller identity comes
+    from Supabase Auth. Tokens are never echoed, persisted in clear text, or logged.
+servers:
+  - url: https://{project}.supabase.co/functions/v1/verify-purchase
+    variables:
+      project:
+        default: project-ref
+paths:
+  /billing/verify:
+    post:
+      operationId: verifyPurchase
+      summary: Verify and recognize a Google Play purchase for the authenticated account
+      security:
+        - supabaseBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [productId, purchaseToken]
+              properties:
+                productId:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                purchaseToken:
+                  type: string
+                  minLength: 1
+                  maxLength: 4096
+                  writeOnly: true
+                  description: Ephemeral provider credential. Never log, persist, or echo this value.
+      responses:
+        '200':
+          description: Normalized verification result; PENDING never grants entitlement.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationResult'
+        '400':
+          description: Invalid media type, malformed body, or unknown product.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '405':
+          description: Only POST is accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid Supabase user JWT.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The token is already bound to a different Kipu account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Google Play or verification persistence is temporarily unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    supabaseBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    VerificationResult:
+      type: object
+      additionalProperties: false
+      required: [outcome, purchaseId, productId, planType, purchaseState, entitlementState, startsAt, effectivePremium, expiresAt, effectiveExpiresAt, isLifetime, willRenew, orderId, acknowledgementState]
+      properties:
+        outcome:
+          type: string
+          enum: [VERIFIED, PENDING]
+        purchaseId:
+          oneOf:
+            - type: string
+              format: uuid
+            - type: 'null'
+        productId:
+          type: string
+        planType:
+          type: string
+          enum: [PRO_MONTHLY, PRO_ANNUAL, PRO_LIFETIME]
+        purchaseState:
+          type: string
+          enum: [PURCHASED, PENDING, CANCELLED]
+        entitlementState:
+          oneOf:
+            - type: string
+              enum: [ACTIVE, IN_GRACE_PERIOD, ACCOUNT_HOLD, CANCELED_ACTIVE, EXPIRED, REVOKED, PAUSED]
+            - type: 'null'
+        startsAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        effectivePremium:
+          type: boolean
+          description: Derived on the server from all verified purchases for the JWT owner, including access already active before a separate pending purchase.
+        expiresAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+          description: Null for verified Lifetime and non-entitling pending purchases.
+        effectiveExpiresAt:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+          description: Latest expiry of the authenticated account's effective subscriptions; null when valid Lifetime is the source.
+        acknowledgementState:
+          type: string
+          enum: [PENDING, ACKNOWLEDGED, NOT_APPLICABLE]
+        isLifetime:
+          type: boolean
+        willRenew:
+          type: boolean
+        orderId:
+          oneOf:
+            - type: string
+            - type: 'null'
+    Error:
+      type: object
+      additionalProperties: false
+      required: [outcome, code, retryable]
+      properties:
+        outcome:
+          type: string
+          enum: [RETRYABLE, REJECTED]
+        code:
+          type: string
+          enum: [NOT_FOUND, UNAUTHENTICATED, INVALID_REQUEST, METHOD_NOT_ALLOWED, UNKNOWN_PRODUCT, PURCHASE_REJECTED, TOKEN_ACCOUNT_CONFLICT, PROVIDER_UNAVAILABLE, PERSISTENCE_UNAVAILABLE]
+        retryable:
+          type: boolean
+        retryAfterSeconds:
+          type: integer
+          minimum: 1
