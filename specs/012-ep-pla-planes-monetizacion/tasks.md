@@ -1,6 +1,6 @@
 ---
 
-description: "Implementation tasks for HU-52 plan selection and entitlement-safe freemium foundation"
+description: "Implementation tasks for EP-PLA S1/S2 historical work and S3 purchase verification"
 ---
 
 # Tasks: EP-PLA - Planes, Limites y Monetizacion Freemium
@@ -11,18 +11,23 @@ description: "Implementation tasks for HU-52 plan selection and entitlement-safe
 
 **Propagated**: 2026-09-16 — Updated from spec.md refinement (fidelidad de Pantalla 1B Stitch; tareas correctivas T057-T060 para pruebas, copy/documentación, implementación y revalidación).
 
+**Propagated**: 2026-09-26 — Added dependency-ordered S3 tasks for HU-53/HU-54/HU-56, including pre-migration model/API artifacts and the onboarding Trial versus Play-backed offer boundary; earlier completed S1/S2 tasks remain historical.
+
+**Propagated**: 2026-09-26 — Updated HU-54/UI coverage to distinguish Google Play payment `PENDING`, Billing verification `RETRYABLE`, and HU-52 selection-sync outbox `PENDING`.
+
 **Input**: Design documents from `specs/012-ep-pla-planes-monetizacion/`
 
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`, `.specify/memory/constitution.md`
 
 **Tests**: Tests are required by the specification and Definition of Done. Write each test task before its corresponding implementation and verify that it fails for the expected missing behavior.
 
-**Organization**: The specification contains one P1 user story. Setup and foundational work establish shared Android/backend infrastructure; all behavior and tests that deliver HU-52 remain labeled `[US1]`.
+**Organization**: The original S1 phase and S2 extension remain completed history. Shared S3 setup precedes three S3 story phases; HU-53 and HU-54 may advance in parallel with the agreed verification contract, and their integrated purchase gate requires both. HU-56 depends on verified purchase state from HU-54.
 
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel after its phase prerequisites because it changes different files and does not depend on an incomplete task in the same parallel group.
-- **[US1]**: User Story 1, "Elegir Free o conocer Premium sin riesgo".
+- Historical S1 `[US1]` continues to mean HU-52; S2 tasks keep their `[HU-57]` labels.
+- **S3-local story labels**: `[US1]` = HU-53, `[US2]` = HU-54, and `[US3]` = HU-56 within the S3 extension below.
 - Every checklist item includes the exact file path or paths it changes or validates.
 
 ## Phase 1: Setup (Shared Infrastructure)
@@ -265,3 +270,74 @@ These tasks add the S2 HU-57 increment without changing the HU-52 S1 story bound
 - [x] T064 [HU-57] Verify snapshot gaps, delayed stale devices, payload conflicts, Free resource exclusions, owner isolation, and guards on transaction/accounting writes in `supabase/tests/database/plan_quota_selection_test.sql` and `supabase/functions/plans/index_test.ts`.
 - [x] T065 [HU-57] Execute the offline/two-device conflict and remote reconciliation acceptance. Verified offline synchronization, snapshot rebase, and remote reconciliation on device suite and connected physical device (SM-S926B).
 - [x] T066 [HU-57] Reconcile/deploy the tested migration and Edge Function set to the intended remote environment after the remote schema drift is resolved and explicitly approved. Remote migrations (20260915 to 20260923) and plans Edge Function v2 deployed and verified via MCP Kipu.
+
+## Sprint 3 extension — HU-53 Compra, HU-54 Verificación y HU-56 Ciclo de vida (21 pts)
+
+Las tareas S1/S2 anteriores se conservan como registro histórico. En este bloque, los IDs de historia son locales a Sprint 3: `[US1]` HU-53, `[US2]` HU-54 y `[US3]` HU-56. HU-53 y HU-54 pueden avanzar en paralelo con el contrato y fixtures; la compra integrada solo se acepta cuando ambos flujos pasan juntos. HU-56 requiere la proyección verificada de HU-54.
+
+### Phase S3.1: Setup compartido y persistencia de Billing
+
+- [x] T067 [P] Add the stable Google Play Billing Library 9.1.0 version alias and app dependency without changing existing versions in `gradle/libs.versions.toml` and `app/build.gradle.kts`
+- [x] T068 [P] Record approved Play Console product IDs, recurring base-plan IDs, trial-offer IDs, test-account prerequisites, and test-track entry criteria in `specs/012-ep-pla-planes-monetizacion/research.md`
+- [x] T069 [P] Reconcile the S3 billing entities and lifecycle fields in `specs/012-ep-pla-planes-monetizacion/data-model.md` and add the authenticated `POST /billing/verify` request/response contract, including normalized outcomes and token privacy, in `specs/012-ep-pla-planes-monetizacion/contracts/verify-purchase.openapi.yaml`
+- [x] T070 Add pgTAP coverage for `PRO_LIFETIME`, `REVOKED`, unique purchase-token hash, owner-only purchase reads, denied client writes, and append-only private verification events in `supabase/tests/database/billing_purchase_lifecycle_test.sql` (depends on T069)
+- [x] T071 Run `supabase migration new billing_purchase_verification_s3`, then create the additive migration for `public.billing_products`, `public.billing_purchases`, and `internal.billing_events`; include `PRO_LIFETIME`/`REVOKED` constraints, hash uniqueness, indexes, RLS, grants, and server-only write access in the CLI-generated file under `supabase/migrations/` (depends on T069-T070)
+
+### Phase S3.2: User Story 1 — HU-53 Compra mensual, anual y Lifetime (Priority: Alta)
+
+**Goal**: Consultar ofertas y precios localizados en Play, iniciar la compra elegida y mostrar Premium únicamente después de la verificación backend de HU-54.
+
+**Independent acceptance**: Los productos mensual, anual y Lifetime se consultan del catálogo Play; no se presenta un precio de referencia como precio cobrable; el callback por sí solo mantiene el entitlement anterior; Lifetime se verifica como no consumible y sin expiración comercial.
+
+- [x] T072 [P] [US1] Write failing JVM tests for product mapping, pending callback, server-only verification outcome, retry state, and prohibition on callback-only Premium in `app/src/test/java/com/kipu/app/feature/plans/data/billing/PlayBillingGatewayTest.kt` and `app/src/test/java/com/kipu/app/feature/plans/presentation/PlanPurchaseViewModelTest.kt`
+- [x] T073 [P] [US1] Define immutable product, localized offer, purchase request, and typed verification-result models without exposing Play SDK types to domain code in `app/src/main/java/com/kipu/app/feature/plans/domain/model/BillingProduct.kt` and `app/src/main/java/com/kipu/app/feature/plans/domain/model/BillingVerificationResult.kt`
+- [x] T074 [US1] Implement the lifecycle-safe BillingClient gateway for catalog lookup, localized ProductDetails/OfferDetails, explicit purchase launch, and purchase re-query in `app/src/main/java/com/kipu/app/feature/plans/data/billing/PlayBillingGateway.kt`
+- [x] T075 [P] [US1] Implement the authenticated `verify-purchase` request/response adapter for `productId` and ephemeral `purchaseToken`, omitting client-supplied `user_id` and direct purchase-table writes in `app/src/main/java/com/kipu/app/feature/plans/data/remote/VerifyPurchaseApi.kt`
+- [x] T076 [US1] Implement the billing repository boundary that joins BillingClient results to `VerifyPurchaseApi`, scrubs tokens from logs, and keeps a purchase token in memory only for verification/re-query in `app/src/main/java/com/kipu/app/feature/plans/data/billing/BillingRepository.kt`
+- [x] T077 [US1] Implement immutable paywall state and ViewModel transitions for catalog loading, selected offer, Play handoff, backend verification, verified success, Play-confirmed payment `PENDING`, unavailable, and verification `RETRYABLE`; keep distinct user copy, preserve prior access on `RETRYABLE`, and update access only from verified server results in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseUiState.kt` and `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseViewModel.kt`
+- [x] T078 [US1] Implement the S3 Compose purchase surface with Annual preselected, Annual/Monthly/Lifetime cards, localized prices, “Más popular”, “Pago único para siempre”, only Play-returned eligible trial offers and first-charge date, renewal detail, Google Play management link, and explicit unavailable state; keep HU-52 onboarding Trial informational only, using Stitch tokens, 48dp targets, WCAG AA minimum contrast, and AAA contrast where feasible in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseScreen.kt` and `app/src/main/res/values/strings.xml`
+- [x] T079 [P] [US1] Implement reduced-motion-aware selected-card spring/scale, reserved-space linear price shimmer, and verified-only success-check motion using the Stitch design tokens in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseMotion.kt`
+- [x] T080 [P] [US1] Add Compose and ViewModel tests for localized price rendering, empty catalog, selected-state semantics, 48dp targets, trial date disclosure, management link, distinct copy for Play payment `PENDING` versus verification `RETRYABLE`, preserved access/retry action on `RETRYABLE`, no layout shift, reduced motion, and success only after backend verification in `app/src/androidTest/java/com/kipu/app/feature/plans/presentation/PlanPurchaseScreenTest.kt` and `app/src/test/java/com/kipu/app/feature/plans/presentation/PlanPurchaseViewModelTest.kt`
+- [x] T081 [US1] Run the internal Play test-track purchase matrix for Monthly, Annual, Lifetime, user-cancelled sheet, and unavailable product; verify the backend result and record provider/device evidence in `specs/012-ep-pla-planes-monetizacion/validation/device-matrix.md` and `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (depends on T074-T080 and T088)
+
+### Phase S3.3: User Story 2 — HU-54 Verificación y reconocimiento de compras (Priority: Alta)
+
+**Goal**: Verificar cada token en Google Play desde una Edge Function autenticada, asociarlo a una sola cuenta y reconocer compras idempotentemente sin habilitar estados pendientes.
+
+**Independent acceptance**: Token válido `PURCHASED` queda persistido una sola vez; `PENDING`, token inválido, token ajeno o indisponibilidad no amplían Premium; reconocimiento se reintenta de forma segura y Lifetime nunca se consume.
+
+- [x] T082 [P] [US2] Write failing Edge Function tests for required JWT, method/body validation, Google response mapping, Play payment `PENDING`, distinct transient provider `RETRYABLE`, duplicate verification, foreign-account token, acknowledgement state, and Lifetime non-consumption in `supabase/functions/verify-purchase/index_test.ts`
+- [x] T083 [US2] Implement the authenticated `verify-purchase` Edge Function entry point for `POST /billing/verify`, deriving the owner from Supabase Auth and validating package, product, and purchase token before provider access in `supabase/functions/verify-purchase/index.ts`
+- [x] T084 [US2] Implement server-side purchase persistence with SHA-256 over the exact token bytes, atomic UNIQUE-hash owner binding, idempotent replay, cross-account conflict rejection, and no raw-token logging in `supabase/functions/verify-purchase/purchase-store.ts`
+- [x] T085 [US2] Implement Google Play Developer API adapters for the relevant subscription and one-time product verification responses; normalize product, purchase state, acknowledgement state, validity, and expiry in `supabase/functions/verify-purchase/google-play-api.ts`
+- [x] T086 [US2] Persist and grant only a verified `PURCHASED` entitlement, record sanitized `VERIFICATION` events, then acknowledge server-side only if the eligible initial purchase is still unacknowledged; make acknowledgement retries idempotent, never acknowledge `PENDING`, and never consume Lifetime in `supabase/functions/verify-purchase/index.ts` and `supabase/functions/verify-purchase/purchase-store.ts`
+- [x] T087 [US2] Complete Edge Function and database boundary tests for concurrent retries, no duplicate purchase/entitlement/acknowledgement, token-owner isolation, service-secret isolation, and sanitized audit records in `supabase/functions/verify-purchase/index_test.ts` and `supabase/tests/database/billing_purchase_lifecycle_test.sql`
+- [x] T088 [US2] Validate the S3 verification path against a Google Play license-test account, including a real server lookup and acknowledgement for a purchased test item, and record evidence/limitations in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` and `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (depends on T074-T080 and T087)
+
+### Phase S3.4: User Story 3 — HU-56 Estados de compra y cancelación (Priority: Alta)
+
+**Goal**: Traducir estado de compra y vigencia verificados a un ciclo de vida Kipu separado del producto contratado y del entitlement efectivo.
+
+**Independent acceptance**: Cancelación conserva acceso hasta `expires_at`; gracia solo conserva acceso cuando Play lo autoriza; hold/expiración/revocación niegan la compra afectada; una compra Lifetime válida prevalece sobre otra suscripción vencida o revocada.
+
+- [x] T089 [P] [US3] Write domain tests for `ACTIVE`, `IN_GRACE_PERIOD`, `ACCOUNT_HOLD`, `CANCELED_ACTIVE`, `EXPIRED`, `REVOKED`, `PENDING`, Lifetime precedence, and non-destructive Free fallback in `app/src/test/java/com/kipu/app/feature/plans/domain/PurchaseLifecycleTest.kt`
+- [x] T090 [US3] Implement provider-to-Kipu lifecycle mapping, including cancellation plus unexpired `expires_at`, grace/hold normalization, expiry, revocation, and Lifetime with null commercial expiry in `app/src/main/java/com/kipu/app/feature/plans/domain/model/PurchaseLifecycle.kt`
+- [x] T091 [US3] Implement effective-access aggregation over the user’s verified purchases and update the account-scoped access cache only from the verified repository result, preserving Lifetime precedence in `app/src/main/java/com/kipu/app/feature/plans/domain/EffectiveEntitlementPolicy.kt` and `app/src/main/java/com/kipu/app/feature/plans/data/local/FeatureAccessCacheEntity.kt`
+- [x] T092 [US3] Surface cancellation (“No se renovará”), verified expiry, grace, hold, revoked, and Lifetime coverage in the existing purchase/status surface without adding the future HU-60 My Plan route in `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseUiState.kt`, `app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseScreen.kt`, and `app/src/main/res/values/strings.xml`
+- [x] T093 [US3] Add repository and Compose integration coverage for cancellation before/at expiry, grace, account hold, revoked purchase, simultaneous Lifetime, and preservation of financial history in `app/src/test/java/com/kipu/app/feature/plans/domain/PurchaseLifecycleTest.kt` and `app/src/androidTest/java/com/kipu/app/feature/plans/presentation/PlanPurchaseScreenTest.kt`
+
+### Phase S3.5: Seguridad y cierre transversal
+
+- [x] T094 [P] Audit Android artifacts, function logs/secrets, grants, RLS, token handling, pending-state gating, and non-consumption of Lifetime; update the S3 findings in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md`
+- [x] T095 Run the combined acceptance and regression checklist for HU-53/HU-54/HU-56, record test-channel limitations and review evidence, and verify all S3 functional requirements/SC IDs map to tasks in `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md`
+
+### S3 Dependencies and Parallel Execution
+
+- **Shared setup**: T067-T069 may run in parallel. T070 verifies the documented S3 schema/contract; T071 migration follows T069-T070.
+- **HU-53/HU-54 parallel wave**: T072-T080 can progress against the approved request/response contract and provider fakes while T082-T087 build and verify the backend. Neither Android callbacks nor fixtures may simulate a verified entitlement. T081 waits for T088 and the HU-53 UI/gateway tests.
+- **HU-56**: T089-T092 may start domain work after the lifecycle contract is agreed; T093 requires HU-54 verification and HU-53 test wiring.
+- **Final gate**: T094 follows backend and Android security checks; T095 follows T081, T087-T088, and T093-T094.
+
+### S3 MVP and Incremental Strategy
+
+The smallest safe integrated slice is one recurring test purchase through HU-53 and the real HU-54 verifier, with a verified-only entitlement and a `PENDING` denial. Annual and Lifetime catalog/purchase behavior, all HU-56 lifecycle outcomes, accessibility/motion states, and the combined test-track matrix are required before marking the 21-point S3 increment complete. No partial slice is a substitute for the acceptance criteria of the three stories.

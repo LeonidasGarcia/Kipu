@@ -1,12 +1,16 @@
 # Implementation Plan: EP-PLA - Planes, Límites y Monetización Freemium
 
+**Propagated**: 2026-09-26 — Clarified the distinct meanings of Billing `PENDING`, verification `RETRYABLE`, and the HU-52 selection-sync outbox `PENDING`.
+
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (adopción de tokens del design system Stitch "Kipu Andean Modernist" como única fuente de verdad visual).
 
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (cleanup sin cambios funcionales: eliminadas las referencias residuales al sistema de diseño previo; el plan ya apunta a `docs/stitch-design-system.md`).
 
 **Propagated**: 2026-09-16 — Updated from spec.md refinement (fidelidad de layout, componentes y copy con Pantalla 1B Stitch; Free informativo, Trial estático, Anual preseleccionado, dos CTAs y criterios SC-002/SC-004/SC-008 actualizados).
 
-**Branch**: `001-planes-monetizacion-freemium` | **Date**: 2026-09-15 | **Spec**: [spec.md](spec.md)
+**Propagated**: 2026-09-26 — Added the S3 architecture for HU-53/HU-54/HU-56, including the onboarding Trial versus Play-backed offer boundary, while preserving the S1/S2 plan and traceability history.
+
+**Branch**: `012-ep-pla-planes-monetizacion` | **Date**: 2026-09-26 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/012-ep-pla-planes-monetizacion/spec.md`
 
@@ -157,6 +161,8 @@ La Edge Function reenvía el JWT del usuario a PostgREST y las RPC obtienen el p
 
 El hash v1 se calcula en servidor sobre UTF-8 de cinco líneas, en este orden: `contract_version`, UUID canónico minúsculo, revisión decimal sin ceros iniciales, selección en mayúsculas y `selected_at` normalizado a UTC con seis dígitos fraccionarios. Los separadores son `LF`, sin `LF` final; el resultado es SHA-256. Android conserva el payload original y nunca calcula identidad con JSON serializado.
 
+La tabla siguiente describe resultados de entrega de la selección HU-52. Su estado local `PENDING` significa que una operación de outbox aún espera sincronización; no es el estado `PENDING` de una compra informado por Google Play ni el resultado `RETRYABLE` de una verificación de Billing.
+
 | Resultado | Acción local |
 |-----------|--------------|
 | `APPLIED` | Reconciliar preferencia/timestamp/cupos, actualizar revisión aceptada y completar outbox. |
@@ -293,3 +299,110 @@ supabase/
 - Migraciones Room/Supabase son versionadas, revisables, no destructivas y probadas con datos representativos.
 - WorkManager se valida en dispositivo real bajo red, Doze, batería, force-stop y reapertura.
 - Otro integrante aprueba la revisión cruzada y el flujo se demuestra en la Review de Sprint 1.
+
+## Sprint 3 Addendum: Arquitectura de HU-53, HU-54 y HU-56
+
+Este incremento extiende el plan histórico S1/S2 para completar 21 puntos de S3. Las afirmaciones previas que excluían Billing y verificación describen el límite de S1; en S3 se integran con el backend verificador, sin habilitar derechos desde Android. Se mantiene la separación de intención, compra, ciclo del proveedor y entitlement efectivo establecida en S1.
+
+### Contexto técnico y versiones
+
+- El catálogo `gradle/libs.versions.toml` no tiene hoy Google Play Billing. Las notas oficiales confirman Google Play Billing Library **9.1.0** como versión estable publicada el 2026-06-18. S3 agrega esta dependencia al catálogo y a `app/build.gradle.kts`; no degrada las versiones existentes. `androidx.core` ya está en 1.19.0, superior al mínimo 1.9 indicado por las notas de Billing.
+- Play Billing obtiene ProductDetails/OfferDetails y precios localizados desde Google Play; S/ 4.99, S/ 29.99 y S/ 49.99 son referencias de negocio para el canal de pruebas, no precios de UI cobrables codificados. La configuración real de producto, base plan y oferta de prueba se registra en `research.md` antes de la prueba integrada.
+- La app sigue el límite unidireccional existente: Compose/ViewModel → caso de uso/repository → gateway de Play o API autenticada. Los tipos de Play se traducen a modelos de dominio y no definen por sí mismos autorización Premium.
+
+### Flujo de compra y verificación autoritativa
+
+1. Al mostrar el paywall, el gateway consulta el catálogo y las ofertas de Play. El ViewModel conserva placeholders del tamaño final mientras carga y renderiza solo el `formattedPrice`/periodicidad devuelto por Play. Una oferta trial solo se presenta cuando Play la devuelve y la elegibilidad aplica; el detalle muestra duración y fecha real del primer cobro.
+2. Tras consentimiento explícito, el gateway inicia la hoja nativa de compra. Un callback local produce únicamente un token candidato. Android no escribe `billing_purchases`, no llama a una operación de consumo/ack autoritativa y no muta `FeatureAccessCacheEntity` con una respuesta local.
+3. El repository manda `productId` y `purchaseToken` a `POST /billing/verify`, servido por `supabase/functions/verify-purchase/index.ts`, adjuntando el JWT de sesión Supabase. La ruta deriva el usuario de Auth, valida método/JSON/JWT, paquete de la app y producto, y consulta el endpoint de Google Play Developer API apropiado al tipo de producto.
+4. El backend calcula SHA-256 sobre los bytes UTF-8 exactos del token opaco y escribe el registro de compra y el evento de auditoría en forma idempotente. Una restricción UNIQUE sobre `purchase_token_hash` junto con validación de `user_id` impide que la misma compra se reasigne o autorice otra cuenta; conflictos devuelven rechazo seguro. El token no se guarda, replica ni registra en logs.
+5. Solo una respuesta de Play `PURCHASED` con producto, usuario y vigencia válidos permite persistir la compra verificada y derivar acceso. El resultado Billing `PENDING` significa pago aún no completado según Play y no aumenta Premium; token inválido, usuario distinto y error del proveedor tampoco lo aumentan. Una falla temporal de consulta produce `RETRYABLE`, conserva el entitlement previamente verificado y permite reintento; su copy dice que Kipu no pudo verificar temporalmente, no que el pago esté pendiente.
+6. Después de persistir la compra verificada y conceder su entitlement efectivo, el backend consulta acknowledgement state y reconoce la compra inicial solo si falta reconocimiento. Si el acknowledge falla, reintentar no duplica compra ni acceso. Los renewals no se reconocen como compras iniciales y Lifetime es no consumible: `consume` nunca se invoca para Lifetime.
+7. Android aplica únicamente el resultado autenticado de verificación a la proyección/cache local asociada a la cuenta actual. Un cambio de sesión invalida el contexto del cache. Ninguna selección, callback, fixture o estado local puede crear una nueva concesión.
+
+El contrato usa la función física `verify-purchase`; la ruta lógica documentada es `/billing/verify`. El cuerpo no acepta `user_id` y nunca responde con el purchase token. Los resultados normalizados son `VERIFIED`, `PENDING`, `REJECTED` y `RETRYABLE`; `PENDING` es un pago pendiente confirmado por Play, mientras `RETRYABLE` es una falla temporal al consultar/verificar. El detalle contiene el tipo de producto, la condición de compra/ciclo y la vigencia verificada que la UI necesita.
+
+### Persistencia, esquema y seguridad
+
+Las entidades oficiales de Kipu se reflejan en S3 sin inventar tablas `subscriptions` o `entitlements` que no aparecen en el diccionario V4.2:
+
+| Objeto | Responsabilidad y cambio S3 |
+| :--- | :--- |
+| `public.billing_products` | Catálogo administrativo de producto (`id`, `store_product_id`, `base_plan_id`, `name`, `plan_type`, `features`, `is_active`). Extender el check de tipo para incluir `PRO_LIFETIME`; solo la API autenticada lee el catálogo y administración controla escritura. |
+| `public.billing_purchases` | Registro verificado por usuario: `user_id`, `order_id`, `purchase_token_hash` único, `product_id`, `purchase_state`, `entitlement_state`, `starts_at`, `expires_at`, `verified_at` y timestamps. No hay escritura directa desde cliente; `expires_at = NULL` representa Lifetime. Agregar `REVOKED` al check de estado de derecho. |
+| `internal.billing_events` | Auditoría append-only, privada al cliente. S3 registra verificaciones saneadas con `purchase_token_hash`; RTDN no se procesa hasta HU-55. No guardar token crudo ni payload que lo revele. |
+| `FeatureAccessCacheEntity` existente | Cache local derivado de compra ya verificada, separado de preferencia/selección. No es autoridad remota ni se restaura entre cuentas como evidencia. |
+
+S3 crea una migración versionada, aditiva y no destructiva para estas tablas en caso de que no existan en el esquema instalado; alinea las definiciones de fuente y agrega `PRO_LIFETIME`/`REVOKED` sin cambiar registros financieros. `CANCELED_ACTIVE` se calcula en dominio desde `purchase_state = CANCELLED` y vigencia no vencida; los estados brutos `GRACE_PERIOD`, `ON_HOLD` y `PAUSED` se normalizan a `IN_GRACE_PERIOD` y `ACCOUNT_HOLD`, respectivamente. `EXPIRED` y `REVOKED` niegan el acceso de esa compra. La agregación de permisos conserva Premium si existe cualquier compra Lifetime verificada vigente.
+
+- Activar RLS en objetos del esquema expuesto. `billing_purchases` permite lectura solo de filas propias; el cliente no recibe grants de inserción/actualización/borrado. `billing_products` queda de lectura para el uso autenticado y escritura administrativa. `internal.billing_events` permanece privada y append-only.
+- La Edge Function valida identidad desde JWT y guarda credenciales de Google Publisher API y credenciales Supabase de servidor en secretos de función. Ningún secreto de servicio se incluye en build Android. El acceso privilegiado de escritura se limita al runtime backend; no se agrega una función `SECURITY DEFINER` pública para eludir RLS.
+- Índices y constraints respaldan consultas por usuario/estado y unicidad de hash. Operaciones concurrentes sobre el mismo token terminan en un registro canónico o en conflicto de dueño, nunca en dos entitlement.
+- La lista actual de `supabase/migrations/` y el source Android no contienen tablas/cliente de Billing; el primer migration y los adaptadores son trabajo nuevo de S3, no compatibilidad ya implementada.
+
+### Ciclo de vida y acceso
+
+La matriz normativa completa está en [spec.md](spec.md), HU-56. La traducción de dominio es:
+
+| Lifecycle Kipu | Base verificada | Acceso |
+| :--- | :--- | :---: |
+| `ACTIVE` | Compra `PURCHASED` recurrente vigente o Lifetime con `expires_at = NULL` | Premium |
+| `IN_GRACE_PERIOD` | Play autoriza el periodo de gracia | Premium temporal, sujeto a la vigencia de Play |
+| `ACCOUNT_HOLD` | Play indica hold/pausa sin derecho activo | Free para esa compra |
+| `CANCELED_ACTIVE` | Renovación cancelada y `now() < expires_at` | Premium hasta `expires_at`; copy «No se renovará» |
+| `EXPIRED` | Periodo vencido confirmado por Play | Free; datos intactos |
+| `REVOKED` | Compra revocada por Play | Sin derecho por esa compra |
+
+Un pago Billing `PENDING` confirmado por Play es resultado de verificación sin acceso, no uno de los estados Premium. Una verificación `RETRYABLE` es un error temporal de proveedor: conserva el acceso previo y ofrece reintento. Ambos se mantienen separados del `PENDING` local de la outbox de selección HU-52. El estado de producto, compra, ciclo de vida y permiso efectivo nunca se colapsan en un único campo editable por UI. La pantalla muestra la cancelación y vigencia sin adelantar la sección completa «Mi Plan» de HU-60.
+
+### UI Compose, tokens Stitch y motion
+
+- Mantener una superficie de compra S3 desplazable y tarjetas accesibles, en orden Anual preseleccionado, Mensual y Lifetime. Esta compra es distinta del onboarding HU-52: la tarjeta estática de Trial de la Pantalla 1B solo registra intención y nunca indica una oferta de Play disponible; la superficie S3 consulta Play y muestra únicamente trials/ofertas disponibles y elegibles, o indisponibilidad. Anual usa badge tonal «Más popular», que no promete un ahorro calculado con una moneda/precio distinto. Lifetime usa «Pago único para siempre» y explicita no renovación/no trial.
+- Usar `background #F7F9FB`, tarjetas `surface_container_lowest #FFFFFF`, selección `surface_tint #006A63` con borde 2dp, CTA `primary_container #0F766E`/pressed `#005C55`, badge `secondary_container #A8ECE5` con texto `on_secondary_container #266D68`, e Inter. Mantener áreas táctiles 48×48dp, WCAG AA 4.5:1 como mínimo y buscar AAA 7:1 cuando la combinación semántica de tokens lo permita.
+- La selección eleva la tarjeta y anima el contorno con spring corto y microescala `1.02`. La carga de precios usa shimmer lineal de 2s sin cambiar el tamaño reservado; el usuario con movimiento reducido recibe un placeholder estático. Los estados cambian con continuidad: `purchase pending` → `verifying` → resultado; check sobrio de éxito de hasta 500ms solo después de `VERIFIED`.
+- Éxito, pago `PENDING`, indisponibilidad y error `RETRYABLE` se presentan como estados inline/card dentro de la hoja/superficie actual; no se añade una nueva ruta de éxito/fallo ausente de los prototipos. El pago pendiente explica que falta completarse en Play y que no activa Premium; `RETRYABLE` explica que no se pudo verificar temporalmente, conserva el acceso previo y ofrece reintento. El `PENDING` de sincronización HU-52 no se muestra como estado de compra.
+- Mostrar precio y moneda localizados, condiciones, primer cobro real cuando hay trial y enlace a administración de suscripciones Google Play. El vínculo no implementa la futura vista completa HU-60.
+
+### Pruebas, dependencias y gates de entrega S3
+
+- Kotlin/JVM: catalog mapping, estados de carga, interacción Billing gateway y garantía callback/no-Premium; test ViewModel cubre success únicamente tras backend.
+- Compose instrumentation: precios reales/falsos localizados mediante gateway fake, selección, target/semántica, placeholder sin layout shift, reduced motion, éxito solo verificado, y copy/UI diferenciados para pago `PENDING` y error de verificación `RETRYABLE`.
+- Supabase Edge: JWT/método/body, llamada stub del proveedor, `PENDING`, token inválido y ajeno, idempotencia, ack ya reconocido, error temporal, token scrub y cero escritura desde Android.
+- SQL/seguridad: migración con datos representativos, RLS/grants, hash UNIQUE, colisión de propietario, writer del servidor, append-only de `internal.billing_events`, incluyendo concurrencia/replay.
+- Canal de pruebas real de Play: completar compras mensual/anual/Lifetime, confirmar los importes/moneda ofertados por Play, probar pendiente cuando el medio lo ofrezca, acknowledgement, estado cancelado vigente, expiración, account hold/gracia según disponibilidad, y demostrar que cancelar la hoja conserva el acceso previo. Fixtures no sustituyen la compra de prueba integrada.
+- Gate de alcance: no incluir RTDN/reconciliación/restauración de HU-55 ni la pantalla completa de Mi Plan/Lifetime de HU-60. No declarar soporte de esas historias con esta integración bajo demanda.
+
+### Archivos y estructura S3
+
+```text
+gradle/libs.versions.toml
+app/build.gradle.kts
+app/src/main/java/com/kipu/app/feature/plans/domain/model/BillingProduct.kt
+app/src/main/java/com/kipu/app/feature/plans/domain/model/BillingVerificationResult.kt
+app/src/main/java/com/kipu/app/feature/plans/domain/model/PurchaseLifecycle.kt
+app/src/main/java/com/kipu/app/feature/plans/data/billing/PlayBillingGateway.kt
+app/src/main/java/com/kipu/app/feature/plans/data/remote/VerifyPurchaseApi.kt
+app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseViewModel.kt
+app/src/main/java/com/kipu/app/feature/plans/presentation/PlanPurchaseScreen.kt
+supabase/functions/verify-purchase/index.ts
+supabase/functions/verify-purchase/index_test.ts
+supabase/migrations/ (timestamp generated by `supabase migration new billing_purchase_verification_s3`)
+supabase/tests/database/billing_purchase_lifecycle_test.sql
+```
+
+`data-model.md` y `contracts/plans-selection.openapi.yaml` conservan la base HU-52/S1 durante esta propagación. La tarea T069 actualiza el modelo para las entidades/estados de compra y agrega `contracts/verify-purchase.openapi.yaml`; T070 amplía las pruebas de esquema y T071 crea la migración después de que modelo y contrato estén definidos. El contrato de selección permanece sin cambios.
+
+### Referencias técnicas verificadas el 2026-09-26
+
+- [Play Billing Library release notes](https://developer.android.com/google/play/billing/release-notes): 9.1.0 figura estable desde 2026-06-18.
+- [Google Play Billing security](https://developer.android.com/google/play/billing/security) y [backend integration](https://developer.android.com/google/play/billing/backend): verificación y reconocimiento en servidor, no conceder por `PENDING`, no consumir un no-consumible.
+- [Supabase Edge Function authentication](https://supabase.com/docs/guides/functions/auth) y [function secrets](https://supabase.com/docs/guides/functions/secrets): validar el JWT del usuario y mantener claves/secretos de servidor fuera del cliente.
+
+### Definition of Done de HU-53/HU-54/HU-56
+
+- Los escenarios de [spec.md](spec.md) pasan en pruebas de dominio, API, SQL/RLS, Compose y canal de pruebas real cuando dependen de Google Play.
+- Ningún callback ni estado PENDING concede Premium; asociación cross-account, repetición, acknowledgement, y Lifetime no consumible se prueban.
+- Los seis estados de HU-56 y el solapamiento Lifetime calculan acceso efectivo correctamente; cancelar conserva acceso solo hasta la expiración verificada.
+- La migración es aditiva, compatible con datos representativos, y `billing_purchases` permanece de solo lectura para cliente.
+- UI mantiene tokens Stitch, 48dp, contraste AA, estados verificables, fecha del primer cobro, gestión de Play y movimiento reducido.
+- Revisión cruzada y evidencia del test track quedan registradas antes de declarar completo Sprint 3.

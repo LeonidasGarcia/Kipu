@@ -1,10 +1,14 @@
 # Feature Specification: EP-PLA - Planes, Límites y Monetización Freemium
 
-**Feature Branch**: `001-planes-monetizacion-freemium`
+**Feature Branch**: `012-ep-pla-planes-monetizacion`
 
 **Created**: 2026-09-14
 
 **Status**: Refined
+
+**Refined**: 2026-09-26 — Resolución de A1: diferenciar el pago `PENDING` informado por Google Play, el fallo temporal de verificación `RETRYABLE` y el estado `PENDING` de la outbox de selección de HU-52; se precisan copy, criterios y cobertura de pruebas.
+
+**Refined**: 2026-09-26 — Incorporación del alcance S3 HU-53/HU-54/HU-56, verificación remota, estados de ciclo de compra y tratamiento explícito de discrepancias del esquema; distinción entre el Trial informativo de HU-52 y las ofertas reales consultadas en Play para HU-53; HU-52 y el addendum S2 se conservan como historial.
 
 **Refined**: 2026-09-15 — Adopción del design system Stitch "Kipu Andean Modernist" como única fuente de verdad visual de la Pantalla 1B; actualización de tokens de UI y lista de artefactos derivados; sin cambios funcionales (FR/RN/SC y user stories intactos).
 
@@ -411,6 +415,220 @@ Este addendum amplía EP-PLA para el Sprint 2 sin cambiar el alcance comercial d
 ### Gate de integración remota
 
 La verificación local de migrations/pgTAP no demuestra compatibilidad del proyecto Supabase remoto. El estado actual y los errores de catálogo están registrados en [`docs/s1-s2-remote-backend-readiness.md`](../../docs/s1-s2-remote-backend-readiness.md). No se declara habilitada la sincronización remota hasta que un despliegue ordenado y validado en un entorno desechable/staging confirme el contrato y RLS; ninguna intención de plan habilita Premium.
+
+## Sprint 3 Addendum: HU-53, HU-54 y HU-56
+
+Este refinamiento agrega 21 puntos de Sprint 3 a EP-PLA sin reemplazar los criterios, las decisiones ni la evidencia histórica de HU-52 (Sprint 1) y HU-57 (Sprint 2). Las secciones anteriores describen el alcance de sus sprints originales; este addendum define el alcance vigente de facturación y reconocimiento de compras para Sprint 3.
+
+### Control del incremento S3
+
+| Historia | Puntos | Dependencia y condición de cierre |
+| :--- | :---: | :--- |
+| HU-53 — Compra mensual, anual y Lifetime | 8 | HU-52 bloqueante; HU-54 parcial. Compra integrada solo cierra después de verificación de servidor. |
+| HU-54 — Verificación y reconocimiento de compras | 8 | HU-01 y HU-52 bloqueantes; HU-53 parcial; backend autenticado y Google Play consultable. |
+| HU-56 — Estados de compra y cancelación | 5 | HU-54 bloqueante; requiere una proyección de compra verificada. |
+| **Total Sprint 3 de EP-PLA** | **21** | Verificación bajo demanda. RTDN y restauración integral permanecen en HU-55 (Sprint 5). |
+
+### Reglas comunes y decisiones normativas
+
+- El producto contratado, el estado devuelto por Google Play y el entitlement efectivo de Kipu son dimensiones independientes. El tipo de producto procede del catálogo; el estado de compra y vigencia se toman de la respuesta verificada de Play; el acceso efectivo se calcula exclusivamente desde compras verificadas por servidor.
+- La interfaz o un callback de Google Play en Android solo informa que hubo una interacción o entrega un token candidato. Ningún callback, estado local, preferencia, selección ni respuesta no verificada concede Premium.
+- Mensual y Anual son suscripciones recurrentes con precios objetivo de referencia S/ 4.99 y S/ 29.99. Lifetime es una compra única no consumible con precio objetivo de referencia S/ 49.99. La fuente cobrable y el texto de precio son los detalles localizados devueltos por Google Play; si no existe oferta, no se inventa ni se presenta un importe como cobrable.
+- Si Google Play ofrece prueba gratuita, esta puede pertenecer únicamente a Monthly/Annual y se muestra solo según la oferta y elegibilidad que devuelva Play. El precio, la duración y la fecha exacta del primer cobro se explican antes de confirmar. Lifetime no tiene prueba propia.
+- La tarjeta estática de Trial de HU-52 pertenece al onboarding y solo registra una intención; no representa una oferta disponible ni inicia Billing. La compra de HU-53 ocurre en la superficie de compra de planes y muestra únicamente las ofertas/trials que Google Play devuelve como disponibles y elegibles; si no hay oferta, explica indisponibilidad.
+- Una compra `PENDING` conserva el acceso previo y no crea ni amplía Premium. La compra puede verificarse de nuevo cuando Play reporte el cambio a `PURCHASED`; Sprint 3 no depende de RTDN para reconocer ese cambio.
+- El backend deriva el `user_id` de la sesión autenticada de Supabase; nunca confía en un `user_id` suministrado por el cliente. El purchase token es opaco: se envía al backend por el canal autenticado, se resume mediante SHA-256 sobre sus bytes UTF-8 exactos y no se persiste ni registra en claro. La unicidad del hash y la asociación al propietario rechazan el uso del mismo token por otra cuenta sin reasignarlo.
+- La fuente de dominio documenta `billing_products`, `billing_purchases` e `internal.billing_events`, pero no una tabla independiente `subscriptions` ni una tabla remota `entitlements`. En S3 la compra recurrente se representa con `billing_purchases`; el entitlement efectivo es una proyección derivada de registros verificados y puede almacenarse localmente solo como cache aislado por cuenta. No se crea otra tabla de suscripciones o entitlements en este alcance.
+- Existe una discrepancia documental que debe resolverse con una migración aditiva antes de aceptar el producto Lifetime: `billing_products.plan_type` admite actualmente `FREE`, `PRO_MONTHLY` y `PRO_ANNUAL`, aunque los requisitos incluyen Lifetime. El catálogo debe admitir `PRO_LIFETIME`. La entidad actual tampoco permite `REVOKED` en `entitlement_state`; la migración debe admitir ese estado. `CANCELED_ACTIVE` es el estado de ciclo de vida normalizado de Kipu, derivado de compra cancelada más `expires_at` vigente; no reemplaza el estado bruto de compra `CANCELLED` de la fuente.
+- `internal.billing_events` conserva eventos de verificación saneados y append-only. La recepción asíncrona de RTDN, la reconciliación periódica y la restauración multidispositivo completa no se adelantan desde HU-55.
+
+### User Story Sprint 3.1 — HU-53: Compra mensual, anual y Lifetime
+
+Como usuario de Kipu, quiero contratar un plan mostrado por Google Play, para habilitar Premium con precio y duración claros.
+
+**Precondición**: Productos configurados en el canal de pruebas y verificación HU-54 integrada en el mismo sprint. HU-52 debe estar disponible. La compra solo se considera completa tras respuesta de verificación de backend.
+
+**Reglas de negocio HU-53**:
+
+1. Mensual y Anual son recurrentes; Lifetime es una compra única no consumible.
+2. Los precios de referencia son S/ 4.99, S/ 29.99 y S/ 49.99; la UI presenta precio y moneda localizados por Play.
+3. El retorno de UI sin verificación remota no habilita acceso.
+4. Lifetime no tiene periodo de prueba propio.
+
+**Criterios de aceptación oficiales**:
+
+#### Escenario 1: Mensual
+
+- **Dado que** el producto mensual está disponible,
+- **Cuando** completa compra y verificación,
+- **Entonces** se muestra Premium con vigencia y renovación.
+
+#### Escenario 2: Anual
+
+- **Dado que** elige oferta anual,
+- **Cuando** confirma en Play,
+- **Entonces** se usa precio y condiciones reales mostrados.
+
+#### Escenario 3: Lifetime
+
+- **Dado que** no existe renovación recurrente activa,
+- **Cuando** compra y se verifica Lifetime,
+- **Entonces** queda acceso sin caducidad comercial ni consumo de producto.
+
+#### Escenario 4: Cancelar
+
+- **Dado que** está en la hoja de compra,
+- **Cuando** cancela,
+- **Entonces** mantiene su acceso previo.
+
+#### Escenario 5: Sin productos
+
+- **Dado que** Play no devuelve oferta,
+- **Cuando** abre planes,
+- **Entonces** se explica indisponibilidad y no se inventa un precio cobrable.
+
+### User Story Sprint 3.2 — HU-54: Verificación y reconocimiento de compras
+
+Como usuario de Kipu, quiero obtener Premium solo cuando mi compra sea válida, para evitar pérdidas o activaciones indebidas.
+
+**Precondición**: Compra reportada; backend autenticado y proveedor consultable. HU-01 y HU-52 deben estar disponibles; HU-53 puede avanzar con contrato y fixtures, y se cierra integrada.
+
+**Reglas de negocio HU-54**:
+
+1. El servidor valida usuario, aplicación, producto, estado y vigencia consultando Google Play Developer API con el token recibido.
+2. `PENDING` no desbloquea Premium.
+3. El reconocimiento de una compra inicial es idempotente. Lifetime nunca se consume; los productos no consumibles ni las suscripciones no se procesan mediante una operación de consumo.
+4. Un token asociado a otra cuenta Kipu se rechaza sin cambiar el propietario.
+5. Una repetición de la misma verificación no duplica compra, entitlement ni reconocimiento. Una falla temporal del proveedor produce `RETRYABLE`, conserva el entitlement previo y permite reintentar; no se presenta al usuario como una compra `PENDING` de Google Play.
+
+**Contrato lógico de verificación**: `POST /billing/verify`, expuesto por la Edge Function Supabase `verify-purchase`, requiere JWT de usuario en `Authorization` y recibe `productId` y `purchaseToken`. La identidad de usuario procede exclusivamente del JWT. El resultado normalizado informa `VERIFIED`, `PENDING`, `REJECTED` o `RETRYABLE`, además de producto, estado de compra, ciclo de vida y vigencia aplicables. En este contrato de Billing, `PENDING` significa que Play confirma que el pago aún está pendiente; `RETRYABLE` significa que Kipu no pudo completar temporalmente la verificación con el proveedor. El `PENDING` de la outbox de selección HU-52 es un estado local de sincronización distinto y no forma parte del contrato de Billing. El contrato nunca devuelve el token ni permite escribir directamente en tablas de facturación desde Android. Token asociado a otra cuenta se rechaza con conflicto de propiedad.
+
+**Criterios de aceptación oficiales**:
+
+#### Escenario 1: Válida
+
+- **Dado que** Play confirma compra del usuario,
+- **Cuando** se verifica,
+- **Entonces** se concede acceso y reconoce entrega una vez.
+
+#### Escenario 2: Pendiente
+
+- **Dado que** la compra sigue PENDING,
+- **Cuando** solicita activar,
+- **Entonces** se mantiene el acceso previo y se informa que el pago sigue pendiente en Google Play; no se concede Premium.
+
+#### Escenario 3: Repetida
+
+- **Dado que** ya se reconoció el token,
+- **Cuando** reintenta verificación,
+- **Entonces** no duplica compra ni permiso.
+
+#### Escenario 4: Otra cuenta
+
+- **Dado que** el token pertenece a otro usuario Kipu,
+- **Cuando** se presenta desde esta sesión,
+- **Entonces** se rechaza sin reasignar propietario.
+
+#### Escenario 5: Fallo
+
+- **Dado que** el proveedor no responde,
+- **Cuando** se solicita verificar,
+- **Entonces** se informa que no fue posible verificar temporalmente (`RETRYABLE`), se conserva el acceso previo y se permite reintentar, sin presentarlo como pago `PENDING` de Google Play.
+
+### User Story Sprint 3.3 — HU-56: Estados de compra y cancelación
+
+Como usuario de Kipu, quiero consultar mi vigencia aunque cancele renovación, para usar el periodo que ya tengo autorizado.
+
+**Precondición**: Existe proyección de compra verificada para el usuario.
+
+**Separación y matriz de ciclo de vida**:
+
+| Estado de ciclo de vida Kipu | Evidencia normalizada de Play | Premium efectivo | Comportamiento |
+| :--- | :--- | :---: | :--- |
+| `ACTIVE` | Compra `PURCHASED`, vigencia recurrente activa | Sí | Acceso hasta la vigencia verificada; mostrar próxima renovación cuando Play la informe. |
+| `IN_GRACE_PERIOD` | Play confirma periodo de gracia | Sí, mientras Play lo autorice | Conservar acceso y mostrar estado de pago pendiente de resolver. |
+| `ACCOUNT_HOLD` | Play confirma hold o pausa que suspende acceso | No | Aplicar Free temporalmente y conservar datos. |
+| `CANCELED_ACTIVE` | Compra `CANCELLED` y `now() < expires_at` | Sí | No renueva; mantiene acceso hasta `expires_at` y muestra «No se renovará». |
+| `EXPIRED` | Play confirma vencimiento o `expires_at` cumplido | No | Volver a Free sin borrar datos ni historial. |
+| `REVOKED` | Play confirma revocación | No para esa compra | Retirar el acceso que dependía de esa compra, sin borrar datos. |
+
+Lifetime verificado se representa como acceso `ACTIVE` con `expires_at = NULL`. Al calcular permisos, una compra Lifetime verificada vigente prevalece sobre la expiración, cancelación o revocación de otra suscripción. Un periodo `PENDING` nunca aparece como estado con Premium.
+
+**Criterios de aceptación oficiales**:
+
+#### Escenario 1: Cancelada vigente
+
+- **Dado que** canceló renovación pero no terminó el periodo,
+- **Cuando** abre Kipu,
+- **Entonces** mantiene Premium hasta vencimiento y ve No se renovará.
+
+#### Escenario 2: Expirada
+
+- **Dado que** el proveedor confirma fin del periodo,
+- **Cuando** revalida,
+- **Entonces** pasa a Free sin borrar datos.
+
+#### Escenario 3: Gracia
+
+- **Dado que** el proveedor mantiene acceso durante gracia,
+- **Cuando** consulta permiso,
+- **Entonces** conserva Premium según vigencia autorizada.
+
+#### Escenario 4: Revocación parcial
+
+- **Dado que** se revoca una compra pero hay Lifetime válido,
+- **Cuando** recalcula acceso,
+- **Entonces** conserva el permiso procedente de Lifetime.
+
+#### Escenario complementario 5: Cuenta en hold
+
+- **Dado que** Play confirma `ACCOUNT_HOLD` o una pausa que suspende el derecho,
+- **Cuando** Kipu revalida la compra,
+- **Entonces** deniega Premium de esa compra y conserva los datos del usuario.
+
+#### Escenario complementario 6: Revocación sin Lifetime
+
+- **Dado que** Play revoca la compra y no existe otra compra Premium verificada vigente,
+- **Cuando** Kipu recalcula el acceso,
+- **Entonces** aplica Kipu Free sin borrar datos ni conceder vigencia por el tiempo restante del periodo revocado.
+
+### Requisitos funcionales y criterios de éxito S3
+
+- **RN-005 — Verdad del proveedor**: Solo la verificación remota con Google Play puede confirmar una compra; el cliente no escribe compras ni entitlements.
+- **RN-006 — Propiedad e idempotencia**: El hash SHA-256 único del token se vincula a una sola cuenta Kipu; reintentos devuelven el resultado canónico y no reasignan propietario.
+- **RN-007 — Acceso temporal**: Cancelar renovación no acorta la vigencia ya pagada. Gracia conserva acceso solo mientras Play lo autorice; hold, expiración y revocación no conceden acceso de esa compra.
+- **FR-033**: El catálogo mensual/anual/Lifetime proviene de productos y ofertas consultados a Google Play; la app muestra precio y moneda localizados y no cobra desde un precio de referencia estático.
+- **FR-034**: La pantalla anual distingue visualmente la recomendación sin afirmar ahorro no calculado a partir de precios localizados; Lifetime se identifica como pago único permanente, sin renovación ni trial propio.
+- **FR-035**: La compra mensual/anual puede mostrar trial solo cuando Play devuelve una oferta elegible y debe presentar duración y fecha exacta del primer cobro antes de confirmar.
+- **FR-036**: Una notificación/callback local de compra pasa a estado de verificación y no cambia el acceso efectivo hasta la respuesta verificada del backend.
+- **FR-037**: `verify-purchase` valida JWT, identidad del usuario, paquete/aplicación, producto, token, estado y vigencia contra Google Play Developer API antes de persistir compra y derivar permiso.
+- **FR-038**: Un pago `PENDING` confirmado por Play no crea ni extiende Premium; una falla temporal de consulta produce `RETRYABLE`, conserva el entitlement previo y permite reintento sin confundirlo con el estado de pago.
+- **FR-039**: El backend calcula un hash SHA-256 del purchase token, aplica unicidad y rechaza un token ya asociado a otro `user_id`; el token en claro no se almacena ni aparece en logs.
+- **FR-040**: Tras persistir y conceder el entitlement de una compra inicial que Play confirme como `PURCHASED`, el backend consulta acknowledgement state y reconoce de forma idempotente solo si falta reconocimiento. Lifetime no se consume; la app cliente no hace reconocimiento autoritativo.
+- **FR-041**: `billing_products`, `billing_purchases` e `internal.billing_events` aplican el acceso mínimo y RLS; el cliente no inserta, actualiza ni elimina compras/eventos y secretos de Google/Supabase permanecen solo en servidor.
+- **FR-042**: Producto, estado bruto de compra, ciclo de vida normalizado y entitlement efectivo se mantienen separados; las reglas de los seis estados y Lifetime siguen la matriz HU-56.
+- **FR-043**: El estado `CANCELED_ACTIVE` conserva Premium solo hasta el fin de la vigencia verificada y comunica «No se renovará»; `EXPIRED` o `REVOKED` retiran acceso sin borrar datos.
+- **FR-044**: Mientras no exista RTDN en S3, Kipu vuelve a consultar y verificar compras bajo demanda al reabrir la experiencia de compra/estado; no declara soporte de actualización asíncrona en tiempo real.
+- **FR-045**: La UI distingue el pago `PENDING` confirmado por Play (pago pendiente, sin Premium) de la falla de verificación `RETRYABLE` (no se pudo verificar temporalmente, acceso previo conservado y acción de reintento); también distingue procesamiento, verificación, éxito verificado e indisponibilidad. Usa la hoja/superficie de compra existente y no inventa una nueva ruta de resultado fuera del prototipo.
+- **FR-046**: Los precios conservan su espacio durante la consulta; selección, carga y confirmación tienen feedback perceptible y respetan la preferencia del sistema por movimiento reducido.
+- **FR-047**: Las tarjetas y botones interactivos reservan mínimo 48×48dp, exponen rol/selección/estado semántico, usan Inter y tokens Stitch, mantienen contraste WCAG AA 4.5:1 para texto normal y buscan AAA 7:1 cuando la combinación de tokens lo permita.
+- **SC-014**: En las pruebas de callback UI, pago `PENDING`, token inválido, token de otra cuenta y falla temporal del proveedor, el cliente no habilita Premium ni altera el entitlement efectivo; la UI distingue `RETRYABLE` de pago `PENDING`.
+- **SC-015**: Los tres productos muestran exclusivamente precios localizados de Play; catálogo vacío presenta indisponibilidad y no un precio cobrable inventado.
+- **SC-016**: Repetir la verificación de un token no duplica registro, permiso ni acknowledge; una compra Lifetime verificada nunca es consumida.
+- **SC-017**: Pruebas de dominio cubren `ACTIVE`, `IN_GRACE_PERIOD`, `ACCOUNT_HOLD`, `CANCELED_ACTIVE`, `EXPIRED`, `REVOKED`, `PENDING` y la precedencia de Lifetime.
+- **SC-018**: La cancelación conserva acceso hasta el `expires_at` verificado, luego pasa a Free; expiración y revocación no eliminan movimientos, historial ni datos del usuario.
+- **SC-019**: Las pantallas de plan cumplen targets 48dp y contraste WCAG AA; los tests de UI verifican selección, carga sin saltos, fecha del primer cobro si hay trial y acceso al administrador de suscripciones de Google Play.
+
+### Contrato de interfaz y estados visuales
+
+- Selector de tarjetas con Anual destacado como opción recomendada, Mensual y Lifetime diferenciados; el badge del Anual usa «Más popular» para evitar prometer un porcentaje de ahorro cuando el precio localizado varía.
+- La selección usa fondo blanco sobre `background`, anillo activo de 2dp y `surface_tint`; CTA usa `primary_container` y estado pressed `primary`. Lifetime presenta «Pago único para siempre» y ausencia de renovación/trial sin letra pequeña.
+- Durante la consulta de catálogo, shimmer conserva las dimensiones del precio y no desplaza contenido. La transición de compra abierta a verificación y resultado preserva continuidad; el check de éxito aparece solo después de confirmación backend.
+- Éxito verificado, pago pendiente e indisponibilidad/error se expresan con copy directo y acciones adecuadas dentro de la superficie existente: confirmación sobria; instrucciones para completar/reintentar pago pendiente; explicación amigable y reintento para error recuperable. No hay pantalla independiente de éxito/fallo en los prototipos actuales.
+- La interacción de selección usa microescala hasta `1.02` y elevación con spring corto; shimmer usa pulso lineal; el check verificado usa transición breve y sobria. El movimiento no esencial se reduce o se sustituye por feedback estático cuando el usuario solicita movimiento reducido.
+- El detalle de condiciones muestra la fecha real del primer cobro si hay trial, renovación/vigencia y enlace de gestión de Google Play. El enlace no amplía Sprint 3 a la pantalla completa «Mi Plan» de HU-60.
+
+**Trazabilidad de fuente y discrepancias**: criterios y dependencias proceden de `KipuApp/Kipu md/02_Kipu_V4.2_Product_Backlog.md` (secciones HU-53/HU-54/HU-56); entidades de `KipuApp/Kipu md/03_Kipu_V4.2_Arquitectura_y_Datos.md` §13 y `KipuApp/Entidades/V4.2_Entidades.md` §11.1–11.3; pantallas de los documentos de Prototipo y `Stich Prompts.md`. AGY confirmó que S3 verifica bajo demanda en `/billing/verify`, que RTDN pertenece a HU-55 y que el constraint de producto actual omite Lifetime. La Edge Function física se denomina `verify-purchase`; la ruta lógica conserva `/billing/verify` para mantener la convención documentada.
 
 ## Artefactos Derivados
 

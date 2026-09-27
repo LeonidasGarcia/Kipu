@@ -352,3 +352,61 @@ No relationship exists from preference, outbox, head or receipt to `entitlements
 - Logs include operation/result identifiers only when necessary and never bearer tokens, financial data or raw sensitive payloads.
 - Local outbox rows are compacted only after terminal reconciliation; unresolved conflict/error state remains observable without sensitive detail.
 - Backup/restore must not move outbox or access cache across users. Until a verified restore design exists, these stores are excluded from automatic backup.
+
+## Sprint 3 Billing Model
+
+### public.billing_products
+
+| Column | PostgreSQL type | Constraints |
+|---|---|---|
+| id | TEXT | Primary key, stable Kipu product key |
+| store_product_id | TEXT | Required Google Play product ID |
+| base_plan_id | TEXT | Nullable; required for recurring subscriptions, null for Lifetime |
+| name | TEXT | Required display name |
+| plan_type | TEXT | FREE, PRO_MONTHLY, PRO_ANNUAL, PRO_LIFETIME |
+| features | JSONB | Not null, defaults to {} |
+| is_active | BOOLEAN | Not null, defaults to true |
+| created_at | TIMESTAMPTZ | Not null, server assigned |
+
+Authenticated users may read active catalog rows. Only server administration may change the catalog. Play ProductDetails remains the source of displayed prices and eligible offers.
+
+### public.billing_purchases
+
+| Column | PostgreSQL type | Constraints |
+|---|---|---|
+| id | UUID | Primary key, server generated |
+| user_id | UUID | Required FK to auth.users(id); account deletion is restricted while financial purchase history exists |
+| order_id | TEXT | Nullable Google order ID |
+| purchase_token_hash | TEXT | Required lowercase 64-character SHA-256 hex, globally unique |
+| product_id | TEXT | Required FK to billing_products(id) |
+| purchase_state | TEXT | PURCHASED, PENDING, or CANCELLED as returned by the provider |
+| entitlement_state | TEXT | Nullable Kipu projection: ACTIVE, IN_GRACE_PERIOD, ACCOUNT_HOLD, CANCELED_ACTIVE, EXPIRED, REVOKED, or provider PAUSED; null means no grant (including PENDING) |
+| acknowledgement_state | TEXT | PENDING, ACKNOWLEDGING (leased server attempt), or ACKNOWLEDGED; set only by the server |
+| acknowledgement_attempted_at | TIMESTAMPTZ | Nullable acknowledgement lease timestamp; stale lease can be retried after five minutes |
+| starts_at | TIMESTAMPTZ | Required, server/provider confirmed |
+| expires_at | TIMESTAMPTZ | Nullable; null for verified Lifetime |
+| verified_at | TIMESTAMPTZ | Required, server assigned |
+| created_at, updated_at | TIMESTAMPTZ | Server assigned |
+
+The token itself is transient request data: it is never stored, returned, or logged. The server hashes the exact UTF-8 token bytes before persistence. The global unique constraint binds that token to exactly one Kipu account. Re-verification by the same owner is idempotent; a different owner receives a conflict and cannot change the existing row. Client access is owner-only SELECT; client writes are revoked.
+
+The provider purchase state and Kipu entitlement state are separate. A row with provider state PENDING has null entitlement_state, cannot grant Premium and cannot be acknowledged. An active subscription canceled by its owner persists as provider state CANCELLED plus Kipu state CANCELED_ACTIVE while the verified expires_at is in the future, then to EXPIRED. Lifetime is PURCHASED + ACTIVE, has no commercial expiry and is never consumed. A database lease ensures concurrent verification retries do not acknowledge the same purchase concurrently; failed/stale attempts return to PENDING for retry.
+
+### internal.billing_events
+
+| Column | PostgreSQL type | Constraints |
+|---|---|---|
+| id | UUID | Primary key, server generated |
+| user_id | UUID | Nullable FK to auth.users(id), account deletion restricted while associated audit history remains |
+| purchase_token_hash | TEXT | Required correlation hash; never raw token |
+| event_type | TEXT | PURCHASE, RENEWAL, CANCELLATION, RTDN_UPDATE, VERIFICATION |
+| raw_payload | JSONB | Required sanitized allowlisted provider metadata; no purchase token, credential, or unfiltered provider payload |
+| received_at | TIMESTAMPTZ | Server assigned |
+
+The table is in a non-exposed schema, has forced RLS, no client grants and append-only enforcement. The server verification function inserts allowlisted event fields in the same database transaction as the purchase projection.
+
+### Verified purchase API
+
+The Android client sends only productId and the ephemeral purchaseToken to the authenticated POST /billing/verify operation. The function derives user_id from the validated Supabase JWT, looks up the active Kipu product, and verifies the token with Google Play before it calls the server-only persistence routine. It returns a normalized outcome and effective entitlement; it never accepts an owner ID, price, entitlement state, or acknowledgement decision from the client. PENDING is an explicit non-entitling outcome. A verified PURCHASED row is persisted before an eligible acknowledgement request; acknowledgement retries are idempotent, and Lifetime is never consumed.
+
+Google subscription states map as follows: active → ACTIVE; grace period → IN_GRACE_PERIOD; on hold → ACCOUNT_HOLD; canceled with future expiry → CANCELED_ACTIVE; expired or canceled after expiry → EXPIRED; paused → PAUSED (no access). Provider revocation maps to REVOKED. Effective access is separately aggregated from verified purchases; a valid Lifetime purchase takes precedence over expired/revoked subscriptions. No future HU-55 RTDN webhook is implemented by this increment.

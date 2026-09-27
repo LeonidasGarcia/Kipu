@@ -160,3 +160,38 @@
 - Elegibilidad sin Play: proyección server-only con vigencia explícita; `UNKNOWN` conservador cuando falta evidencia.
 - Conflicto entre `PREMIUM_REQUIRED` y spec: prevalece `PREMIUM_ENTITLEMENT_REQUIRED` de FR-018.
 - `Stich Prompts.md`: no existe localmente; el artefacto Stitch extraído y `docs/stitch-design-system.md` son la evidencia disponible, sin afirmaciones adicionales.
+# Sprint 3 — Google Play Billing: decisiones y prerequisitos
+
+## Contrato comercial
+
+La app obtiene ProductDetails, moneda, precio localizado y ofertas directamente de Google Play Billing Library 9.1.0. Los valores de referencia de la historia (S/ 4.99, S/ 29.99 y S/ 49.99) no son precios cobrables ni se usan como fallback visual. Lifetime es un producto de compra única no consumible y no recibe un offer de prueba propio.
+
+## Identificadores de Play Console
+
+El repositorio no incluye acceso a Play Console ni export de catálogo aprobado. Por ello estos identificadores son candidatos de trabajo, no IDs aprobados:
+
+| Plan Kipu | Product ID candidato | Base plan candidato | Offer de prueba |
+|---|---|---|---|
+| Mensual | `kipu_pro_monthly` | `monthly` | Debe confirmarse con el owner de Play Console; solo se muestra si Play lo devuelve para la cuenta |
+| Anual | `kipu_pro_annual` | `annual` | Debe confirmarse con el owner de Play Console; solo se muestra si Play lo devuelve para la cuenta |
+| Lifetime | `kipu_pro_lifetime` | No aplica | No aplica |
+
+No activar estos productos ni usarlos como catálogo de producción hasta validar sus IDs y estados en Play Console. El applicationId de este repositorio es `com.kipu.app`; el mismo package debe estar publicado en el track de prueba para que Billing funcione.
+
+## Acceso al track de prueba
+
+Para completar la aceptación externa se requiere:
+
+1. Aplicación `com.kipu.app` registrada y subida al track interno con el mismo certificado y applicationId que el APK instalado.
+2. Productos mensual/anual (con base plans y ofertas configuradas por el equipo de producto) y Lifetime publicados/activos en Play Console.
+3. Cuenta Google añadida como license tester y miembro autorizado del track; Play Store instalada y actualizada en el dispositivo.
+4. Un dispositivo Android con Play Store, cuenta de prueba seleccionada y conexión de red.
+5. Secret de cuenta de servicio con permiso Android Publisher API almacenado fuera del repositorio en el runtime Edge Function; nunca distribuirlo en el APK.
+
+La sesión de implementación no dispone de evidencia de IDs aprobados, cuenta license tester, publicación de track ni credenciales de Android Publisher. T081 y T088 requieren esos elementos; no se simulará una aceptación de compra real con mocks.
+
+## Fuentes técnicas
+
+- Google Play Billing integration: https://developer.android.com/google/play/billing/integrate (9.1.0, ProductDetails, estado PENDING, verificación de servidor y acknowledge solo luego de PURCHASED).
+- Google Play Developer API — subscriptions v2: https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptionsv2 (estados de ciclo de vida, vencimiento y acknowledgement).
+- Google Play Developer API — products v2: https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.productsv2 (estado de compra de productos de una sola vez).
