@@ -8,10 +8,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.feature.accounts.presentation.dashboard.DashboardScreen
 import com.kipu.app.feature.accounts.presentation.detail.AccountDetailScreen
+import com.kipu.app.feature.notifications.presentation.NotificationBadgeViewModel
+import com.kipu.app.navigation.navigateToNotifications
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.feature.accounts.presentation.instruments.AccountFormScreen
 import com.kipu.app.feature.accounts.presentation.instruments.CardFormScreen
 import com.kipu.app.feature.accounts.presentation.instruments.RateCatalogScreen
@@ -57,6 +61,8 @@ fun NavGraphBuilder.accountsDestinations(
 ) {
     composable(ACCOUNTS_DASHBOARD_ROUTE) { backStackEntry ->
         val viewModel: AccountsViewModel = hiltViewModel()
+        val notificationBadgeViewModel: NotificationBadgeViewModel = hiltViewModel()
+        val unreadNotificationCount by notificationBadgeViewModel.unreadCount.collectAsStateWithLifecycle()
         val feedback = backStackEntry.savedStateHandle
             .getStateFlow<String?>(ACCOUNT_DASHBOARD_FEEDBACK_KEY, null)
             .collectAsState()
@@ -68,6 +74,8 @@ fun NavGraphBuilder.accountsDestinations(
             onAccountClick = { accountId -> navController.navigateToAccountDetail(accountId) },
             onCardClick = { cardId -> navController.navigateToCardDetail(cardId) },
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
+            onNavigateToNotifications = navController::navigateToNotifications,
+            unreadNotificationCount = unreadNotificationCount,
             feedbackMessage = feedback.value,
             onFeedbackConsumed = { backStackEntry.savedStateHandle[ACCOUNT_DASHBOARD_FEEDBACK_KEY] = null },
         )

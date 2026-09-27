@@ -28,6 +28,10 @@ import com.kipu.app.feature.movements.data.local.MovementDao
 import com.kipu.app.feature.movements.data.local.MovementOutboxEntity
 import com.kipu.app.feature.movements.data.local.MovementSyncCheckpointEntity
 import com.kipu.app.feature.movements.data.local.TransactionEntity
+import com.kipu.app.feature.notifications.data.local.AppNotificationDao
+import com.kipu.app.feature.notifications.data.local.AppNotificationEntity
+import com.kipu.app.feature.notifications.data.local.NotificationSyncOutboxDao
+import com.kipu.app.feature.notifications.data.local.NotificationSyncOutboxEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheDao
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
@@ -73,8 +77,10 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         MovementSyncCheckpointEntity::class,
         CreditInstallmentEntity::class,
         CreditPaymentAllocationEntity::class,
+        AppNotificationEntity::class,
+        NotificationSyncOutboxEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -93,4 +99,6 @@ abstract class KipuDatabase : RoomDatabase() {
     abstract fun merchantCatalogDao(): MerchantCatalogDao
     abstract fun movementDao(): MovementDao
     abstract fun creditDao(): CreditDao
+    abstract fun appNotificationDao(): AppNotificationDao
+    abstract fun notificationSyncOutboxDao(): NotificationSyncOutboxDao
 }

@@ -635,3 +635,41 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
     }
 }
 
+/** Migration 11 -> 12: adds account-scoped notification cache and desired-state sync outbox. */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `app_notifications` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `body` TEXT NOT NULL,
+                `notification_type` TEXT NOT NULL,
+                `reference_entity_type` TEXT,
+                `reference_entity_id` TEXT,
+                `is_read` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `deleted_at` INTEGER,
+                `event_payload` TEXT NOT NULL DEFAULT '{}',
+                PRIMARY KEY(`user_id`, `id`)
+            )""".trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `app_notifications_user_created_idx` ON `app_notifications` (`user_id`, `created_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `app_notifications_user_read_created_idx` ON `app_notifications` (`user_id`, `is_read`, `created_at`)")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `notification_sync_outbox` (
+                `operation_id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `notification_id` TEXT NOT NULL,
+                `is_read` INTEGER,
+                `deleted_at` INTEGER,
+                `attempt_count` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`operation_id`)
+            )""".trimIndent(),
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `notification_outbox_owner_notice_uq` ON `notification_sync_outbox` (`user_id`, `notification_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `notification_outbox_owner_created_idx` ON `notification_sync_outbox` (`user_id`, `created_at`)")
+    }
+}
+

@@ -62,6 +62,7 @@ import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
+import com.kipu.app.feature.notifications.presentation.UnreadNotificationBadge
 
 import androidx.compose.material.icons.filled.Settings
 
@@ -75,6 +76,8 @@ fun DashboardScreen(
     onAccountClick: (String) -> Unit = {},
     onCardClick: (String) -> Unit = onAccountClick,
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
+    unreadNotificationCount: Int = 0,
     feedbackMessage: String? = null,
     onFeedbackConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -106,6 +109,10 @@ fun DashboardScreen(
                         )
                     },
                     actions = {
+                        UnreadNotificationBadge(
+                            unreadCount = unreadNotificationCount,
+                            onClick = onNavigateToNotifications,
+                        )
                         IconButton(onClick = onNavigateToMovements) {
                             Icon(
                                 imageVector = Icons.Default.Payments,
