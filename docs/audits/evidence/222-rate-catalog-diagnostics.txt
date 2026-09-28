@@ -1,0 +1,4 @@
+Read-only diagnostics after the rate catalog still displayed its retry error on the Samsung Galaxy S24+ R5CX10W7CZD (2026-09-28).
+- Android dumpsys connectivity showed a Wi-Fi network request with INTERNET capability; this does not prove that the device had validated internet or that Kipu's API/auth endpoint was reachable.
+- A filtered logcat search for credit_products, catalog/rates, HTTP 4xx/5xx, UnknownHost, SocketTimeout, and IOException returned no matching Kipu client diagnostics.
+- No HTTP status/body or server response was captured. Root cause remains undetermined; do not infer network, authentication, endpoint, or catalog-count failure from the UI message alone.

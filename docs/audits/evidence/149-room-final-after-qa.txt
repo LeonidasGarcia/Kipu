@@ -1,0 +1,27 @@
+ROOM QA SNAPSHOT — final after QA transfers and compensating operations
+Counts: transactions=20 ledger_entries=29
+Balances (sum of ledger entries, minor units):
+('Sueldo', 287500, 'PEN')
+('Pasivo tarjeta •••• 1234', -50000, 'PEN')
+('Efectivo', 101878, 'PEN')
+('Pasivo tarjeta •••• 7548', 0, 'PEN')
+Latest transactions:
+('2b9521b2-0e7b-4f09-acc7-e2a11927164e', 'TRANSFER', None, 1, '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 1790616531905)
+('ba2cf881-7926-467c-b481-eafb45750057', 'TRANSFER', None, 1, '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 1790616463035)
+('bc29d76c-e1dd-489a-8a50-a116de11d6f9', 'TRANSFER', None, 200000, '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 1790616394717)
+('59808518-931d-4a99-b427-9f19915918f6', 'TRANSFER', None, 200000, '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 1790616183963)
+('ecf20456-beb2-4da5-aca8-d3a22237361b', 'EXPENSE', None, 11, '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', None, 1790615266590)
+('3227efde-b209-4c5b-9dbe-056c7b623002', 'EXPENSE', None, 11, '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', None, 1790615175426)
+Latest ledger entries:
+('Efectivo', 'SOURCE', -1, '2b9521b2-0e7b-4f09-acc7-e2a11927164e')
+('Sueldo', 'DESTINATION', 1, '2b9521b2-0e7b-4f09-acc7-e2a11927164e')
+('Sueldo', 'SOURCE', -1, 'ba2cf881-7926-467c-b481-eafb45750057')
+('Efectivo', 'DESTINATION', 1, 'ba2cf881-7926-467c-b481-eafb45750057')
+('Sueldo', 'SOURCE', -200000, 'bc29d76c-e1dd-489a-8a50-a116de11d6f9')
+('Efectivo', 'DESTINATION', 200000, 'bc29d76c-e1dd-489a-8a50-a116de11d6f9')
+('Efectivo', 'SOURCE', -200000, '59808518-931d-4a99-b427-9f19915918f6')
+('Sueldo', 'DESTINATION', 200000, '59808518-931d-4a99-b427-9f19915918f6')
+('Efectivo', 'SOURCE', -11, 'ecf20456-beb2-4da5-aca8-d3a22237361b')
+('Efectivo', 'SOURCE', -11, '3227efde-b209-4c5b-9dbe-056c7b623002')
+('Efectivo', 'SOURCE', -100, '01231153-faae-47ab-8e1b-5bf8e7e41bb2')
+('Sueldo', 'SOURCE', -100000, '3d0e6923-fa04-37e4-bf01-139b81173411')

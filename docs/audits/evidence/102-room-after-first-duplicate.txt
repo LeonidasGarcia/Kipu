@@ -1,0 +1,17 @@
+ROOM QA SNAPSHOT 2026-09-28 — DESPUÉS DEL PRIMER GASTO DE DUPLICADO QA (S/ 1.00)
+
+COUNTS
+{'transactions': 14, 'ledger_entries': 19}
+
+BALANCES
+{'alias': 'Efectivo', 'balance_minor': 101900}
+{'alias': 'Pasivo tarjeta •••• 1234', 'balance_minor': -50000}
+{'alias': 'Pasivo tarjeta •••• 7548', 'balance_minor': 0}
+{'alias': 'Sueldo', 'balance_minor': 287500}
+
+QA MOVEMENT
+{'type': 'EXPENSE', 'amount_minor': 100, 'source_account_id': '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 'category_id': 'c56d0946-be26-483d-87dc-3a4893059794', 'merchant_provisional_text': 'HBO', 'sync_status': 'PENDING'}
+
+LEDGER
+{'role': 'SOURCE', 'signed_amount_minor': -100, 'alias': 'Efectivo'}
+{'role': 'SOURCE', 'signed_amount_minor': -100000, 'alias': 'Sueldo'}

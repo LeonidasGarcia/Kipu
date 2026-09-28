@@ -1,0 +1,20 @@
+﻿accounts|Sueldo|SAVINGS|archived=0|currency=PEN
+accounts|Pasivo tarjeta •••• 7548|CREDIT_LIABILITY|archived=0|currency=PEN
+accounts|Pasivo tarjeta •••• 1234|CREDIT_LIABILITY|archived=0|currency=PEN
+accounts|Efectivo|CASH|archived=0|currency=PEN
+accounts|QA_EFECTIVO|CASH|archived=1|currency=PEN
+accounts|QA_SAVINGS|SAVINGS|archived=1|currency=PEN
+cards||CREDIT|VISA|7548|limit=1000000|archived=1
+cards|oro|DEBIT|VISA|7548|limit=0|archived=0
+cards|American Express Platinum|CREDIT|AMEX|1234|limit=5000000|archived=0
+transactions|26|max_id=1790617188298
+credit purchases|0|amount_minor=0
+ledger|2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4|balance_minor=287500
+ledger|49e5d599-1181-3612-a06a-809f1333f4c0|balance_minor=-50000
+ledger|4e4bef0a-8056-44fc-9a3f-c38e6aea8b03|balance_minor=101878
+ledger|72d6064b-4143-3d39-af24-ec117cbf5842|balance_minor=0
+instrument_outbox|ERROR|1
+instrument_outbox|PENDING|27
+movement_outbox|FAILED_PERMANENT|1
+movement_outbox|PENDING|8
+alerts|0

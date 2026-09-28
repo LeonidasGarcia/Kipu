@@ -1,0 +1,52 @@
+ROOM QA SNAPSHOT 2026-09-28 — ESTADO FINAL TRAS RECUPERAR OPERACIONES DE PRUEBA
+TRANSACTIONS: 13
+CARD_PAYMENT: 4
+LEDGER_ENTRIES: 18
+
+BALANCE PROJECTIONS
+{'alias': 'Efectivo', 'balance_minor': 102000, 'currency_code': 'PEN'}
+{'alias': 'Pasivo tarjeta •••• 1234', 'balance_minor': -50000, 'currency_code': 'PEN'}
+{'alias': 'Pasivo tarjeta •••• 7548', 'balance_minor': 0, 'currency_code': 'PEN'}
+{'alias': 'Sueldo', 'balance_minor': 287500, 'currency_code': 'PEN'}
+
+QA PURCHASES / PAYMENTS
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 400000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 10000, 'source_account_id': None, 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': 'qa_test_installments'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 4000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 100000, 'source_account_id': None, 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': 'qa_test_parser'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 106000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 100000, 'source_account_id': None, 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': 'qa_test_parser_2'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 100000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+
+LATEST LEDGER
+{'transaction_id': '3d0e6923-fa04-37e4-bf01-139b81173411', 'role': 'SOURCE', 'signed_amount_minor': -100000, 'alias': 'Sueldo'}
+{'transaction_id': '3d0e6923-fa04-37e4-bf01-139b81173411', 'role': 'LIABILITY', 'signed_amount_minor': 100000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'transaction_id': 'bccc1ff2-d2cc-36e7-aa70-96198f567f32', 'role': 'LIABILITY', 'signed_amount_minor': -100000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'transaction_id': '3745ed8c-a5a4-3671-9292-5f33d5f98ead', 'role': 'SOURCE', 'signed_amount_minor': -106000, 'alias': 'Sueldo'}
+{'transaction_id': '3745ed8c-a5a4-3671-9292-5f33d5f98ead', 'role': 'LIABILITY', 'signed_amount_minor': 106000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'transaction_id': '23f525a9-8181-3f20-8133-166be52679d2', 'role': 'LIABILITY', 'signed_amount_minor': -100000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'transaction_id': '24625f7a-f941-32f6-8d07-3d193af7e46a', 'role': 'SOURCE', 'signed_amount_minor': -4000, 'alias': 'Sueldo'}
+{'transaction_id': '24625f7a-f941-32f6-8d07-3d193af7e46a', 'role': 'LIABILITY', 'signed_amount_minor': 4000, 'alias': 'Pasivo tarjeta •••• 7548'}
+
+QA INSTALLMENTS
+{'merchant_provisional_text': 'qa_test_installments', 'installment_number': 1, 'principal_minor': 3334, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_installments', 'installment_number': 2, 'principal_minor': 3333, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_installments', 'installment_number': 3, 'principal_minor': 3333, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_parser', 'installment_number': 1, 'principal_minor': 33334, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_parser', 'installment_number': 2, 'principal_minor': 33333, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_parser', 'installment_number': 3, 'principal_minor': 33333, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_parser_2', 'installment_number': 1, 'principal_minor': 33334, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_parser_2', 'installment_number': 2, 'principal_minor': 33333, 'status': 'PAID'}
+{'merchant_provisional_text': 'qa_test_parser_2', 'installment_number': 3, 'principal_minor': 33333, 'status': 'PAID'}
+
+QA PAYMENT ALLOCATIONS
+{'merchant_provisional_text': 'qa_test_installments', 'allocated_minor': 3334}
+{'merchant_provisional_text': 'qa_test_installments', 'allocated_minor': 666}
+{'merchant_provisional_text': 'qa_test_parser', 'allocated_minor': 33334}
+{'merchant_provisional_text': 'qa_test_installments', 'allocated_minor': 2667}
+{'merchant_provisional_text': 'qa_test_parser', 'allocated_minor': 33333}
+{'merchant_provisional_text': 'qa_test_installments', 'allocated_minor': 3333}
+{'merchant_provisional_text': 'qa_test_parser', 'allocated_minor': 33333}
+{'merchant_provisional_text': 'qa_test_parser_2', 'allocated_minor': 33334}
+{'merchant_provisional_text': 'qa_test_parser_2', 'allocated_minor': 33333}
+{'merchant_provisional_text': 'qa_test_parser_2', 'allocated_minor': 33333}

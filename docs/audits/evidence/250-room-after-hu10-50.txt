@@ -1,0 +1,14 @@
+﻿summary|27|transactions|36|ledger_entries
+recent_transaction|4936efe6-4b5a-327e-a4ab-0c69c4a473bb|EXPENSE|2450000|PEN|CARD_PURCHASE|QA-HU10-50
+recent_transaction|legacy:79175e5f-aa92-458f-a2c4-08cf12ba588d|EXPENSE|2000|PEN||
+recent_transaction|legacy:c0109b7d-38c4-4afe-9f72-e09e3fca2e5b|INCOME|1900|PEN||
+card|American Express Platinum|1234|archived=0|limit_minor=5000000
+ledger_balance|Sueldo|SAVINGS|287500
+ledger_balance|Pasivo tarjeta •••• 1234|CREDIT_LIABILITY|-2500000
+ledger_balance|Efectivo|CASH|101878
+ledger_balance|Pasivo tarjeta •••• 7548|CREDIT_LIABILITY|0
+movement_outbox|FAILED_PERMANENT|1
+movement_outbox|PENDING|8
+instrument_outbox|ERROR|1
+instrument_outbox|PENDING|28
+notification_count|0

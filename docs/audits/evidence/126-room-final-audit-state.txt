@@ -1,0 +1,28 @@
+ROOM QA SNAPSHOT 2026-09-28 — ESTADO FINAL DESPUÉS DE ARCHIVAR BCP
+
+COUNTS
+{'transactions': 16, 'ledger_entries': 21, 'active_credit_cards': 0, 'archived_credit_cards': 2}
+
+BALANCES
+{'alias': 'Efectivo', 'balance_minor': 101878, 'currency_code': 'PEN'}
+{'alias': 'Pasivo tarjeta •••• 1234', 'balance_minor': -50000, 'currency_code': 'PEN'}
+{'alias': 'Pasivo tarjeta •••• 7548', 'balance_minor': 0, 'currency_code': 'PEN'}
+{'alias': 'Sueldo', 'balance_minor': 287500, 'currency_code': 'PEN'}
+
+CARD STATUS
+{'alias': 'American Express Platinum', 'issuer': 'Interbank', 'last_four_digits': '1234', 'is_archived': 1, 'credit_limit_minor_units': 5000000}
+{'alias': None, 'issuer': 'BCP', 'last_four_digits': '7548', 'is_archived': 1, 'credit_limit_minor_units': 1000000}
+
+QA TEST EXPENSES
+{'type': 'EXPENSE', 'amount_minor': 100, 'source_account_id': '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 'category_id': 'c56d0946-be26-483d-87dc-3a4893059794', 'merchant_provisional_text': 'HBO'}
+{'type': 'EXPENSE', 'amount_minor': 11, 'source_account_id': '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 'category_id': 'c56d0946-be26-483d-87dc-3a4893059794', 'merchant_provisional_text': 'QA_DUP_CASE'}
+{'type': 'EXPENSE', 'amount_minor': 11, 'source_account_id': '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 'category_id': 'c56d0946-be26-483d-87dc-3a4893059794', 'merchant_provisional_text': 'QA_DUP_CASE'}
+
+QA CARD PURCHASES/PAYMENTS
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 400000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 10000, 'source_account_id': None, 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': 'qa_test_installments'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 4000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 100000, 'source_account_id': None, 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': 'qa_test_parser'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 106000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 100000, 'source_account_id': None, 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': 'qa_test_parser_2'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 100000, 'source_account_id': '2dc32e9c-0cbb-46d3-8eb6-16f04cf65fe4', 'card_id': '37c96675-9e7f-4b5c-8f14-1292d20f0058', 'merchant_provisional_text': None}
