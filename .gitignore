@@ -48,3 +48,6 @@ venv/
 *.egg-info/
 supabase/.temp/
 supabase/.branches/
+
+# QA test run evidence (heavy screenshots, dumps, SQLite dbs)
+docs/audits/evidence/
