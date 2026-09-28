@@ -16,8 +16,7 @@ import com.kipu.app.feature.accounts.presentation.detail.AccountDetailScreen
 import com.kipu.app.feature.notifications.presentation.NotificationBadgeViewModel
 import com.kipu.app.navigation.navigateToNotifications
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kipu.app.feature.accounts.presentation.instruments.AccountFormScreen
-import com.kipu.app.feature.accounts.presentation.instruments.CardFormScreen
+import com.kipu.app.feature.accounts.presentation.instruments.UnifiedInstrumentFormScreen
 import com.kipu.app.feature.accounts.presentation.instruments.RateCatalogScreen
 
 const val ACCOUNTS_DASHBOARD_ROUTE = "accounts/dashboard"
@@ -105,7 +104,7 @@ fun NavGraphBuilder.accountsDestinations(
 
     composable(ACCOUNT_FORM_ROUTE) {
         val viewModel: AccountsViewModel = hiltViewModel()
-        AccountFormScreen(
+        UnifiedInstrumentFormScreen(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onSaveSuccess = { message -> navController.returnToAccountsDashboard(message) },
@@ -114,7 +113,7 @@ fun NavGraphBuilder.accountsDestinations(
 
     composable(CARD_FORM_ROUTE) {
         val viewModel: AccountsViewModel = hiltViewModel()
-        CardFormScreen(
+        UnifiedInstrumentFormScreen(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onSaveSuccess = { message -> navController.returnToAccountsDashboard(message) },

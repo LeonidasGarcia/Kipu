@@ -43,6 +43,9 @@ interface CardDao {
     @Query("SELECT COUNT(*) FROM cards WHERE user_id = :userId AND creation_operation_id = :creationOperationId")
     suspend fun countByCreationOperationId(userId: String, creationOperationId: String): Int
 
+    @Query("SELECT COUNT(*) FROM transactions WHERE user_id = :userId AND card_id = :cardId")
+    suspend fun countTransactionsForCard(userId: String, cardId: String): Int
+
     @Query("UPDATE cards SET alias = :alias, preset_id = :presetId, color = :color, icon = :icon, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
     suspend fun updateAppearance(userId: String, id: String, alias: String?, presetId: String?, color: String?, icon: String?, nowMicros: Long)
 

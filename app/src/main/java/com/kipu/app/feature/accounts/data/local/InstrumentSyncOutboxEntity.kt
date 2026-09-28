@@ -9,6 +9,7 @@ import androidx.room.Index
     primaryKeys = ["user_id", "operation_id"],
     indices = [
         Index(value = ["user_id", "state", "next_attempt_at"]),
+        Index(value = ["user_id", "state", "lease_expires_at"]),
         Index(value = ["user_id", "aggregate_type", "aggregate_id"]),
     ],
 )
@@ -39,6 +40,8 @@ data class InstrumentSyncOutboxEntity(
     val attemptCount: Int = 0,
     @ColumnInfo(name = "next_attempt_at")
     val nextAttemptAt: Long? = null,
+    @ColumnInfo(name = "lease_expires_at")
+    val leaseExpiresAt: Long? = null,
     @ColumnInfo(name = "error_code")
     val errorCode: String? = null,
     @ColumnInfo(name = "created_at")

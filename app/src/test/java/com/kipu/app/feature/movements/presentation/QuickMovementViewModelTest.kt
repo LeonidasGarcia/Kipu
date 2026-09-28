@@ -13,6 +13,9 @@ import com.kipu.app.feature.accounts.domain.FinancialInstrumentsRepository
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card
+import com.kipu.app.feature.accounts.domain.model.CardNetwork
+import com.kipu.app.feature.accounts.domain.model.CreditCard
+import com.kipu.app.feature.accounts.domain.usecase.ConfirmCreditPurchase
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
 import com.kipu.app.feature.categories.domain.CategoriesRepository
 import com.kipu.app.feature.categories.domain.model.Category
@@ -52,6 +55,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -85,6 +89,7 @@ class QuickMovementViewModelTest {
 
         viewModel = QuickMovementViewModel(
             registerTransactionUseCase = registerUseCase,
+            confirmCreditPurchaseUseCase = ConfirmCreditPurchase(fakeInstrumentsRepo),
             observeInstruments = observeInstruments,
             observeCategories = ObserveCategories(FakeCategoriesRepo(testUserId, testCategoryId, testIncomeCategoryId)),
             categorySyncScheduler = object : CategorySyncScheduler {
@@ -171,6 +176,39 @@ class QuickMovementViewModelTest {
 
         assertEquals(1, fakeMovementRepo.registeredCommands.size)
         assertEquals(2550L, fakeMovementRepo.registeredCommands.first().amountMinor)
+    }
+
+    @Test
+    fun `active credit card can be selected for expense without registering a cash transaction`() = runTest {
+        advanceUntilIdle()
+        val card = fakeInstrumentsRepo.creditCard
+        assertEquals(listOf(card.id.value), viewModel.uiState.value.availableCreditCards.map { it.id.value })
+
+        viewModel.onSourceCardSelected(card.id.value)
+        assertNull(viewModel.uiState.value.selectedSourceAccountId)
+        viewModel.onAmountChanged("25.50")
+        viewModel.onCategorySelected(viewModel.uiState.value.availableCategories.single())
+        viewModel.onMerchantProvisionalText("Bodega")
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(card.id.value, fakeInstrumentsRepo.confirmedPurchases.single().cardId.value)
+        assertEquals(2550L, fakeInstrumentsRepo.confirmedPurchases.single().amount.minorUnits)
+        assertEquals("Bodega", fakeInstrumentsRepo.confirmedPurchases.single().merchant)
+        assertEquals(testCategoryId.value, fakeInstrumentsRepo.confirmedPurchases.single().categoryId)
+        assertTrue(fakeMovementRepo.registeredCommands.isEmpty())
+    }
+
+    @Test
+    fun `leaving expense clears selected credit card source`() = runTest {
+        advanceUntilIdle()
+        val card = fakeInstrumentsRepo.creditCard
+
+        viewModel.onSourceCardSelected(card.id.value)
+        viewModel.onTypeSelected(MovementType.INCOME)
+
+        assertNull(viewModel.uiState.value.selectedSourceCardId)
+        assertEquals(testAccountId.value, viewModel.uiState.value.selectedSourceAccountId)
     }
 
     @Test
@@ -343,6 +381,26 @@ class QuickMovementViewModelTest {
         val transferAccountId: AccountId,
         val userId: UserId,
     ) : FinancialInstrumentsRepository {
+        val creditCard = CreditCard(
+            id = CardId.generate(),
+            userId = userId,
+            alias = "BCP Visa",
+            issuer = "BCP",
+            network = CardNetwork.VISA,
+            lastFourDigits = "7548",
+            currency = Currency.PEN,
+            creditLimitMinorUnits = 500000L,
+            billingDay = 15,
+            dueDay = 5,
+        )
+        data class Purchase(
+            val cardId: CardId,
+            val amount: Money,
+            val merchant: String,
+            val categoryId: String?,
+        )
+        val confirmedPurchases = mutableListOf<Purchase>()
+
         val accounts = listOf(
             Account(
                 id = accountId,
@@ -374,7 +432,7 @@ class QuickMovementViewModelTest {
         )
 
         override fun observeAccounts(activeOnly: Boolean): Flow<List<Account>> = flowOf(accounts)
-        override fun observeCards(activeOnly: Boolean): Flow<List<Card>> = flowOf(emptyList())
+        override fun observeCards(activeOnly: Boolean): Flow<List<Card>> = flowOf(listOf(creditCard))
         override fun observeActiveComputableCount(): Flow<Int> = flowOf(1)
         override fun observeAccountById(accountId: AccountId): Flow<Account?> = flowOf(accounts.find { it.id == accountId })
         override fun observeAccountBalance(accountId: AccountId): Flow<Money> = flowOf(Money(100000L, Currency.PEN))
@@ -391,7 +449,10 @@ class QuickMovementViewModelTest {
         override suspend fun updateCardAppearance(cardId: CardId, alias: String?, preset: com.kipu.app.feature.accounts.domain.model.CardPreset?, colorToken: String?, iconToken: String?, operationId: com.kipu.app.core.finance.domain.model.OperationId): Result<Unit> = Result.success(Unit)
         override suspend fun deleteUnusedCard(cardId: CardId, operationId: com.kipu.app.core.finance.domain.model.OperationId): Result<Unit> = Result.success(Unit)
         override suspend fun payCreditCard(cardId: CardId, sourceAccountId: AccountId, paymentAmount: Money, effectiveAt: java.time.Instant, operationId: com.kipu.app.core.finance.domain.model.OperationId): Result<Unit> = Result.success(Unit)
-        override suspend fun confirmCreditPurchase(cardId: CardId, amount: Money, merchant: String, effectiveAt: java.time.Instant, installments: Int, operationId: com.kipu.app.core.finance.domain.model.OperationId): Result<Unit> = Result.success(Unit)
+        override suspend fun confirmCreditPurchase(cardId: CardId, amount: Money, merchant: String, effectiveAt: java.time.Instant, installments: Int, operationId: com.kipu.app.core.finance.domain.model.OperationId, categoryId: String, merchantId: String?, note: String?): Result<Unit> {
+            confirmedPurchases += Purchase(cardId, amount, merchant, categoryId)
+            return Result.success(Unit)
+        }
         override suspend fun archiveInstrument(instrumentId: String, isCard: Boolean, operationId: com.kipu.app.core.finance.domain.model.OperationId): Result<Unit> = Result.success(Unit)
         override suspend fun reactivateInstrument(instrumentId: String, isCard: Boolean, operationId: com.kipu.app.core.finance.domain.model.OperationId): Result<Unit> = Result.success(Unit)
     }

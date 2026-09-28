@@ -52,6 +52,8 @@ data class CardEntity(
     val dueDay: Int? = null,
     @ColumnInfo(name = "preset_id")
     val presetId: String? = null,
+    @ColumnInfo(name = "style_preset_id")
+    val stylePresetId: String? = null,
     @ColumnInfo(name = "color")
     val color: String? = null,
     @ColumnInfo(name = "icon")

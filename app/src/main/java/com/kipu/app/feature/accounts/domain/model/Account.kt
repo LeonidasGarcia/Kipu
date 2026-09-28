@@ -11,6 +11,7 @@ enum class AccountType {
     SAVINGS,
     BANK,
     DIGITAL_WALLET,
+    CREDIT_LIABILITY,
 }
 
 enum class AccountPreset(
@@ -63,5 +64,5 @@ data class Account(
     }
 
     val isComputableForQuota: Boolean
-        get() = type != AccountType.CASH
+        get() = type != AccountType.CASH && type != AccountType.CREDIT_LIABILITY
 }

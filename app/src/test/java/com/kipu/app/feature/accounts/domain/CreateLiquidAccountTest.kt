@@ -17,6 +17,7 @@ import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.DebitCard
 import com.kipu.app.feature.accounts.domain.usecase.ArchiveInstrument
 import com.kipu.app.feature.accounts.domain.usecase.CreateLiquidAccount
+import com.kipu.app.feature.accounts.domain.usecase.ConfirmCreditPurchase
 import com.kipu.app.feature.accounts.domain.usecase.QuotaExceededException
 import com.kipu.app.feature.accounts.domain.usecase.ReactivateInstrument
 import com.kipu.app.feature.accounts.domain.usecase.RecordOpeningAdjustment
@@ -36,6 +37,17 @@ open class FakeFinancialInstrumentsRepository : FinancialInstrumentsRepository {
     val archivedInstruments = mutableListOf<String>()
     val reactivatedInstruments = mutableListOf<String>()
     var activeComputableCount = 0
+    data class ConfirmedPurchase(
+        val cardId: CardId,
+        val amount: Money,
+        val merchant: String,
+        val effectiveAt: Instant,
+        val installments: Int,
+        val categoryId: String?,
+        val merchantId: String?,
+        val note: String?,
+    )
+    val confirmedPurchases = mutableListOf<ConfirmedPurchase>()
 
     override suspend fun createLiquidAccount(account: Account, operationId: OperationId): Result<Account> {
         createdAccounts.add(account)
@@ -93,8 +105,14 @@ open class FakeFinancialInstrumentsRepository : FinancialInstrumentsRepository {
         merchant: String,
         effectiveAt: Instant,
         installments: Int,
-        operationId: OperationId
-    ): Result<Unit> = Result.success(Unit)
+        operationId: OperationId,
+        categoryId: String,
+        merchantId: String?,
+        note: String?,
+    ): Result<Unit> {
+        confirmedPurchases += ConfirmedPurchase(cardId, amount, merchant, effectiveAt, installments, categoryId, merchantId, note)
+        return Result.success(Unit)
+    }
 
     override suspend fun archiveInstrument(instrumentId: String, isCard: Boolean, operationId: OperationId): Result<Unit> {
         archivedInstruments.add(instrumentId)
@@ -129,6 +147,7 @@ class CreateLiquidAccountTest {
     private lateinit var archiveInstrument: ArchiveInstrument
     private lateinit var reactivateInstrument: ReactivateInstrument
     private lateinit var updateAppearance: UpdateInstrumentAppearance
+    private lateinit var confirmCreditPurchase: ConfirmCreditPurchase
 
     private val testUserId = UserId.generate()
 
@@ -140,6 +159,7 @@ class CreateLiquidAccountTest {
         archiveInstrument = ArchiveInstrument(fakeRepository)
         reactivateInstrument = ReactivateInstrument(fakeRepository)
         updateAppearance = UpdateInstrumentAppearance(fakeRepository)
+        confirmCreditPurchase = ConfirmCreditPurchase(fakeRepository)
     }
 
     @Test
@@ -160,6 +180,50 @@ class CreateLiquidAccountTest {
         val result = createLiquidAccount(account)
         assertTrue(result.isSuccess)
         assertEquals(1, fakeRepository.createdAccounts.size)
+    }
+
+    @Test
+    fun `credit liability account cannot be created through liquid account flow`() = runTest {
+        val account = Account(
+            id = AccountId.generate(),
+            userId = testUserId,
+            alias = "Internal credit liability",
+            type = AccountType.CREDIT_LIABILITY,
+            currency = Currency.PEN,
+            initialBalance = Money(0L, Currency.PEN),
+            openedAt = Instant.now(),
+        )
+
+        val result = createLiquidAccount(account)
+
+        assertTrue(result.isFailure)
+        assertTrue(fakeRepository.createdAccounts.isEmpty())
+    }
+
+    @Test
+    fun `credit purchase use case forwards category catalog merchant and note`() = runTest {
+        val cardId = CardId.generate()
+        val amount = Money(12_500L, Currency.PEN)
+        val occurredAt = Instant.parse("2026-09-25T15:00:00Z")
+
+        confirmCreditPurchase(
+            cardId = cardId,
+            amount = amount,
+            merchant = "Tambo",
+            effectiveAt = occurredAt,
+            installments = 1,
+            categoryId = "category-id",
+            merchantId = "merchant-id",
+            note = "Compra semanal",
+        )
+
+        val purchase = fakeRepository.confirmedPurchases.single()
+        assertEquals(cardId, purchase.cardId)
+        assertEquals(amount, purchase.amount)
+        assertEquals(occurredAt, purchase.effectiveAt)
+        assertEquals("category-id", purchase.categoryId)
+        assertEquals("merchant-id", purchase.merchantId)
+        assertEquals("Compra semanal", purchase.note)
     }
 
     @Test

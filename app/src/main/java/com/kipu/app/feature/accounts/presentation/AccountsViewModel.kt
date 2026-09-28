@@ -8,6 +8,7 @@ import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.core.finance.domain.model.OperationId
 import com.kipu.app.core.finance.domain.model.UserId
+import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.domain.FinancialInstrumentsRepository
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
@@ -23,6 +24,8 @@ import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
 import com.kipu.app.feature.accounts.domain.usecase.ReactivateInstrument
 import com.kipu.app.feature.accounts.domain.usecase.RecordOpeningAdjustment
 import com.kipu.app.feature.accounts.domain.usecase.UpdateInstrumentAppearance
+import com.kipu.app.feature.categories.domain.model.CategoryType
+import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
 import javax.inject.Inject
@@ -58,6 +61,8 @@ data class InstrumentsUiState(
     val isMasked: Boolean = false,
 )
 
+data class PurchaseCategoryOption(val id: String, val name: String)
+
 sealed interface AccountUiEvent {
     data class ShowMessage(val message: String) : AccountUiEvent
     data class Error(val message: String) : AccountUiEvent
@@ -80,6 +85,8 @@ class AccountsViewModel @Inject constructor(
     private val getReferentialRatesUseCase: com.kipu.app.feature.accounts.domain.usecase.GetReferentialRates,
     private val updatePersonalTeaUseCase: com.kipu.app.feature.accounts.domain.usecase.UpdatePersonalTea,
     private val financialInstrumentsRepository: FinancialInstrumentsRepository,
+    private val observeCategories: ObserveCategories,
+    private val sessionCoordinator: SessionCoordinator,
 ) : ViewModel() {
 
     private val _isMasked = MutableStateFlow(false)
@@ -96,6 +103,26 @@ class AccountsViewModel @Inject constructor(
 
     private val _creditNotifications = MutableStateFlow<List<CreditUtilizationNotification>>(emptyList())
     val creditNotifications: StateFlow<List<CreditUtilizationNotification>> = _creditNotifications.asStateFlow()
+
+    private val _purchaseCategories = MutableStateFlow<List<PurchaseCategoryOption>>(emptyList())
+    val purchaseCategories: StateFlow<List<PurchaseCategoryOption>> = _purchaseCategories.asStateFlow()
+
+    init {
+        sessionCoordinator.currentOwner?.verifiedUserId?.let { ownerId ->
+            viewModelScope.launch {
+                observeCategories(UserId(ownerId)).collect { roots ->
+                    _purchaseCategories.value = roots
+                        .filter { it.category.isActive && !it.category.isPlanLocked }
+                        .flatMap { root -> listOf(root) + root.subcategories }
+                        .filter {
+                            it.category.isActive && !it.category.isPlanLocked &&
+                                it.category.categoryType != CategoryType.INCOME
+                        }
+                        .map { PurchaseCategoryOption(it.category.id.value, it.displayName) }
+                }
+            }
+        }
+    }
 
     fun refreshCreditUtilizationNotifications(cardId: String? = null) {
         viewModelScope.launch {
@@ -133,9 +160,17 @@ class AccountsViewModel @Inject constructor(
         merchant: String,
         effectiveAt: Instant,
         installments: Int,
+        categoryId: String,
     ) {
         viewModelScope.launch {
-            confirmCreditPurchaseUseCase(cardId, amount, merchant, effectiveAt, installments).fold(
+            confirmCreditPurchaseUseCase(
+                cardId = cardId,
+                amount = amount,
+                merchant = merchant,
+                effectiveAt = effectiveAt,
+                installments = installments,
+                categoryId = categoryId,
+            ).fold(
                 onSuccess = { _eventChannel.send(AccountUiEvent.ShowMessage("Compra registrada; pendiente de sincronización")) },
                 onFailure = { _eventChannel.send(AccountUiEvent.Error(it.message ?: "No se pudo confirmar la compra")) },
             )
@@ -353,6 +388,7 @@ class AccountsViewModel @Inject constructor(
         preset: com.kipu.app.feature.accounts.domain.model.CardPreset?,
         colorToken: String?,
         iconToken: String?,
+        stylePresetId: String? = null,
         onSuccess: (com.kipu.app.feature.accounts.domain.model.DebitCard) -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -366,6 +402,7 @@ class AccountsViewModel @Inject constructor(
                 currency = linkedAccount.currency,
                 linkedAccountId = linkedAccount.id,
                 preset = preset,
+                stylePresetId = stylePresetId,
                 colorToken = colorToken ?: preset?.defaultColorToken,
                 iconToken = iconToken ?: preset?.defaultIconToken,
             )
@@ -397,6 +434,7 @@ class AccountsViewModel @Inject constructor(
         preset: com.kipu.app.feature.accounts.domain.model.CardPreset?,
         colorToken: String?,
         iconToken: String?,
+        stylePresetId: String? = null,
         onSuccess: (com.kipu.app.feature.accounts.domain.model.CreditCard) -> Unit = {},
     ) {
         viewModelScope.launch {
@@ -413,6 +451,7 @@ class AccountsViewModel @Inject constructor(
                 dueDay = dueDay,
                 personalTeaBps = personalTeaBps,
                 preset = preset,
+                stylePresetId = stylePresetId,
                 colorToken = colorToken ?: preset?.defaultColorToken,
                 iconToken = iconToken ?: preset?.defaultIconToken,
             )

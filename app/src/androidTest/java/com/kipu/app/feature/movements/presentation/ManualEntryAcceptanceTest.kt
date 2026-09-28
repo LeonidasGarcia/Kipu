@@ -58,6 +58,7 @@ class ManualEntryAcceptanceTest {
                     onTypeSelected = { type -> state.value = state.value.copy(type = type) },
                     onAmountChanged = { amount -> state.value = state.value.copy(amountText = amount) },
                     onSourceAccountSelected = { id -> state.value = state.value.copy(selectedSourceAccountId = id) },
+                    onSourceCardSelected = {},
                     onDestinationAccountSelected = { id -> state.value = state.value.copy(selectedDestinationAccountId = id) },
                     onCategorySelected = { category ->
                         state.value = state.value.copy(

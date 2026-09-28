@@ -1,31 +1,56 @@
 package com.kipu.app.feature.accounts.presentation.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kipu.app.ui.component.MaskedCardReference
+import com.kipu.app.ui.motion.rememberReducedMotionEnabled
+import kotlinx.coroutines.launch
 
 @Composable
 fun InstrumentCardPreview(
@@ -34,67 +59,212 @@ fun InstrumentCardPreview(
     subtitle: String,
     lastFourDigits: String? = null,
     modifier: Modifier = Modifier,
+    network: String? = null,
+    balanceLabel: String? = null,
+    amount: String? = null,
+    backgroundColor: Color = MaterialTheme.colorScheme.primaryContainer,
+    foregroundColor: Color = Color.White,
+    stylePreset: CardStylePreset? = null,
+    showCardHardware: Boolean = true,
 ) {
+    val reducedMotion = rememberReducedMotionEnabled()
+    val rotationX = remember { Animatable(0f) }
+    val rotationY = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    var glarePosition by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
+    val shape = RoundedCornerShape(16.dp)
+    val cardForeground = stylePreset?.textColor ?: foregroundColor
+    val cardBrush = stylePreset?.gradientBrush ?: Brush.linearGradient(listOf(backgroundColor, backgroundColor))
+    LaunchedEffect(reducedMotion) {
+        if (reducedMotion) {
+            rotationX.snapTo(0f)
+            rotationY.snapTo(0f)
+            glarePosition = Offset(0.5f, 0.5f)
+        }
+    }
     val accessibleDescription = buildString {
-        append("Tarjeta física simulada. ")
+        append("Vista previa de instrumento. ")
         append(title.ifBlank { "Mi instrumento" })
         append(". $instrumentType. $subtitle.")
+        if (showCardHardware) append(" Chip EMV y pago sin contacto.")
+        if (network != null) append(" Red $network.")
+        stylePreset?.let { append(" ${it.institutionCode}, nivel ${it.tierLabel}.") }
+        if (balanceLabel != null && amount != null) append(" $balanceLabel: $amount.")
         if (lastFourDigits?.length == 4 && lastFourDigits.all(Char::isDigit)) {
             append(" Termina en $lastFourDigits.")
         }
     }
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 132.dp)
-            .testTag("instrument_card_preview")
-            .semantics(mergeDescendants = true) { contentDescription = accessibleDescription },
+            .heightIn(min = 160.dp)
+            .onSizeChanged { size = it }
+            .pointerInput(reducedMotion, size) {
+                if (!reducedMotion) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            scope.launch {
+                                rotationX.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                                rotationY.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                            }
+                            glarePosition = Offset(0.5f, 0.5f)
+                        },
+                        onDragCancel = {
+                            scope.launch {
+                                rotationX.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                                rotationY.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                            }
+                            glarePosition = Offset(0.5f, 0.5f)
+                        },
+                    ) { change, _ ->
+                        val width = size.width.coerceAtLeast(1).toFloat()
+                        val height = size.height.coerceAtLeast(1).toFloat()
+                        val x = (change.position.x / width).coerceIn(0f, 1f)
+                        val y = (change.position.y / height).coerceIn(0f, 1f)
+                        scope.launch {
+                            rotationY.snapTo((x - 0.5f) * 14f)
+                            rotationX.snapTo((0.5f - y) * 14f)
+                        }
+                        glarePosition = Offset(x, y)
+                        change.consume()
+                    }
+                }
+            },
     ) {
-        Row(
+        Card(
+            shape = shape,
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+                .heightIn(min = 160.dp)
+                .graphicsLayer {
+                    if (!reducedMotion) {
+                        this.rotationX = rotationX.value
+                        this.rotationY = rotationY.value
+                        cameraDistance = 14f * density
+                    }
+                }
+                .testTag("instrument_card_preview")
+                .semantics(mergeDescendants = true) { contentDescription = accessibleDescription },
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 160.dp)
+                    .clip(shape)
+                    .background(cardBrush),
             ) {
-                Text(
-                    text = "Kipu · $instrumentType",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Text(
-                    text = title.ifBlank { "Mi instrumento" },
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
-                )
-                if (lastFourDigits?.length == 4 && lastFourDigits.all(Char::isDigit)) {
-                    MaskedCardReference(
-                        lastFourDigits = lastFourDigits,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                if (stylePreset != null) {
+                    Canvas(Modifier.fillMaxSize()) {
+                        drawCircle(
+                            color = stylePreset.accentColor.copy(alpha = 0.18f),
+                            radius = this.size.minDimension * 0.42f,
+                            center = Offset(this.size.width * 0.88f, this.size.height * 0.12f),
+                        )
+                        for (index in 0..3) {
+                            val startX = this.size.width * (0.52f + index * 0.12f)
+                            drawLine(
+                                color = stylePreset.accentColor.copy(alpha = 0.16f),
+                                start = Offset(startX, this.size.height * 0.08f),
+                                end = Offset(startX - this.size.height * 0.42f, this.size.height * 0.92f),
+                                strokeWidth = 1.dp.toPx(),
+                            )
+                        }
+                    }
+                }
+                if (!reducedMotion) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(Color.White.copy(alpha = 0.12f), Color.Transparent),
+                                    center = androidx.compose.ui.geometry.Offset(
+                                        x = size.width * (0.76f + glarePosition.x * 0.20f),
+                                        y = size.height * (0.06f + glarePosition.y * 0.30f),
+                                    ),
+                                    radius = size.width.coerceAtLeast(1) * 0.24f,
+                                ),
+                            ),
                     )
                 }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "$title · $instrumentType",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = cardForeground,
+                        )
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = cardForeground,
+                        )
+                        stylePreset?.let {
+                            Text(
+                                text = "${it.institutionCode} · ${it.tierLabel}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = cardForeground,
+                            )
+                        }
+                        if (balanceLabel != null && amount != null) {
+                            Text(balanceLabel, style = MaterialTheme.typography.labelMedium, color = cardForeground)
+                            Text(
+                                amount,
+                                style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Bold,
+                                color = cardForeground,
+                            )
+                        }
+                        if (lastFourDigits?.length == 4 && lastFourDigits.all(Char::isDigit)) {
+                            MaskedCardReference(
+                                lastFourDigits = lastFourDigits,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = cardForeground,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (showCardHardware) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = 32.dp, height = 24.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(cardForeground.copy(alpha = 0.78f)),
+                                )
+                                Text(")))", color = cardForeground, style = MaterialTheme.typography.titleMedium)
+                            }
+                            Icon(
+                                imageVector = Icons.Default.CreditCard,
+                                contentDescription = null,
+                                tint = cardForeground,
+                                modifier = Modifier.size(30.dp),
+                            )
+                            if (!network.isNullOrBlank()) {
+                                Text(network.uppercase(), color = cardForeground, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Icon(Icons.Default.AccountBalance, contentDescription = null, tint = cardForeground, modifier = Modifier.size(30.dp))
+                        }
+                    }
+                }
             }
-            Spacer(Modifier.width(12.dp))
-            Icon(
-                imageVector = Icons.Default.CreditCard,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(36.dp),
-            )
         }
     }
 }

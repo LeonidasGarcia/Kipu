@@ -132,6 +132,7 @@ fun AccountFormScreen(
                     AccountType.SAVINGS -> "Ahorros"
                     AccountType.BANK -> "Corriente"
                     AccountType.DIGITAL_WALLET -> "Billetera"
+                    AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
                 },
                 subtitle = "${selectedPreset?.defaultName ?: "Cuenta genérica"} · ${selectedCurrency.name}",
             )
@@ -159,12 +160,13 @@ fun AccountFormScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AccountType.entries.forEach { type ->
+                AccountType.entries.filter { it != AccountType.CREDIT_LIABILITY }.forEach { type ->
                     val label = when (type) {
                         AccountType.CASH -> "Efectivo"
                         AccountType.SAVINGS -> "Ahorros"
                         AccountType.BANK -> "Corriente"
                         AccountType.DIGITAL_WALLET -> "Billetera"
+                        AccountType.CREDIT_LIABILITY -> error("Credit liability accounts are internal")
                     }
                     FilterChip(
                         selected = selectedType == type,

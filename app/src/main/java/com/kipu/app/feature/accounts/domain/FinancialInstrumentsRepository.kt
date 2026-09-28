@@ -53,6 +53,9 @@ interface FinancialInstrumentsRepository {
         effectiveAt: Instant,
         installments: Int = 1,
         operationId: OperationId = OperationId.generate(),
+        categoryId: String,
+        merchantId: String? = null,
+        note: String? = null,
     ): Result<Unit>
 
     // Shared lifecycle

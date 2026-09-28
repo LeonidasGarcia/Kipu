@@ -47,6 +47,7 @@ import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.domain.model.CreditCard
+import com.kipu.app.feature.accounts.domain.model.CreditLiabilityAccountIds
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
 import com.kipu.app.feature.accounts.domain.model.DebitCard
@@ -108,6 +109,9 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     }
 
     override suspend fun createLiquidAccount(account: Account, operationId: OperationId): Result<Account> {
+        if (account.type == AccountType.CREDIT_LIABILITY) {
+            return Result.failure(IllegalArgumentException("Credit liability accounts are managed by their card"))
+        }
         val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
         val nowMicros = System.currentTimeMillis() * 1000L
         val movementId = MovementId.generate().value
@@ -392,6 +396,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         billingDay = null,
                         dueDay = null,
                         presetId = card.preset?.name,
+                        stylePresetId = card.stylePresetId,
                         color = card.colorToken,
                         icon = card.iconToken,
                         isArchived = false,
@@ -401,7 +406,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     )
                 )
 
-                val payloadHash = sha256("${operationId.value}:${card.id.value}:${card.lastFourDigits}")
+                val payloadHash = sha256("${operationId.value}:${card.id.value}:${card.lastFourDigits}:${card.stylePresetId.orEmpty()}")
                 val payload = RegisterCardRequestDto(
                     operationId = operationId.value,
                     cardId = card.id.value,
@@ -416,6 +421,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     billingDay = null,
                     dueDay = null,
                     presetId = card.preset?.name,
+                    stylePresetId = card.stylePresetId,
                     color = card.colorToken,
                     icon = card.iconToken,
                     payloadHash = payloadHash,
@@ -448,10 +454,37 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
 
     override suspend fun registerCreditCard(card: CreditCard, operationId: OperationId): Result<CreditCard> {
         val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
+        if (card.userId.value != userId) {
+            return Result.failure(IllegalArgumentException("Credit card owner does not match the active session"))
+        }
         val nowMicros = System.currentTimeMillis() * 1000L
 
         return runCatching {
             database.withTransaction {
+                val liabilityAccountId = card.liabilityAccountId.value
+                accountDao.insertIfAbsent(
+                    AccountEntity(
+                        id = liabilityAccountId,
+                        userId = userId,
+                        creationOperationId = CreditLiabilityAccountIds.creationOperationId(userId, card.id.value),
+                        alias = "Pasivo tarjeta •••• ${card.lastFourDigits}",
+                        type = "CREDIT_LIABILITY",
+                        currency = card.currency.name,
+                        presetId = null,
+                        color = null,
+                        icon = null,
+                        initialBalanceMinorUnits = 0L,
+                        openedAt = nowMicros,
+                        isArchived = false,
+                        remoteRevision = 0L,
+                        createdAt = nowMicros,
+                        updatedAt = nowMicros,
+                    ),
+                )
+                val liabilityAccount = requireNotNull(accountDao.getById(userId, liabilityAccountId))
+                require(liabilityAccount.type == "CREDIT_LIABILITY" && liabilityAccount.currency == card.currency.name) {
+                    "Credit card liability account is incompatible"
+                }
                 cardDao.insert(
                     CardEntity(
                         id = card.id.value,
@@ -463,11 +496,12 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         network = card.network.name,
                         lastFourDigits = card.lastFourDigits,
                         currency = card.currency.name,
-                        accountId = null,
+                        accountId = liabilityAccountId,
                         creditLimitMinorUnits = card.creditLimitMinorUnits,
                         billingDay = card.billingDay,
                         dueDay = card.dueDay,
                         presetId = card.preset?.name,
+                        stylePresetId = card.stylePresetId,
                         color = card.colorToken,
                         icon = card.iconToken,
                         isArchived = false,
@@ -478,7 +512,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     )
                 )
 
-                val payloadHash = sha256("${operationId.value}:${card.id.value}:${card.creditLimitMinorUnits}")
+                val payloadHash = sha256("${operationId.value}:${card.id.value}:${card.creditLimitMinorUnits}:${card.stylePresetId.orEmpty()}")
                 val payload = RegisterCardRequestDto(
                     operationId = operationId.value,
                     cardId = card.id.value,
@@ -488,11 +522,12 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     lastFourDigits = card.lastFourDigits,
                     currency = card.currency.name,
                     alias = card.alias,
-                    accountId = null,
+                    accountId = liabilityAccountId,
                     creditLimitMinorUnits = card.creditLimitMinorUnits,
                     billingDay = card.billingDay,
                     dueDay = card.dueDay,
                     presetId = card.preset?.name,
+                    stylePresetId = card.stylePresetId,
                     color = card.colorToken,
                     icon = card.iconToken,
                     payloadHash = payloadHash,
@@ -583,7 +618,14 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         CreditProductReference(
                             id = item.id,
                             institutionCode = item.institutionCode,
-                            institutionName = item.institutionName ?: item.institutionCode,
+                            institutionName = item.institutionName?.takeIf(String::isNotBlank)
+                                ?: when (item.institutionCode.uppercase()) {
+                                    "BCP" -> "Banco de Crédito del Perú"
+                                    "BBVA" -> "BBVA Perú"
+                                    "INTERBANK" -> "Interbank"
+                                    "SCOTIABANK" -> "Scotiabank Perú"
+                                    else -> item.institutionCode
+                                },
                             productName = item.productName,
                             cardNetwork = item.cardNetwork,
                             penTeaMinBps = item.referenceTeaPenMinBps,
@@ -747,11 +789,19 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         val nowMicros = System.currentTimeMillis() * 1000L
         val nowMillis = System.currentTimeMillis()
         val transactionId = stableCreditTransactionId(userId, operationId.value, "payment")
+        val transactionCommand = CreditTransactionCommandDto(
+            id = transactionId,
+            type = "TRANSFER",
+            amountMinor = paymentAmount.minorUnits,
+            currencyCode = paymentAmount.currency.name,
+            sourceAccountId = sourceAccountId.value,
+            occurredAt = effectiveAt.toString(),
+            cardId = cardId.value,
+            operationKind = "CARD_PAYMENT",
+            installmentCount = 1,
+        )
         val payloadHash = sha256(
-            listOf(
-                "TRANSFER", "CARD_PAYMENT", transactionId, cardId.value, sourceAccountId.value,
-                paymentAmount.minorUnits.toString(), paymentAmount.currency.name, effectiveAt.toString(),
-            ).joinToString("|"),
+            """{"contract_version":1,"transaction":${creditCommandJson.encodeToString(transactionCommand)}}""",
         )
 
         val commitResult = runCatching {
@@ -761,12 +811,16 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     require(priorReceipt.requestHash == payloadHash) {
                         "Idempotency conflict: operation identity was reused with a different payment"
                     }
+                    require(priorReceipt.status == "APPLIED") { "This payment was rejected; submit a new operation after reviewing the error" }
                     return@withTransaction
                 }
                 val priorCommand = syncDao.getByOperationId(userId, operationId.value)
                 if (priorCommand != null) {
                     require(priorCommand.payloadHash == payloadHash) {
                         "Idempotency conflict: operation identity was reused with a different payment"
+                    }
+                    require(priorCommand.state !in setOf("FAILED_PERMANENT", "CONFLICT")) {
+                        "This payment was rejected; submit a new operation after reviewing the error"
                     }
                     return@withTransaction
                 }
@@ -780,6 +834,14 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     "Only an active bank or savings account can pay a credit card"
                 }
                 require(creditCard.type == "CREDIT") { "Only credit cards accept debt payments" }
+                val liabilityAccountId = requireNotNull(creditCard.accountId) {
+                    "Credit card liability account is missing"
+                }
+                val liabilityAccount = accountDao.getById(userId, liabilityAccountId)
+                    ?: throw IllegalArgumentException("Credit card liability account not found")
+                require(liabilityAccount.type == "CREDIT_LIABILITY" && liabilityAccount.currency == creditCard.currency) {
+                    "Credit card liability account is incompatible"
+                }
                 require(!creditCard.isArchived) { "Cannot pay archived credit card" }
                 require(paymentAmount.minorUnits > 0L) { "Payment amount must be positive" }
                 val lockedIds = lockedInstrumentIds(userId)
@@ -796,22 +858,16 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 val currentDebt = outstandingInstallments.fold(0L) { sum, item ->
                     Math.addExact(sum, item.outstandingMinor)
                 }
+                val ledgerDebt = creditDao.getLedgerOutstandingPrincipalForCard(userId, cardId.value)
+                require(ledgerDebt >= 0L && ledgerDebt == currentDebt) {
+                    "Credit liability ledger does not match the installment schedule"
+                }
                 require(currentDebt >= paymentAmount.minorUnits) { "Payment amount exceeds current card debt" }
 
                 val command = CreditCommandRequestDto(
                     idempotencyKey = operationId.value,
                     requestHash = payloadHash,
-                    transaction = CreditTransactionCommandDto(
-                        id = transactionId,
-                        type = "TRANSFER",
-                        amountMinor = paymentAmount.minorUnits,
-                        currencyCode = paymentAmount.currency.name,
-                        sourceAccountId = sourceAccountId.value,
-                        occurredAt = effectiveAt.toString(),
-                        cardId = cardId.value,
-                        operationKind = "CARD_PAYMENT",
-                        installmentCount = 1,
-                    ),
+                    transaction = transactionCommand,
                 )
                 val transaction = com.kipu.app.feature.movements.data.local.TransactionEntity(
                     id = transactionId,
@@ -843,11 +899,26 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                             currencyCode = paymentAmount.currency.name,
                             createdAt = nowMillis,
                         ),
+                        com.kipu.app.feature.movements.data.local.LedgerEntryEntity(
+                            id = stableCreditTransactionId(userId, operationId.value, "liability-ledger"),
+                            userId = userId,
+                            transactionId = transactionId,
+                            accountId = liabilityAccountId,
+                            role = "LIABILITY",
+                            signedAmountMinor = paymentAmount.minorUnits,
+                            currencyCode = paymentAmount.currency.name,
+                            createdAt = nowMillis,
+                        ),
                     ),
                 )
                 database.financialMovementDao().rebuildAccountProjection(
                     userId = userId,
                     accountId = sourceAccountId.value,
+                    now = nowMillis,
+                )
+                database.financialMovementDao().rebuildAccountProjection(
+                    userId = userId,
+                    accountId = liabilityAccountId,
                     now = nowMillis,
                 )
 
@@ -907,7 +978,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         userId = userId,
                         commandType = "PAY_CREDIT_CARD",
                         aggregateType = "CARD",
-                        aggregateId = transactionId,
+                        aggregateId = cardId.value,
                         predecessorOperationId = predecessorOpId,
                         expectedRevision = creditCard.remoteRevision,
                         contractVersion = 1,
@@ -931,16 +1002,32 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         effectiveAt: Instant,
         installments: Int,
         operationId: OperationId,
+        categoryId: String,
+        merchantId: String?,
+        note: String?,
     ): Result<Unit> {
         val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
         val nowMicros = System.currentTimeMillis() * 1000L
         val nowMillis = System.currentTimeMillis()
         val transactionId = stableCreditTransactionId(userId, operationId.value, "purchase")
+        val transactionCommand = CreditTransactionCommandDto(
+            id = transactionId,
+            type = "EXPENSE",
+            amountMinor = amount.minorUnits,
+            currencyCode = amount.currency.name,
+            categoryId = categoryId,
+            merchantId = merchantId,
+            merchantProvisionalText = merchant.trim().takeIf { merchantId == null },
+            occurredAt = effectiveAt.toString(),
+            note = note?.takeIf(String::isNotBlank),
+            cardId = cardId.value,
+            operationKind = "CARD_PURCHASE",
+            installmentCount = installments,
+        )
+        // A local collision check over a typed JSON command. PostgreSQL independently
+        // computes the authoritative receipt hash from its canonical JSONB value.
         val payloadHash = sha256(
-            listOf(
-                "EXPENSE", "CARD_PURCHASE", transactionId, cardId.value, amount.minorUnits.toString(),
-                amount.currency.name, merchant.trim(), installments.toString(), effectiveAt.toString(),
-            ).joinToString("|"),
+            """{"contract_version":1,"transaction":${creditCommandJson.encodeToString(transactionCommand)}}""",
         )
 
         val commitResult = runCatching {
@@ -950,6 +1037,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     require(priorReceipt.requestHash == payloadHash) {
                         "Idempotency conflict: operation identity was reused with a different purchase"
                     }
+                    require(priorReceipt.status == "APPLIED") { "This purchase was rejected; submit a new operation after reviewing the error" }
                     return@withTransaction
                 }
                 val priorCommand = syncDao.getByOperationId(userId, operationId.value)
@@ -957,12 +1045,23 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     require(priorCommand.payloadHash == payloadHash) {
                         "Idempotency conflict: operation identity was reused with a different purchase"
                     }
+                    require(priorCommand.state !in setOf("FAILED_PERMANENT", "CONFLICT")) {
+                        "This purchase was rejected; submit a new operation after reviewing the error"
+                    }
                     return@withTransaction
                 }
 
                 val card = cardDao.getById(userId, cardId.value)
                     ?: throw IllegalArgumentException("Card not found: " + cardId.value)
                 require(card.type == "CREDIT") { "Only credit cards can record credit purchases" }
+                val liabilityAccountId = requireNotNull(card.accountId) {
+                    "Credit card liability account is missing"
+                }
+                val liabilityAccount = accountDao.getById(userId, liabilityAccountId)
+                    ?: throw IllegalArgumentException("Credit card liability account not found")
+                require(liabilityAccount.type == "CREDIT_LIABILITY" && liabilityAccount.currency == card.currency) {
+                    "Credit card liability account is incompatible"
+                }
                 require(!card.isArchived) { "Cannot record purchase on archived card" }
                 require(cardId.value !in lockedInstrumentIds(userId)) {
                     "Card is locked by the Free plan selection"
@@ -971,6 +1070,29 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 require(amount.minorUnits > 0L) { "Purchase amount must be positive" }
                 require(installments in 1..36) { "Installments must be between 1 and 36: $installments" }
                 require(merchant.isNotBlank()) { "Merchant cannot be blank" }
+                require(categoryId.isNotBlank()) { "A purchase category is required" }
+                val category = database.categoryDao().getCategoryById(categoryId)
+                    ?: throw IllegalArgumentException("Purchase category not found")
+                require(category.isActive) { "Purchase category is inactive" }
+                require(category.userId == null || category.userId == userId) {
+                    "Purchase category belongs to another owner"
+                }
+                require(category.categoryType != "INCOME") { "Purchase category must classify an expense" }
+                require(!isPlanLockedCategory(userId, category)) { "Purchase category is locked by the Free plan selection" }
+                val creditDao = database.creditDao()
+                val currentDebt = creditDao.getLedgerOutstandingPrincipalForCard(userId, cardId.value)
+                val scheduledDebt = creditDao.getOutstandingInstallmentsForCard(userId, cardId.value)
+                    .fold(0L) { sum, item -> Math.addExact(sum, item.outstandingMinor) }
+                require(currentDebt == scheduledDebt) {
+                    "Credit liability ledger does not match the installment schedule"
+                }
+                val debtAfterPurchase = Math.addExact(currentDebt, amount.minorUnits)
+                val creditLimit = requireNotNull(card.creditLimitMinorUnits) {
+                    "Credit card limit is not configured"
+                }
+                require(debtAfterPurchase <= creditLimit) {
+                    "Purchase would exceed the available credit limit"
+                }
 
                 val peruDate = effectiveAt.atZone(ZoneId.of("America/Lima")).toLocalDate()
                 val firstDueDate = CreditCalculations.calculateFirstInstallmentDueDate(
@@ -990,17 +1112,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 val command = CreditCommandRequestDto(
                     idempotencyKey = operationId.value,
                     requestHash = payloadHash,
-                    transaction = CreditTransactionCommandDto(
-                        id = transactionId,
-                        type = "EXPENSE",
-                        amountMinor = amount.minorUnits,
-                        currencyCode = amount.currency.name,
-                        merchantProvisionalText = merchant.trim(),
-                        occurredAt = effectiveAt.toString(),
-                        cardId = cardId.value,
-                        operationKind = "CARD_PURCHASE",
-                        installmentCount = installments,
-                    ),
+                    transaction = transactionCommand,
                 )
                 val transaction = com.kipu.app.feature.movements.data.local.TransactionEntity(
                     id = transactionId,
@@ -1008,8 +1120,11 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     type = "EXPENSE",
                     amountMinor = amount.minorUnits,
                     currencyCode = amount.currency.name,
-                    merchantProvisionalText = merchant.trim(),
+                    categoryId = categoryId,
+                    merchantId = merchantId,
+                    merchantProvisionalText = merchant.trim().takeIf { merchantId == null },
                     occurredAt = effectiveAt.toEpochMilli(),
+                    note = note?.takeIf(String::isNotBlank),
                     status = "ACTIVE",
                     syncStatus = "PENDING",
                     createdAt = nowMillis,
@@ -1019,6 +1134,25 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     installmentCount = installments,
                 )
                 database.movementDao().insertTransaction(transaction)
+                database.movementDao().insertLedgerEntries(
+                    listOf(
+                        com.kipu.app.feature.movements.data.local.LedgerEntryEntity(
+                            id = stableCreditTransactionId(userId, operationId.value, "liability-ledger"),
+                            userId = userId,
+                            transactionId = transactionId,
+                            accountId = liabilityAccountId,
+                            role = "LIABILITY",
+                            signedAmountMinor = -amount.minorUnits,
+                            currencyCode = amount.currency.name,
+                            createdAt = nowMillis,
+                        ),
+                    ),
+                )
+                database.financialMovementDao().rebuildAccountProjection(
+                    userId = userId,
+                    accountId = liabilityAccountId,
+                    now = nowMillis,
+                )
                 database.creditDao().insertInstallments(
                     principalSchedule.schedule.map { installment ->
                         com.kipu.app.feature.accounts.data.local.CreditInstallmentEntity(
@@ -1059,7 +1193,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         userId = userId,
                         commandType = "CONFIRM_CREDIT_PURCHASE",
                         aggregateType = "CARD",
-                        aggregateId = transactionId,
+                        aggregateId = cardId.value,
                         predecessorOperationId = predecessorOpId,
                         expectedRevision = card.remoteRevision,
                         contractVersion = 1,
@@ -1207,7 +1341,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     }
 
     private fun AccountEntity.isVisibleInDomain(): Boolean =
-        runCatching { AccountType.valueOf(type) }.isSuccess
+        runCatching { AccountType.valueOf(type) }.getOrNull()?.let { it != AccountType.CREDIT_LIABILITY } == true
 
     private fun CardEntity.toDomain(isPlanLocked: Boolean = false): Card {
         val curr = Currency.fromCode(currency)
@@ -1222,6 +1356,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 currency = curr,
                 linkedAccountId = AccountId(requireNotNull(accountId)),
                 preset = CardPreset.fromId(presetId),
+                stylePresetId = stylePresetId,
                 colorToken = color,
                 iconToken = icon,
                 isArchived = isArchived,
@@ -1243,7 +1378,9 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 billingDay = billingDay ?: 1,
                 dueDay = dueDay ?: 1,
                 personalTeaBps = personalTeaBps,
+                liabilityAccountId = AccountId(requireNotNull(accountId) { "Credit card liability account is missing" }),
                 preset = CardPreset.fromId(presetId),
+                stylePresetId = stylePresetId,
                 colorToken = color,
                 iconToken = icon,
                 isArchived = isArchived,
@@ -1361,6 +1498,29 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         ).planLockedResourceIds
     }
 
+    private suspend fun isPlanLockedCategory(
+        userId: String,
+        category: com.kipu.app.feature.categories.data.local.CategoryEntity,
+    ): Boolean {
+        val root = category.parentId?.let { database.categoryDao().getCategoryById(it) } ?: category
+        if (root.parentId != null || root.origin != "CUSTOM" || root.userId != userId) return false
+        val activeRoots = database.categoryDao().getCategoriesForUser(userId)
+            .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+        val selected = database.planQuotaSelectionDao()
+            .getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
+        val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
+        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
+            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        val quota = quotaPolicy.evaluate(
+            group = QuotaGroup.CUSTOM_CATEGORIES,
+            activeResourceIds = activeRoots.map { it.id },
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        )
+        return root.id in quota.planLockedResourceIds
+    }
+
     override fun observeSelectedFreeInstrumentIds(): Flow<Set<String>> =
         sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
@@ -1396,7 +1556,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 is LocalAccess.Available -> {
                     combine(
                         cardDao.observeById(access.userId, cardId.value),
-                        database.creditDao().observeOutstandingPrincipalForCard(access.userId, cardId.value),
+                            database.creditDao().observeLedgerOutstandingPrincipalForCard(access.userId, cardId.value),
                     ) { card, debtMinorUnits ->
                         if (card == null) {
                             Money(0L, Currency.PEN)
