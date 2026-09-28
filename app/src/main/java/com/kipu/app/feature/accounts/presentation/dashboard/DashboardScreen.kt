@@ -60,6 +60,7 @@ import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
+import com.kipu.app.ui.component.formatMinorUnits
 import com.kipu.app.feature.notifications.presentation.UnreadNotificationBadge
 
 import androidx.compose.material.icons.filled.Settings
@@ -230,7 +231,11 @@ fun DashboardScreen(
                             }
                         }
 
-                        if (!data?.creditCards.isNullOrEmpty()) {
+                        val activeCreditCards = data?.creditCards.orEmpty().filter { !it.card.isArchived }
+                        val archivedCreditCardsWithDebt = data?.creditCards.orEmpty().filter {
+                            it.card.isArchived && it.debt.minorUnits > 0L
+                        }
+                        if (activeCreditCards.isNotEmpty()) {
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -255,7 +260,7 @@ fun DashboardScreen(
                                 }
                             }
 
-                            items(data.creditCards, key = { it.card.id.value }) { creditItem ->
+                            items(activeCreditCards, key = { it.card.id.value }) { creditItem ->
                                 com.kipu.app.feature.accounts.presentation.components.CreditCardSummaryCard(
                                     creditCardWithSummary = creditItem,
                                     onClick = { onCardClick(creditItem.card.id.value) },
@@ -263,10 +268,14 @@ fun DashboardScreen(
                             }
                         }
 
-                        val archivedCardsNotInDebtSummary = instruments.archivedCards.filter { card ->
-                            data?.creditCards?.none { it.card.id == card.id } ?: true
+                        val archivedCardsWithoutDebtSummary = instruments.archivedCards.filter { card ->
+                            archivedCreditCardsWithDebt.none { it.card.id == card.id }
                         }
-                        if (instruments.archivedAccounts.isNotEmpty() || archivedCardsNotInDebtSummary.isNotEmpty()) {
+                        if (
+                            instruments.archivedAccounts.isNotEmpty() ||
+                            archivedCreditCardsWithDebt.isNotEmpty() ||
+                            archivedCardsWithoutDebtSummary.isNotEmpty()
+                        ) {
                             item {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -283,10 +292,19 @@ fun DashboardScreen(
                                     onClick = { onAccountClick(account.id.value) },
                                 )
                             }
-                            items(archivedCardsNotInDebtSummary, key = { "archived-card-${it.id.value}" }) { card ->
+                            items(archivedCreditCardsWithDebt, key = { "archived-debt-card-${it.card.id.value}" }) { item ->
+                                ArchivedInstrumentCard(
+                                    title = item.card.alias ?: "${item.card.issuer} ${item.card.network}",
+                                    subtitle = "${item.card.issuer} •••• ${item.card.lastFourDigits} · Deuda: ${item.card.currency.name} ${formatMinorUnits(item.debt.minorUnits)}",
+                                    badge = "Archivada · Deuda pendiente",
+                                    onClick = { onCardClick(item.card.id.value) },
+                                )
+                            }
+                            items(archivedCardsWithoutDebtSummary, key = { "archived-card-${it.id.value}" }) { card ->
                                 ArchivedInstrumentCard(
                                     title = card.alias ?: "${card.issuer} ${card.network}",
                                     subtitle = "${card.issuer} • ${card.network} •••• ${card.lastFourDigits}",
+                                    badge = "Archivada",
                                     onClick = { onCardClick(card.id.value) },
                                 )
                             }
@@ -320,6 +338,7 @@ fun DashboardScreen(
 private fun ArchivedInstrumentCard(
     title: String,
     subtitle: String,
+    badge: String = "Archivado",
     onClick: () -> Unit,
 ) {
     Card(
@@ -343,7 +362,19 @@ private fun ArchivedInstrumentCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Text("Archivado", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                val badgeColors = if (badge.contains("Deuda pendiente")) {
+                    MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+                }
+                Surface(shape = MaterialTheme.shapes.small, color = badgeColors.first) {
+                    Text(
+                        badge,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = badgeColors.second,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
             }
             Text(
                 text = "El historial se conserva. Toca para ver o reactivar.",

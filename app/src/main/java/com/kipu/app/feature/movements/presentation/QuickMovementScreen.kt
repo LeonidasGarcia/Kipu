@@ -1,17 +1,19 @@
 package com.kipu.app.feature.movements.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,6 +33,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -41,8 +45,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -68,11 +71,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +90,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.R
 import com.kipu.app.feature.categories.presentation.components.MerchantPickerBottomSheet
 import com.kipu.app.feature.categories.presentation.components.MerchantPickerViewModel
+import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.movements.domain.model.MovementType
 import java.text.SimpleDateFormat
@@ -96,12 +102,14 @@ import java.util.Locale
 import com.kipu.app.ui.theme.KipuExpense
 import com.kipu.app.ui.theme.KipuIncome
 import com.kipu.app.ui.theme.KipuMotionTokens
+import com.kipu.app.ui.motion.rememberReducedMotionEnabled
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickMovementBottomSheet(
     onDismissRequest: () -> Unit,
     onMessage: (String) -> Unit = {},
+    onSaved: (MovementType) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: QuickMovementViewModel = hiltViewModel(),
     merchantPickerViewModel: MerchantPickerViewModel = hiltViewModel(),
@@ -117,6 +125,7 @@ fun QuickMovementBottomSheet(
         viewModel.events.collect { event ->
             when (event) {
                 is QuickMovementUiEvent.TransactionSaved -> {
+                    onSaved(event.movementType)
                     onDismissRequest()
                     onMessage(event.message)
                 }
@@ -226,7 +235,7 @@ fun QuickMovementBottomSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuickMovementContent(
     uiState: QuickMovementUiState,
@@ -247,6 +256,7 @@ fun QuickMovementContent(
 ) {
     val scrollState = rememberScrollState()
     val colors = MaterialTheme.colorScheme
+    var showCategoryPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -429,52 +439,46 @@ fun QuickMovementContent(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Text(
+                    text = if (uiState.type == MovementType.EXPENSE) "Categoría *" else "Categoría (opcional)",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant,
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { showCategoryPicker = true },
+                    enabled = uiState.availableCategories.isNotEmpty(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("category_picker_open"),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text(
-                        text = if (uiState.type == MovementType.EXPENSE) "Categoría *" else "Categoría (opcional)",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant
-                    )
-                    if (uiState.selectedCategoryName != null) {
-                        Text(
-                            text = uiState.selectedCategoryName,
-                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = colors.primary
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = resolveCategoryIcon(uiState.selectedCategoryIcon ?: "category"),
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(20.dp),
                         )
+                        Text(
+                            text = uiState.selectedCategoryName
+                                ?: if (uiState.availableCategories.isEmpty()) "Cargando categorías" else "Elegir categoría",
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start,
+                            maxLines = 1,
+                        )
+                        Icon(Icons.Default.ExpandMore, contentDescription = "Mostrar categorías")
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
                 if (uiState.availableCategories.isEmpty()) {
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         "Cargando categorías. Conéctate para sincronizarlas si aún no aparecen.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = colors.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    uiState.availableCategories.forEach { category ->
-                        val isSelected = uiState.selectedCategoryId == category.id
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onCategorySelected(category) },
-                            label = { Text(category.name) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = colors.primaryContainer,
-                                selectedLabelColor = colors.onPrimaryContainer,
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag("chip_cat_${category.id}"),
-                        )
-                    }
                 }
                 if (uiState.categoryError != null) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -482,20 +486,29 @@ fun QuickMovementContent(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(
-                        onClick = onOpenMerchantPicker,
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
-                    ) {
-                        Text(
-                            uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
-                            maxLines = 1,
-                        )
-                    }
-                    if (uiState.merchantName.isNotBlank()) {
-                        IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text("Comercio (opcional)", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = onOpenMerchantPicker,
+                                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
+                            ) {
+                                Text(
+                                    uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
+                                    maxLines = 1,
+                                )
+                            }
+                            if (uiState.merchantName.isNotBlank()) {
+                                IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
+                                }
+                            }
                         }
                     }
                 }
@@ -615,6 +628,160 @@ fun QuickMovementContent(
                     text = stringResource(R.string.movement_save),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
+            }
+        }
+    }
+
+    if (showCategoryPicker) {
+        CategoryPickerBottomSheet(
+            categories = uiState.availableCategories,
+            selectedCategoryId = uiState.selectedCategoryId,
+            onSelect = onCategorySelected,
+            onDismiss = { showCategoryPicker = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CategoryPickerBottomSheet(
+    categories: List<CategoryOption>,
+    selectedCategoryId: String?,
+    onSelect: (CategoryOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val reducedMotion = rememberReducedMotionEnabled()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var expandedRoots by remember { mutableStateOf(emptySet<String>()) }
+    val roots = categories.filter { it.parentCategoryId == null }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = colors.surface,
+        modifier = Modifier.testTag("category_picker_sheet"),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 560.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text("Elegir categoría", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Elige una categoría principal o despliega sus subcategorías.",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+            )
+            HorizontalDivider(color = colors.outlineVariant)
+            roots.forEachIndexed { index, root ->
+                val children = categories.filter { it.parentCategoryId == root.id }
+                val expanded = root.id in expandedRoots
+                val duration = if (reducedMotion) 0 else KipuMotionTokens.FastMillis
+                val rotation by animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    animationSpec = tween(durationMillis = duration, easing = FastOutSlowInEasing),
+                    label = "category-chevron-${root.id}",
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = { onSelect(root); onDismiss() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .semantics { selected = root.id == selectedCategoryId }
+                            .testTag("category_root_${root.id}"),
+                    ) {
+                        Icon(
+                            imageVector = resolveCategoryIcon(root.icon),
+                            contentDescription = null,
+                            tint = if (root.id == selectedCategoryId) colors.primary else colors.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = root.name,
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Start,
+                            color = if (root.id == selectedCategoryId) colors.primary else colors.onSurface,
+                            fontWeight = if (root.id == selectedCategoryId) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                    if (children.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                expandedRoots = if (expanded) expandedRoots - root.id else expandedRoots + root.id
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .semantics {
+                                    contentDescription = if (expanded) "Contraer ${root.name}" else "Expandir ${root.name}"
+                                    stateDescription = if (expanded) "Expandido" else "Contraído"
+                                }
+                                .testTag("category_expand_${root.id}"),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ExpandMore,
+                                contentDescription = null,
+                                tint = colors.onSurfaceVariant,
+                                modifier = Modifier.graphicsLayer { rotationZ = rotation },
+                            )
+                        }
+                    }
+                }
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = if (reducedMotion) EnterTransition.None else
+                        expandVertically(tween(KipuMotionTokens.FastMillis, easing = FastOutSlowInEasing)) +
+                            fadeIn(tween(KipuMotionTokens.FastMillis)),
+                    exit = if (reducedMotion) ExitTransition.None else
+                        shrinkVertically(tween(KipuMotionTokens.FastMillis, easing = FastOutSlowInEasing)) +
+                            fadeOut(tween(KipuMotionTokens.FastMillis)),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, bottom = 8.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surfaceContainerLow)
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        children.forEach { child ->
+                            TextButton(
+                                onClick = { onSelect(child); onDismiss() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .semantics { selected = child.id == selectedCategoryId }
+                                    .testTag("category_subcategory_${child.id}"),
+                            ) {
+                                Icon(
+                                    imageVector = resolveCategoryIcon(child.icon),
+                                    contentDescription = null,
+                                    tint = if (child.id == selectedCategoryId) colors.primary else colors.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = child.name,
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.Start,
+                                    color = if (child.id == selectedCategoryId) colors.primary else colors.onSurface,
+                                    fontWeight = if (child.id == selectedCategoryId) FontWeight.SemiBold else FontWeight.Normal,
+                                )
+                            }
+                        }
+                    }
+                }
+                if (index < roots.lastIndex) HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
             }
         }
     }

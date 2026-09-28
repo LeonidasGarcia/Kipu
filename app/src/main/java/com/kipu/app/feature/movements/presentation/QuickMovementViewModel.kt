@@ -42,7 +42,11 @@ data class CategoryOption(
     val name: String,
     val icon: String,
     val categoryType: CategoryType = CategoryType.GENERAL,
-)
+    val parentCategoryId: String? = null,
+    val parentName: String? = null,
+) {
+    val displayName: String get() = parentName?.let { "$it > $name" } ?: name
+}
 
 data class QuickMovementUiState(
     val type: MovementType = MovementType.EXPENSE,
@@ -74,7 +78,10 @@ data class QuickMovementUiState(
 )
 
 sealed interface QuickMovementUiEvent {
-    data class TransactionSaved(val message: String) : QuickMovementUiEvent
+    data class TransactionSaved(
+        val message: String,
+        val movementType: MovementType = MovementType.EXPENSE,
+    ) : QuickMovementUiEvent
     data class ShowMessage(val message: String) : QuickMovementUiEvent
 }
 
@@ -102,14 +109,16 @@ class QuickMovementViewModel @Inject constructor(
             viewModelScope.launch {
                 observeCategories(UserId(ownerId)).collect { items ->
                     allCategoryOptions = items.filter { it.category.isActive }
-                        .flatMap { root -> listOf(root) + root.subcategories }
-                        .filter { it.category.isActive && !it.category.isPlanLocked }
-                        .map {
+                        .flatMap { root -> listOf(root to null) + root.subcategories.map { it to root } }
+                        .filter { (item, _) -> item.category.isActive && !item.category.isPlanLocked }
+                        .map { (item, parent) ->
                             CategoryOption(
-                                id = it.category.id.value,
-                                name = it.displayName,
-                                icon = it.icon,
-                                categoryType = it.category.categoryType,
+                                id = item.category.id.value,
+                                name = item.displayName,
+                                icon = item.icon,
+                                categoryType = item.category.categoryType,
+                                parentCategoryId = parent?.category?.id?.value,
+                                parentName = parent?.displayName,
                             )
                         }
                     _uiState.update { current ->
@@ -118,7 +127,7 @@ class QuickMovementViewModel @Inject constructor(
                         current.copy(
                             availableCategories = options,
                             selectedCategoryId = selection?.id,
-                            selectedCategoryName = selection?.name,
+                selectedCategoryName = selection?.displayName,
                             selectedCategoryIcon = selection?.icon,
                         )
                     }
@@ -163,7 +172,7 @@ class QuickMovementViewModel @Inject constructor(
                 type = type,
                 availableCategories = options,
                 selectedCategoryId = selection?.id,
-                selectedCategoryName = selection?.name,
+                selectedCategoryName = selection?.displayName,
                 selectedCategoryIcon = selection?.icon,
                 merchantName = if (type == MovementType.EXPENSE) current.merchantName else "",
                 selectedMerchantId = if (type == MovementType.EXPENSE) current.selectedMerchantId else null,
@@ -236,7 +245,7 @@ class QuickMovementViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 selectedCategoryId = category.id,
-                selectedCategoryName = category.name,
+                selectedCategoryName = category.displayName,
                 selectedCategoryIcon = category.icon,
                 categoryError = null,
             )
@@ -399,7 +408,7 @@ class QuickMovementViewModel @Inject constructor(
                         MovementSyncStatus.PENDING, MovementSyncStatus.IN_FLIGHT ->
                             "Guardado en este dispositivo · Pendiente de sincronización"
                     }
-                    _events.send(QuickMovementUiEvent.TransactionSaved(message))
+                    _events.send(QuickMovementUiEvent.TransactionSaved(message, command.type))
                     resetForm()
                 }
                 is RegisterTransactionResult.SimilarTransactionWarning -> {

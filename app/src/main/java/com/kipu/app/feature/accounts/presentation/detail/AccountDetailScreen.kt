@@ -197,7 +197,7 @@ fun AccountDetailScreen(
         PayCardDialog(
             creditCardWithSummary = creditCardSummary,
             eligibleAccounts = dashboard.dashboardData?.liquidAccounts.orEmpty(),
-            viewModel = viewModel,
+            onPayCreditCard = viewModel::payCreditCard,
             onDismiss = { showCardPayment = false },
         )
     }

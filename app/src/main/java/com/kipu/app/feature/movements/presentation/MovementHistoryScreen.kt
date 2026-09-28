@@ -289,6 +289,9 @@ fun MovementHistoryRoute(
     if (uiState.showRegisterSheet) {
         QuickMovementBottomSheet(
             onDismissRequest = viewModel::onCloseRegisterSheet,
+            onSaved = { movementType ->
+                if (movementType == MovementType.TRANSFER) viewModel.showAllTransactionsAfterTransfer()
+            },
             onMessage = { message ->
                 scope.launch { snackbarHostState.showSnackbar(message) }
             },
@@ -311,18 +314,22 @@ fun TransactionRow(
         "CARD_PAYMENT_CASH" -> "Pago de tarjeta"
         else -> null
     }
-    val title = legacyTitle ?: item.merchantName?.takeIf { it.isNotBlank() }
-        ?: item.categoryName?.takeIf { it.isNotBlank() }
-        ?: when (tx.type) {
-            MovementType.EXPENSE -> "Gasto"
-            MovementType.INCOME -> "Ingreso"
-            MovementType.TRANSFER -> "Transferencia"
-        }
+    val title = when {
+        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "Pago de tarjeta"
+        legacyTitle != null -> legacyTitle
+        else -> item.merchantName?.takeIf { it.isNotBlank() }
+            ?: item.categoryName?.takeIf { it.isNotBlank() }
+            ?: when (tx.type) {
+                MovementType.EXPENSE -> "Gasto"
+                MovementType.INCOME -> "Ingreso"
+                MovementType.TRANSFER -> "Transferencia"
+            }
+    }
 
     val cardLabel = item.cardAlias ?: item.cardLastFourDigits?.let { "•••• $it" } ?: "Tarjeta"
     val subtitle = when {
         tx.operationKind.equals("CARD_PURCHASE", ignoreCase = true) -> cardLabel
-        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "${item.sourceAccountAlias ?: "Origen"} → $cardLabel"
+        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "${item.sourceAccountAlias ?: "Cuenta"} → $cardLabel"
         tx.type == MovementType.TRANSFER -> "${item.sourceAccountAlias ?: "Origen"} → ${item.destinationAccountAlias ?: "Destino"}"
         else -> item.sourceAccountAlias ?: "Cuenta"
     }

@@ -31,18 +31,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.kipu.app.core.finance.domain.model.AccountId
+import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.feature.accounts.domain.model.AccountWithBalance
 import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
-import com.kipu.app.feature.accounts.presentation.AccountsViewModel
+import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.ui.component.formatMinorUnits
+
+typealias CreditCardPaymentHandler = (
+    cardId: CardId,
+    sourceAccountId: AccountId,
+    paymentAmount: Money,
+    onSuccess: () -> Unit,
+    onFailure: (String) -> Unit,
+) -> Unit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PayCardDialog(
     creditCardWithSummary: CreditCardWithSummary,
     eligibleAccounts: List<AccountWithBalance>,
-    viewModel: AccountsViewModel,
+    onPayCreditCard: CreditCardPaymentHandler,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,9 +60,7 @@ fun PayCardDialog(
     val debt = creditCardWithSummary.debt
 
     val matchingAccounts = remember(eligibleAccounts, card.currency) {
-        eligibleAccounts.filter {
-            it.account.currency == card.currency && !it.account.isArchived && it.balance.minorUnits > 0L
-        }
+        eligibleCardPaymentAccounts(eligibleAccounts, card.currency)
     }
 
     var selectedAccount by remember { mutableStateOf(matchingAccounts.firstOrNull()) }
@@ -198,11 +206,15 @@ fun PayCardDialog(
                     }
 
                     isSubmitting = true
-                    viewModel.payCreditCard(
-                        cardId = card.id,
-                        sourceAccountId = sourceAcc.account.id,
-                        paymentAmount = Money(minorUnits, card.currency),
-                        onSuccess = onDismiss,
+                    onPayCreditCard(
+                        card.id,
+                        sourceAcc.account.id,
+                        Money(minorUnits, card.currency),
+                        onDismiss,
+                        { message ->
+                            isSubmitting = false
+                            errorMessage = message
+                        },
                     )
                 },
                 enabled = !isSubmitting && selectedAccount != null && debt.minorUnits > 0L,
@@ -217,4 +229,12 @@ fun PayCardDialog(
         },
         modifier = modifier,
     )
+}
+
+internal fun eligibleCardPaymentAccounts(
+    accounts: List<AccountWithBalance>,
+    cardCurrency: com.kipu.app.core.finance.domain.model.Currency,
+): List<AccountWithBalance> = accounts.filter {
+    it.account.type in setOf(AccountType.BANK, AccountType.SAVINGS) &&
+        it.account.currency == cardCurrency && !it.account.isArchived && it.balance.minorUnits > 0L
 }

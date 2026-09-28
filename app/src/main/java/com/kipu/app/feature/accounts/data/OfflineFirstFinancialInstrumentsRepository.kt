@@ -214,20 +214,53 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 val account = accountDao.getById(userId, accountId.value)
                     ?: throw IllegalArgumentException("Account not found: ${accountId.value}")
 
-                // Find original opening movement
+                // The original opening anchors the adjustment chain; the effective base may
+                // already be a later ADJUSTMENT that has not yet been reversed.
                 val movements = database.openHelper.readableDatabase.query(
-                    "SELECT id, amount_minor_units, effective_at FROM financial_movements WHERE user_id = ? AND opening_account_id = ? LIMIT 1",
+                    "SELECT id FROM financial_movements WHERE user_id = ? AND opening_account_id = ? AND kind = 'OPENING' LIMIT 1",
                     arrayOf(userId, accountId.value)
                 )
                 var originalOpeningId: String? = null
-                var originalAmount = 0L
                 if (movements.moveToFirst()) {
                     originalOpeningId = movements.getString(0)
-                    originalAmount = movements.getLong(1)
                 }
                 movements.close()
 
                 requireNotNull(originalOpeningId) { "Original opening movement not found for account ${accountId.value}" }
+
+                val activeOpening = database.openHelper.readableDatabase.query(
+                    """
+                    SELECT movement.id, movement.amount_minor_units
+                    FROM financial_movements AS movement
+                    WHERE movement.user_id = ?
+                      AND (
+                        movement.id = ?
+                        OR (movement.kind = 'ADJUSTMENT' AND movement.adjusts_movement_id = ?)
+                      )
+                      AND movement.status = 'POSTED'
+                      AND NOT EXISTS (
+                        SELECT 1 FROM financial_movements AS reversal
+                        WHERE reversal.user_id = movement.user_id
+                          AND reversal.kind = 'REVERSAL'
+                          AND reversal.status = 'POSTED'
+                          AND reversal.reverses_movement_id = movement.id
+                      )
+                    ORDER BY CASE WHEN movement.kind = 'ADJUSTMENT' THEN 1 ELSE 0 END DESC,
+                             movement.created_at DESC,
+                             movement.operation_sequence DESC
+                    LIMIT 1
+                    """.trimIndent(),
+                    arrayOf(userId, originalOpeningId, originalOpeningId),
+                )
+                var activeOpeningId: String? = null
+                var activeOpeningAmount = 0L
+                if (activeOpening.moveToFirst()) {
+                    activeOpeningId = activeOpening.getString(0)
+                    activeOpeningAmount = activeOpening.getLong(1)
+                }
+                activeOpening.close()
+
+                requireNotNull(activeOpeningId) { "Active opening adjustment not found for account ${accountId.value}" }
 
                 val reversalId = MovementId.generate().value
                 val adjustmentId = MovementId.generate().value
@@ -240,12 +273,12 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                         operationSequence = 0,
                         userId = userId,
                         kind = MovementKind.REVERSAL.name,
-                        amountMinorUnits = -originalAmount,
+                        amountMinorUnits = -activeOpeningAmount,
                         currency = account.currency,
                         accountId = accountId.value,
                         effectiveAt = nowMicros,
                         status = MovementStatus.POSTED.name,
-                        reversesMovementId = originalOpeningId,
+                        reversesMovementId = activeOpeningId,
                         createdAt = nowMicros,
                     )
                 )

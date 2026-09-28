@@ -151,6 +151,19 @@ class QuickMovementViewModelTest {
     }
 
     @Test
+    fun `successful transfer event identifies transfer for immediate history visibility`() = runTest {
+        advanceUntilIdle()
+        val event = async { viewModel.events.first() }
+        viewModel.onTypeSelected(MovementType.TRANSFER)
+        viewModel.onAmountChanged("12.00")
+        viewModel.onDestinationAccountSelected(transferAccountId.value)
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(MovementType.TRANSFER, (event.await() as QuickMovementUiEvent.TransactionSaved).movementType)
+    }
+
+    @Test
     fun `saving without amount sets amountError`() = runTest {
         advanceUntilIdle()
         viewModel.onAmountChanged("0")

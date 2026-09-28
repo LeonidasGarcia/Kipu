@@ -45,6 +45,7 @@ import com.kipu.app.navigation.accountsDestinations
 import com.kipu.app.navigation.authDestinations
 import com.kipu.app.navigation.movementDestinations
 import com.kipu.app.navigation.movementsDestinations
+import com.kipu.app.navigation.notificationDestinations
 import com.kipu.app.navigation.planSelectionDestination
 import com.kipu.app.navigation.settingsDestinations
 import com.kipu.app.ui.component.LocalBalanceMasked
@@ -199,6 +200,9 @@ class MainActivity : FragmentActivity() {
                                     navController = navController,
                                 )
                                 movementsDestinations(
+                                    navController = navController,
+                                )
+                                notificationDestinations(
                                     navController = navController,
                                 )
                             }
