@@ -10,13 +10,16 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -30,8 +33,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -72,12 +83,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -92,7 +106,10 @@ import com.kipu.app.feature.categories.presentation.components.MerchantPickerBot
 import com.kipu.app.feature.categories.presentation.components.MerchantPickerViewModel
 import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
 import com.kipu.app.feature.accounts.domain.model.CreditCard
+import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.feature.movements.domain.model.MovementType
+import com.kipu.app.ui.component.formatMinorUnits
+import com.kipu.app.ui.theme.rememberKipuColors
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
@@ -114,6 +131,8 @@ fun QuickMovementBottomSheet(
     viewModel: QuickMovementViewModel = hiltViewModel(),
     merchantPickerViewModel: MerchantPickerViewModel = hiltViewModel(),
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    onNavigateToNewAccount: () -> Unit = {},
+    mostUsedAccountId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val merchantPickerState by merchantPickerViewModel.uiState.collectAsStateWithLifecycle()
@@ -137,16 +156,16 @@ fun QuickMovementBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         containerColor = colors.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(vertical = 12.dp)
-                    .width(36.dp)
+                    .width(40.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(colors.outlineVariant)
+                    .background(Color(0xFFCBD5E1))
             )
         },
         modifier = modifier.testTag("quick_movement_sheet"),
@@ -169,6 +188,14 @@ fun QuickMovementBottomSheet(
             onToggleMoreDetails = viewModel::onToggleMoreDetails,
             onSave = viewModel::onSave,
             onClose = onDismissRequest,
+            accountBalances = uiState.accountBalances,
+            creditCardDebts = uiState.creditCardDebts,
+            creditCardAvailableCredits = uiState.creditCardAvailableCredits,
+            mostUsedAccountId = mostUsedAccountId,
+            onNavigateToNewAccount = onNavigateToNewAccount,
+            onCreateSubcategory = viewModel::createCategoryOrSubcategory,
+            isCreatingSubcategory = uiState.isCreatingSubcategory,
+            categoryCreationError = uiState.categoryCreationError,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         )
     }
@@ -252,17 +279,26 @@ fun QuickMovementContent(
     onToggleMoreDetails: () -> Unit,
     onSave: () -> Unit,
     onClose: () -> Unit,
+    accountBalances: Map<String, Money>,
+    creditCardDebts: Map<String, Money>,
+    creditCardAvailableCredits: Map<String, Money>,
+    mostUsedAccountId: String?,
+    onNavigateToNewAccount: () -> Unit,
+    onCreateSubcategory: suspend (String?, String, String, String, Boolean) -> Result<CategoryOption>,
+    isCreatingSubcategory: Boolean,
+    categoryCreationError: String?,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
     val colors = MaterialTheme.colorScheme
     var showCategoryPicker by remember { mutableStateOf(false) }
+    var showSourceAccountPicker by remember { mutableStateOf(false) }
+    var showDestinationAccountPicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(scrollState)
-            .padding(bottom = 24.dp)
+            .fillMaxHeight(0.9f)
     ) {
         // Top Header
         Row(
@@ -289,126 +325,200 @@ fun QuickMovementContent(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(scrollState),
+        ) {
+        Spacer(modifier = Modifier.height(8.dp))
 
-        // Tabs: Gasto / Ingreso / Transferencia
+        // Segmented type selector keeps the existing transfer flow while matching the pastel pill design.
         val tabs = listOf(
             MovementType.EXPENSE to stringResource(R.string.movement_type_expense),
             MovementType.INCOME to stringResource(R.string.movement_type_income),
             MovementType.TRANSFER to stringResource(R.string.movement_type_transfer),
         )
-        val selectedTabIndex = tabs.indexOfFirst { it.first == uiState.type }.coerceAtLeast(0)
-
-        TabRow(
-            selectedTabIndex = selectedTabIndex,
-            containerColor = colors.surfaceContainerLow,
-            contentColor = colors.primary,
-            indicator = { tabPositions ->
-                if (selectedTabIndex < tabPositions.size) {
-                    TabRowDefaults.SecondaryIndicator(
-                        Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                        color = when (uiState.type) {
-                            MovementType.EXPENSE -> KipuExpense
-                            MovementType.INCOME -> KipuIncome
-                            MovementType.TRANSFER -> colors.primary
-                        }
-                    )
-                }
-            },
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(18.dp))
+                .background(rememberKipuColors().surfaceVariant)
+                .padding(4.dp),
         ) {
-            tabs.forEachIndexed { index, (type, label) ->
-                Tab(
-                    selected = selectedTabIndex == index,
-                    onClick = { onTypeSelected(type) },
-                    text = {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal
-                            ),
-                            color = if (selectedTabIndex == index) colors.onSurface else colors.onSurfaceVariant
-                        )
-                    },
+            tabs.forEach { (type, label) ->
+                val selected = uiState.type == type
+                val selectedContainer = when (type) {
+                    MovementType.EXPENSE -> if (rememberKipuColors().isDark) Color(0xFF7F1D1D) else Color(0xFFFEE2E2)
+                    MovementType.INCOME -> if (rememberKipuColors().isDark) Color(0xFF14532D) else Color(0xFFDCFCE7)
+                    MovementType.TRANSFER -> if (rememberKipuColors().isDark) Color(0xFF134E4A) else Color(0xFFCCFBF1)
+                }
+                val selectedContent = when (type) {
+                    MovementType.EXPENSE -> if (rememberKipuColors().isDark) Color(0xFFFCA5A5) else Color(0xFFB91C1C)
+                    MovementType.INCOME -> if (rememberKipuColors().isDark) Color(0xFF86EFAC) else Color(0xFF166534)
+                    MovementType.TRANSFER -> rememberKipuColors().primaryText
+                }
+                Row(
                     modifier = Modifier
-                        .height(48.dp)
+                        .weight(1f)
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(if (selected) selectedContainer else Color.Transparent)
+                        .clickable(role = Role.Tab, onClick = { onTypeSelected(type) })
+                        .semantics { this.selected = selected }
                         .testTag("tab_${type.name.lowercase()}"),
-                )
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = when (type) {
+                            MovementType.EXPENSE -> "↓  $label"
+                            MovementType.INCOME -> "↑  $label"
+                            MovementType.TRANSFER -> "↔  $label"
+                        },
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        ),
+                        color = if (selected) selectedContent else rememberKipuColors().inkSecondary,
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Amount Input with tabular numbers (tnum)
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = rememberKipuColors().surfaceSubtle),
+            border = BorderStroke(1.dp, rememberKipuColors().border),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Text(
-                text = stringResource(R.string.movement_amount_label),
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onSurfaceVariant
+                text = when (uiState.type) {
+                    MovementType.EXPENSE -> "MONTO DEL GASTO"
+                    MovementType.INCOME -> "MONTO DEL INGRESO"
+                    MovementType.TRANSFER -> "MONTO DE TRANSFERENCIA"
+                },
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.6.sp,
+                ),
+                color = rememberKipuColors().inkSecondary,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             OutlinedTextField(
                 value = uiState.amountText,
                 onValueChange = onAmountChanged,
                 placeholder = {
                     Text(
                         "0.00",
-                        style = MaterialTheme.typography.headlineMedium.copy(
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 34.sp,
                             fontFeatureSettings = "tnum",
-                            color = colors.outline
+                            fontWeight = FontWeight.Bold,
+                            color = rememberKipuColors().inkSecondary,
                         )
                     )
                 },
                 prefix = {
                     Text(
-                        if (uiState.currency == "PEN") "S/ " else "$ ",
-                        style = MaterialTheme.typography.headlineMedium.copy(
+                        (when (uiState.type) {
+                            MovementType.EXPENSE -> "− "
+                            MovementType.INCOME -> "+ "
+                            MovementType.TRANSFER -> ""
+                        }) + if (uiState.currency == "PEN") "S/ " else "$ ",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 34.sp,
                             fontWeight = FontWeight.Bold,
                             color = when (uiState.type) {
-                                MovementType.EXPENSE -> KipuExpense
-                                MovementType.INCOME -> KipuIncome
-                                MovementType.TRANSFER -> colors.primary
+                                MovementType.EXPENSE -> rememberKipuColors().inkPrimary
+                                MovementType.INCOME -> rememberKipuColors().positive
+                                MovementType.TRANSFER -> rememberKipuColors().primaryText
                             }
                         )
                     )
                 },
-                textStyle = MaterialTheme.typography.headlineMedium.copy(
+                textStyle = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 34.sp,
                     fontWeight = FontWeight.Bold,
                     fontFeatureSettings = "tnum",
-                    color = colors.onSurface
+                    color = rememberKipuColors().inkPrimary,
                 ),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 isError = uiState.amountError != null,
-                supportingText = uiState.amountError?.let { { Text(it, color = colors.error) } },
                 singleLine = true,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.primary,
-                    unfocusedBorderColor = colors.outlineVariant,
+                    focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    errorBorderColor = Color.Transparent,
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 72.dp)
                     .testTag("input_amount")
                     .semantics { contentDescription = "Monto de la transacción" },
             )
+            uiState.amountError?.let { error ->
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Source Account Selector
-        SourceInstrumentDropdownSelector(
-            label = if (uiState.type == MovementType.INCOME) "Cuenta destino" else stringResource(R.string.movement_source_account),
-            accounts = uiState.availableAccounts,
-            creditCards = if (uiState.type == MovementType.EXPENSE) uiState.availableCreditCards else emptyList(),
-            selectedAccountId = uiState.selectedSourceAccountId,
-            selectedCardId = uiState.selectedSourceCardId,
-            onAccountSelected = onSourceAccountSelected,
-            onCardSelected = onSourceCardSelected,
-            error = uiState.accountError,
+        val selectedSourceAccount = uiState.availableAccounts.firstOrNull {
+            it.id.value == uiState.selectedSourceAccountId
+        }
+        val selectedSourceCard = uiState.availableCreditCards.firstOrNull {
+            it.id.value == uiState.selectedSourceCardId
+        }
+        val isDarkTheme = rememberKipuColors().isDark
+
+        val (sourceIcon, sourceIconBg, sourceIconTint) = remember(selectedSourceAccount, selectedSourceCard, isDarkTheme) {
+            val icon = when {
+                selectedSourceCard != null -> Icons.Default.CreditCard
+                selectedSourceAccount != null -> when (selectedSourceAccount.type) {
+                    com.kipu.app.feature.accounts.domain.model.AccountType.CASH -> Icons.Default.Payments
+                    com.kipu.app.feature.accounts.domain.model.AccountType.DIGITAL_WALLET -> Icons.Default.AccountBalanceWallet
+                    com.kipu.app.feature.accounts.domain.model.AccountType.SAVINGS,
+                    com.kipu.app.feature.accounts.domain.model.AccountType.BANK -> Icons.Default.AccountBalance
+                    com.kipu.app.feature.accounts.domain.model.AccountType.CREDIT_LIABILITY -> Icons.Default.CreditCard
+                }
+                else -> Icons.Default.AccountBalanceWallet
+            }
+            val bg = if (isDarkTheme) Color(0xFF134E4A) else Color(0xFFCCFBF1)
+            val tint = if (isDarkTheme) Color(0xFF5EEAD4) else Color(0xFF0F766E)
+            Triple(icon, bg, tint)
+        }
+        val sourceTitle = selectedSourceAccount?.alias
+            ?: selectedSourceCard?.alias
+            ?: selectedSourceCard?.let { "${it.issuer} ${it.network.name}" }
+            ?: "Seleccionar cuenta"
+        val sourceSubtitle = selectedSourceAccount?.let { account ->
+            val balance = accountBalances[account.id.value]?.let { " · Saldo ${formatMoneyInline(it)}" }.orEmpty()
+            "${accountTypeLabel(account.type)} ${account.currency.name}$balance"
+        } ?: selectedSourceCard?.let { card ->
+            val debt = creditCardDebts[card.id.value]?.let { " · Deuda ${formatMoneyInline(it)}" }.orEmpty()
+            "Crédito · •••• ${card.lastFourDigits}$debt"
+        } ?: "Elige dónde registrar este movimiento"
+        PastelMovementSelectionRow(
+            icon = sourceIcon,
+            iconContainer = sourceIconBg,
+            iconTint = sourceIconTint,
+            label = if (uiState.type == MovementType.INCOME) "Cuenta destino" else "Cuenta",
+            value = sourceTitle,
+            supportingText = sourceSubtitle,
+            onClick = { showSourceAccountPicker = true },
             modifier = Modifier.testTag("selector_source_account"),
         )
+        if (uiState.accountError != null) {
+            Text(uiState.accountError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
 
         // Destination Account Selector (Transfer only)
         AnimatedVisibility(
@@ -418,16 +528,28 @@ fun QuickMovementContent(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                SourceInstrumentDropdownSelector(
+                val selectedDestination = uiState.availableAccounts.firstOrNull {
+                    it.id.value == uiState.selectedDestinationAccountId
+                }
+                val (destIconBg, destIconTint) = if (isDarkTheme) {
+                    Color(0xFF134E4A) to Color(0xFF5EEAD4)
+                } else {
+                    Color(0xFFCCFBF1) to Color(0xFF0F766E)
+                }
+                PastelMovementSelectionRow(
+                    icon = Icons.Default.AccountBalanceWallet,
+                    iconContainer = destIconBg,
+                    iconTint = destIconTint,
                     label = stringResource(R.string.movement_destination_account),
-                    accounts = uiState.availableAccounts.filter {
-                        it.id.value != uiState.selectedSourceAccountId && it.currency.name == uiState.currency
-                    },
-                    selectedAccountId = uiState.selectedDestinationAccountId,
-                    onAccountSelected = onDestinationAccountSelected,
-                    error = uiState.destinationAccountError,
+                    value = selectedDestination?.alias ?: "Seleccionar cuenta destino",
+                    supportingText = selectedDestination?.let { "${accountTypeLabel(it.type)} · ${it.currency.name}" }
+                        ?: "Elige la cuenta que recibirá el monto",
+                    onClick = { showDestinationAccountPicker = true },
                     modifier = Modifier.testTag("selector_destination_account"),
                 )
+                if (uiState.destinationAccountError != null) {
+                    Text(uiState.destinationAccountError, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
 
@@ -438,40 +560,32 @@ fun QuickMovementContent(
             exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = if (uiState.type == MovementType.EXPENSE) "Categoría *" else "Categoría (opcional)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant,
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showCategoryPicker = true },
-                    enabled = uiState.availableCategories.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("category_picker_open"),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = resolveCategoryIcon(uiState.selectedCategoryIcon ?: "category"),
-                            contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Text(
-                            text = uiState.selectedCategoryName
-                                ?: if (uiState.availableCategories.isEmpty()) "Cargando categorías" else "Elegir categoría",
-                            modifier = Modifier.weight(1f),
-                            textAlign = TextAlign.Start,
-                            maxLines = 1,
-                        )
-                        Icon(Icons.Default.ExpandMore, contentDescription = "Mostrar categorías")
-                    }
+                Spacer(modifier = Modifier.height(10.dp))
+                val hasCategory = !uiState.selectedCategoryName.isNullOrBlank()
+                val (catIcon, catBg, catTint) = if (hasCategory) {
+                    val colorsPair = categoryPastelColors(uiState.selectedCategoryName.orEmpty())
+                    Triple(
+                        resolveCategoryIcon(uiState.selectedCategoryIcon ?: "label"),
+                        colorsPair.first,
+                        colorsPair.second,
+                    )
+                } else {
+                    val bg = if (isDarkTheme) Color(0xFF2E1065) else Color(0xFFEDE9FE)
+                    val tint = if (isDarkTheme) Color(0xFFC4B5FD) else Color(0xFF7C3AED)
+                    Triple(Icons.Default.Label, bg, tint)
                 }
+                PastelMovementSelectionRow(
+                    icon = catIcon,
+                    iconContainer = catBg,
+                    iconTint = catTint,
+                    label = if (uiState.type == MovementType.EXPENSE) "Categoría" else "Categoría (opcional)",
+                    value = uiState.selectedCategoryName
+                        ?: if (uiState.availableCategories.isEmpty()) "Cargando categorías" else "Elegir categoría",
+                    supportingText = uiState.selectedCategoryName?.let { "Toca para cambiar" }
+                        ?: "Clasifica este movimiento",
+                    onClick = { showCategoryPicker = true },
+                    modifier = Modifier.testTag("category_picker_open"),
+                )
                 if (uiState.availableCategories.isEmpty()) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -485,39 +599,57 @@ fun QuickMovementContent(
                     Text(uiState.categoryError, color = colors.error, style = MaterialTheme.typography.bodySmall)
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text("Comercio (opcional)", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(
-                                onClick = onOpenMerchantPicker,
-                                modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("input_merchant"),
-                            ) {
-                                Text(
-                                    uiState.merchantName.ifBlank { stringResource(R.string.movement_select_merchant) },
-                                    maxLines = 1,
-                                )
-                            }
-                            if (uiState.merchantName.isNotBlank()) {
-                                IconButton(onClick = onClearMerchant, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Default.Close, contentDescription = "Quitar comercio")
-                                }
-                            }
-                        }
-                    }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = uiState.type == MovementType.EXPENSE,
+            enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
+            exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+                val (merchantBg, merchantTint) = if (isDarkTheme) {
+                    Color(0xFF451A03) to Color(0xFFFDBA74)
+                } else {
+                    Color(0xFFFFEDD5) to Color(0xFFC2410C)
+                }
+                PastelMovementSelectionRow(
+                    icon = Icons.Default.Storefront,
+                    iconContainer = merchantBg,
+                    iconTint = merchantTint,
+                    label = "Comercio",
+                    value = uiState.merchantName.ifBlank { "Agregar comercio (opcional)" },
+                    supportingText = if (uiState.selectedMerchantId != null) "Comercio del catálogo" else "Puedes escribir un nombre libre",
+                    onClick = onOpenMerchantPicker,
+                    modifier = Modifier.testTag("input_merchant"),
+                )
+                if (uiState.merchantName.isNotBlank()) {
+                    TextButton(
+                        onClick = onClearMerchant,
+                        modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
+                    ) { Text("Quitar comercio") }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        val (dateBg, dateTint) = if (isDarkTheme) {
+            Color(0xFF082F49) to Color(0xFF7DD3FC)
+        } else {
+            Color(0xFFE0F2FE) to Color(0xFF0284C7)
+        }
+        val formattedDate = remember(uiState.occurredAt) { formatTransactionDate(uiState.occurredAt) }
+        PastelMovementSelectionRow(
+            icon = Icons.Default.CalendarToday,
+            iconContainer = dateBg,
+            iconTint = dateTint,
+            label = "Fecha",
+            value = formattedDate,
+            supportingText = "Toca para cambiar la fecha y hora",
+            onClick = onOpenDatePicker,
+            modifier = Modifier.padding(top = 10.dp).testTag("selector_occurred_at"),
+        )
 
-        // Collapsible "Más detalles"
+        // Collapsible notes section; only the note field exists in the Sprint 3 transaction model.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -535,14 +667,14 @@ fun QuickMovementContent(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = stringResource(R.string.movement_more_details),
+                text = "Nota (opcional)",
                 style = MaterialTheme.typography.titleSmall,
-                color = colors.primary
+                color = rememberKipuColors().primaryText,
             )
             Icon(
                 imageVector = if (uiState.isMoreDetailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                 contentDescription = null,
-                tint = colors.primary
+                tint = rememberKipuColors().primaryText,
             )
         }
 
@@ -552,25 +684,10 @@ fun QuickMovementContent(
             exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
         ) {
             Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                // Date Display
-                val formattedDate = remember(uiState.occurredAt) {
-                    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(uiState.occurredAt))
-                }
-                OutlinedButton(
-                    onClick = onOpenDatePicker,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("Fecha: $formattedDate", color = colors.onSurface)
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Notes input
                 OutlinedTextField(
                     value = uiState.note,
                     onValueChange = onNoteChanged,
-                    label = { Text(stringResource(R.string.movement_note)) },
+                    label = { Text("Nota") },
                     placeholder = { Text(stringResource(R.string.movement_note_placeholder)) },
                     maxLines = 3,
                     shape = RoundedCornerShape(12.dp),
@@ -584,9 +701,10 @@ fun QuickMovementContent(
                 )
             }
         }
+        }
 
         if (uiState.generalError != null) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = uiState.generalError,
                 color = colors.error,
@@ -596,7 +714,7 @@ fun QuickMovementContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Save Button (Primary CTA)
         Button(
@@ -604,15 +722,15 @@ fun QuickMovementContent(
             enabled = !uiState.isSaving,
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = colors.primary,
-                contentColor = colors.onPrimary
+            containerColor = rememberKipuColors().primary,
+            contentColor = rememberKipuColors().onPrimary,
             ),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp)
                 .testTag("btn_save_transaction")
                 .semantics {
-                    contentDescription = if (uiState.isSaving) "Guardando transacción" else "Guardar transacción"
+                    contentDescription = if (uiState.isSaving) "Guardando transacción" else saveLabel(uiState.type)
                 },
         ) {
             if (uiState.isSaving) {
@@ -625,7 +743,7 @@ fun QuickMovementContent(
                 Text(stringResource(R.string.movement_saving))
             } else {
                 Text(
-                    text = stringResource(R.string.movement_save),
+                    text = saveLabel(uiState.type),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -633,13 +751,196 @@ fun QuickMovementContent(
     }
 
     if (showCategoryPicker) {
-        CategoryPickerBottomSheet(
+        PastelCategoryPickerBottomSheet(
             categories = uiState.availableCategories,
             selectedCategoryId = uiState.selectedCategoryId,
             onSelect = onCategorySelected,
+            onCreateCategory = onCreateSubcategory,
             onDismiss = { showCategoryPicker = false },
+            isCreating = isCreatingSubcategory,
+            errorMessage = categoryCreationError,
         )
     }
+
+    if (showSourceAccountPicker) {
+        AccountSelectorBottomSheet(
+            onDismissRequest = { showSourceAccountPicker = false },
+            accounts = uiState.availableAccounts,
+            creditCards = uiState.availableCreditCards,
+            selectedAccountId = uiState.selectedSourceAccountId,
+            selectedCardId = uiState.selectedSourceCardId,
+            allowCreditCards = uiState.type == MovementType.EXPENSE,
+            accountBalances = accountBalances,
+            cardDebts = creditCardDebts,
+            cardAvailableCredits = creditCardAvailableCredits,
+            mostUsedAccountId = mostUsedAccountId,
+            title = if (uiState.type == MovementType.INCOME) "Seleccionar cuenta destino" else "Seleccionar cuenta",
+            subtitle = if (uiState.type == MovementType.INCOME) "Elige dónde recibir el ingreso" else "Elige de dónde sale el movimiento",
+            onAccountIdSelected = onSourceAccountSelected,
+            onCardIdSelected = onSourceCardSelected,
+            onNewAccountClick = {
+                showSourceAccountPicker = false
+                onNavigateToNewAccount()
+            },
+        )
+    }
+
+    if (showDestinationAccountPicker) {
+        val eligibleDestinationAccounts = uiState.availableAccounts.filter { account ->
+            account.id.value != uiState.selectedSourceAccountId && account.currency.name == uiState.currency
+        }
+        AccountSelectorBottomSheet(
+            onDismissRequest = { showDestinationAccountPicker = false },
+            accounts = eligibleDestinationAccounts,
+            selectedAccountId = uiState.selectedDestinationAccountId,
+            allowCreditCards = false,
+            accountBalances = accountBalances,
+            title = stringResource(R.string.movement_destination_account),
+            subtitle = "Elige la cuenta que recibirá el monto",
+            onAccountIdSelected = onDestinationAccountSelected,
+            onNewAccountClick = {
+                showDestinationAccountPicker = false
+                onNavigateToNewAccount()
+            },
+        )
+    }
+}
+
+@Composable
+private fun PastelMovementSelectionRow(
+    icon: ImageVector,
+    iconContainer: Color,
+    iconTint: Color,
+    label: String,
+    value: String,
+    supportingText: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val kipuColors = rememberKipuColors()
+    Card(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .semantics {
+                contentDescription = "$label. $value. $supportingText"
+                role = Role.Button
+            },
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = kipuColors.surface),
+        border = BorderStroke(1.dp, kipuColors.border),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = kipuColors.inkSecondary,
+                    maxLines = 1,
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = kipuColors.inkPrimary,
+                    maxLines = 1,
+                )
+                Text(
+                    text = supportingText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = kipuColors.inkSecondary,
+                    maxLines = 1,
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = kipuColors.inkSecondary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun categoryPastelColors(categoryName: String): Pair<Color, Color> {
+    val name = categoryName.lowercase(Locale.ROOT)
+    val dark = rememberKipuColors().isDark
+    return when {
+        "aliment" in name || "mercado" in name || "comida" in name || "restauran" in name ->
+            if (dark) Color(0xFF7C2D12) to Color(0xFFFDBA74) else Color(0xFFFFEDD5) to Color(0xFF9A3412)
+        "suscrip" in name || "stream" in name || "entreten" in name ->
+            if (dark) Color(0xFF4C1D95) to Color(0xFFC4B5FD) else Color(0xFFEDE9FE) to Color(0xFF5B21B6)
+        "transp" in name || "movil" in name || "auto" in name || "gas" in name ->
+            if (dark) Color(0xFF0C4A6E) to Color(0xFF7DD3FC) else Color(0xFFE0F2FE) to Color(0xFF075985)
+        "salud" in name || "cuidado" in name || "medic" in name || "farmac" in name ->
+            if (dark) Color(0xFF881337) to Color(0xFFFDA4AF) else Color(0xFFFFE4E6) to Color(0xFF9F1239)
+        "hogar" in name || "servicio" in name || "casa" in name || "luz" in name || "agua" in name ->
+            if (dark) Color(0xFF78350F) to Color(0xFFFCD34D) else Color(0xFFFEF3C7) to Color(0xFF92400E)
+        "educ" in name || "libro" in name || "curso" in name ->
+            if (dark) Color(0xFF064E3B) to Color(0xFF6EE7B7) else Color(0xFFD1FAE5) to Color(0xFF065F46)
+        "compr" in name || "ropa" in name || "tienda" in name ->
+            if (dark) Color(0xFF831843) to Color(0xFFF472B6) else Color(0xFFFCE7F3) to Color(0xFF9D174D)
+        else ->
+            if (dark) Color(0xFF1E293B) to Color(0xFF94A3B8) else Color(0xFFF1F5F9) to Color(0xFF475569)
+    }
+}
+
+private fun formatMoneyInline(money: Money): String {
+    val currency = when (money.currency.name) {
+        "PEN" -> "S/"
+        "USD" -> "$"
+        else -> money.currency.name
+    }
+    return "$currency ${formatMinorUnits(money.minorUnits)}"
+}
+
+private fun formatTransactionDate(timestamp: Long): String {
+    val date = Date(timestamp)
+    val locale = Locale("es", "PE")
+    val dateCalendar = java.util.Calendar.getInstance().apply { time = date }
+    val nowCalendar = java.util.Calendar.getInstance()
+    val dayLabel = if (
+        dateCalendar.get(java.util.Calendar.YEAR) == nowCalendar.get(java.util.Calendar.YEAR) &&
+        dateCalendar.get(java.util.Calendar.DAY_OF_YEAR) == nowCalendar.get(java.util.Calendar.DAY_OF_YEAR)
+    ) {
+        "Hoy, "
+    } else {
+        ""
+    }
+    val dateText = SimpleDateFormat("d MMM yyyy", locale).format(date)
+    val timeText = SimpleDateFormat("hh:mm a", Locale.US).format(date)
+    return "$dayLabel$dateText · $timeText"
+}
+
+private fun saveLabel(type: MovementType): String = when (type) {
+    MovementType.EXPENSE -> "Guardar gasto"
+    MovementType.INCOME -> "Guardar ingreso"
+    MovementType.TRANSFER -> "Guardar transferencia"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

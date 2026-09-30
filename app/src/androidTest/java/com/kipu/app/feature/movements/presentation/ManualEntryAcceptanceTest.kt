@@ -76,6 +76,16 @@ class ManualEntryAcceptanceTest {
                         acceptedCategoryId = state.value.selectedCategoryId
                     },
                     onClose = {},
+                    accountBalances = emptyMap(),
+                    creditCardDebts = emptyMap(),
+                    creditCardAvailableCredits = emptyMap(),
+                    mostUsedAccountId = null,
+                    onNavigateToNewAccount = {},
+                    onCreateSubcategory = { _, _, _, _, _ ->
+                        Result.failure(UnsupportedOperationException("Subcategory creation is not part of this test"))
+                    },
+                    isCreatingSubcategory = false,
+                    categoryCreationError = null,
                 )
             }
         }
