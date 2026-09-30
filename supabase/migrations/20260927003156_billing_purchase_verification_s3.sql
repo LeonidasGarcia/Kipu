@@ -1,4 +1,4 @@
-﻿create schema if not exists internal;
+create schema if not exists internal;
 
 do $$ begin
   create role billing_verification_executor nologin;
@@ -28,12 +28,14 @@ alter table public.billing_products add column if not exists created_at timestam
 
 alter table public.billing_products drop constraint if exists billing_products_plan_type_check;
 alter table public.billing_products drop constraint if exists billing_products_store_product_id_key;
+alter table public.billing_products drop constraint if exists billing_products_store_base_plan_key;
 alter table public.billing_products drop constraint if exists billing_products_lifetime_without_base_plan_check;
 alter table public.billing_products
   add constraint billing_products_plan_type_check
   check (plan_type in ('FREE','PRO_MONTHLY','PRO_ANNUAL','PRO_LIFETIME'));
+-- Google Play uses one product with multiple base_plan_id; unique on composite
 alter table public.billing_products
-  add constraint billing_products_store_product_id_key unique (store_product_id);
+  add constraint billing_products_store_base_plan_key unique (store_product_id, base_plan_id);
 alter table public.billing_products
   add constraint billing_products_lifetime_without_base_plan_check
   check (plan_type <> 'PRO_LIFETIME' or base_plan_id is null);

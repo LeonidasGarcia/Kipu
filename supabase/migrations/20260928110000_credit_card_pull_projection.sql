@@ -844,12 +844,17 @@ BEGIN
 
     v_transaction_id := COALESCE(NULLIF(v_response->>'transaction_id', '')::uuid, NULLIF(v_tx->>'id', '')::uuid);
     v_card_id := NULLIF(v_tx->>'card_id', '')::uuid;
-    SELECT t, c.account_id, a.account_type, a.currency_code
-    INTO v_transaction, v_linked_account_id, v_linked_account_type, v_linked_currency
+    SELECT t.* INTO v_transaction
     FROM public.transactions t
-    JOIN public.cards c ON c.user_id = t.user_id AND c.id = t.card_id
+    WHERE t.user_id = v_user_id AND t.id = v_transaction_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'CREDIT_LIABILITY_ACCOUNT_INVALID: Cannot post credit purchase liability';
+    END IF;
+    SELECT c.account_id, a.account_type, a.currency_code
+    INTO v_linked_account_id, v_linked_account_type, v_linked_currency
+    FROM public.cards c
     JOIN public.accounts a ON a.user_id = c.user_id AND a.id = c.account_id
-    WHERE t.user_id = v_user_id AND t.id = v_transaction_id AND c.id = v_card_id
+    WHERE c.user_id = v_user_id AND c.id = v_card_id
     FOR UPDATE OF c;
     IF NOT FOUND OR v_transaction.status <> 'CONFIRMED'
        OR v_linked_account_type <> 'CREDIT_LIABILITY'
@@ -933,12 +938,17 @@ BEGIN
     v_transaction_id := COALESCE(NULLIF(v_response->>'transaction_id', '')::uuid, NULLIF(v_tx->>'id', '')::uuid);
     v_card_id := NULLIF(v_tx->>'card_id', '')::uuid;
     v_amount := (v_tx->>'amount_minor')::bigint;
-    SELECT t, c.account_id, c.currency_code, a.account_type, a.currency_code
-    INTO v_transaction, v_linked_account_id, v_card_currency, v_linked_account_type, v_linked_currency
+    SELECT t.* INTO v_transaction
     FROM public.transactions t
-    JOIN public.cards c ON c.user_id = t.user_id AND c.id = t.card_id
+    WHERE t.user_id = v_user_id AND t.id = v_transaction_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'CREDIT_LIABILITY_ACCOUNT_INVALID: Cannot post credit-card payment liability';
+    END IF;
+    SELECT c.account_id, c.currency_code, a.account_type, a.currency_code
+    INTO v_linked_account_id, v_card_currency, v_linked_account_type, v_linked_currency
+    FROM public.cards c
     JOIN public.accounts a ON a.user_id = c.user_id AND a.id = c.account_id
-    WHERE t.user_id = v_user_id AND t.id = v_transaction_id AND c.id = v_card_id
+    WHERE c.user_id = v_user_id AND c.id = v_card_id
     FOR UPDATE OF c;
     IF NOT FOUND OR v_transaction.status <> 'CONFIRMED'
        OR v_transaction.amount_minor <> v_amount OR v_card_currency <> v_transaction.currency_code
