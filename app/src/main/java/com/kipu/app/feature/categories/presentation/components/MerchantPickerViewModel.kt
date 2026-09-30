@@ -25,6 +25,8 @@ enum class CatalogStatus {
 data class MerchantPickerState(
     val query: String = "",
     val searchResults: List<MerchantCatalogEntry> = emptyList(),
+    val catalogEntries: List<MerchantCatalogEntry> = emptyList(),
+    val categoryFilters: List<com.kipu.app.feature.categories.domain.model.MerchantCategoryFilter> = emptyList(),
     val selectedMerchant: MerchantCatalogEntry? = null,
     val provisionalText: String? = null,
     val isSearching: Boolean = false,
@@ -43,6 +45,19 @@ class MerchantPickerViewModel @Inject constructor(
     val uiState: StateFlow<MerchantPickerState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            repository.observeMerchantCatalog().collectLatest { entries ->
+                _uiState.update { it.copy(catalogEntries = entries) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeMerchantCategoryFilters().collectLatest { filters ->
+                _uiState.update { it.copy(categoryFilters = filters) }
+            }
+        }
+    }
 
     fun initialize(
         initialMerchant: MerchantCatalogEntry? = null,

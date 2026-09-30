@@ -42,6 +42,9 @@ interface CategoryDao {
     @Query("SELECT COUNT(*) FROM categories WHERE user_id = :userId AND origin = 'CUSTOM' AND parent_id IS NULL AND is_active = 1")
     suspend fun countActiveCustomRoots(userId: String): Int
 
+    @Query("SELECT COUNT(*) FROM categories WHERE user_id = :userId AND origin = 'CUSTOM' AND parent_id IS NULL AND is_active = 1 AND category_type = :categoryType")
+    suspend fun countActiveCustomRootsByType(userId: String, categoryType: String): Int
+
     // Presentation
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPresentation(presentation: CategoryPresentationEntity)

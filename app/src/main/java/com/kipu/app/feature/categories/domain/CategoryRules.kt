@@ -107,12 +107,15 @@ object CategoryRules {
      * Normalizes search queries for merchant and category lookup:
      * - Converts to lowercase.
      * - Strips accents / diacritics (NFD decomposition).
+     * - Removes punctuation so names such as McDonald's, Listo!, and iCloud+ match
+     *   canonical normalized merchant names.
      * - Trims and collapses multiple whitespace.
      */
     fun normalizeText(text: String): String {
         val nfdNormalized = Normalizer.normalize(text, Normalizer.Form.NFD)
         val pattern = "\\p{InCombiningDiacriticalMarks}+".toRegex()
-        return pattern.replace(nfdNormalized, "")
+        val withoutDiacritics = pattern.replace(nfdNormalized, "")
+        return "[^\\p{L}\\p{N}\\s]".toRegex().replace(withoutDiacritics, "")
             .lowercase(Locale.ROOT)
             .trim()
             .replace("\\s+".toRegex(), " ")

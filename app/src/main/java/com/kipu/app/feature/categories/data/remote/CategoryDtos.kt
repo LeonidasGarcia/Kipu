@@ -91,6 +91,10 @@ data class MerchantCatalogItemDto(
     @SerialName("normalized_name") val normalizedName: String,
     @SerialName("is_active") val isActive: Boolean = true,
     @SerialName("version") val version: Long = 1L,
+    @SerialName("default_category_id") val defaultCategoryId: String? = null,
+    @SerialName("priority") val priority: String = "B",
+    @SerialName("logo_key") val logoKey: String? = null,
+    @SerialName("brand_color") val brandColor: String? = null,
 )
 
 @Serializable

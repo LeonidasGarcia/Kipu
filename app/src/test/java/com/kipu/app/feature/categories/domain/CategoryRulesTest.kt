@@ -157,4 +157,12 @@ class CategoryRulesTest {
         assertFalse(CategoryRules.matchesNormalized("Tambo", "oxxo"))
         assertFalse(CategoryRules.matchesNormalized("Tambo", "   "))
     }
+
+    @Test
+    fun `merchant search normalization removes brand punctuation`() {
+        assertEquals("mcdonalds", CategoryRules.normalizeText("McDonald's"))
+        assertEquals("listo", CategoryRules.normalizeText("Listo!"))
+        assertEquals("icloud", CategoryRules.normalizeText("iCloud+"))
+        assertTrue(CategoryRules.matchesNormalized("McDonald's", "mcdonalds"))
+    }
 }

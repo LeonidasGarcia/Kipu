@@ -140,10 +140,14 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                         MerchantCatalogEntity(
                             id = dto.id,
                             name = dto.name,
-                            normalizedName = dto.normalizedName,
+                            normalizedName = com.kipu.app.feature.categories.domain.CategoryRules.normalizeText(dto.normalizedName),
                             isActive = dto.isActive,
                             version = dto.version,
-                            lastSyncedAt = now
+                            lastSyncedAt = now,
+                            defaultCategoryId = dto.defaultCategoryId,
+                            priority = dto.priority,
+                            logoKey = dto.logoKey,
+                            brandColor = dto.brandColor,
                         )
                     }
                     if (entities.isNotEmpty()) {

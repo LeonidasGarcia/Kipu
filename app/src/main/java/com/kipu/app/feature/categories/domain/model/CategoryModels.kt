@@ -80,7 +80,16 @@ data class MerchantCatalogEntry(
     val id: MerchantId,
     val name: String,
     val normalizedName: String,
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val defaultCategoryId: CategoryId? = null,
+    val priority: String = "B",
+    val logoKey: String? = null,
+    val brandColor: String? = null,
+)
+
+data class MerchantCategoryFilter(
+    val categoryId: CategoryId,
+    val name: String,
 )
 
 data class MovementClassification(
