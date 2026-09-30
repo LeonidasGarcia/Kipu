@@ -51,3 +51,8 @@ supabase/.branches/
 
 # QA test run evidence (heavy screenshots, dumps, SQLite dbs)
 docs/audits/evidence/
+
+# Local audit notes and Orca task prompts
+/AUDITORIA_Y_PLAN_FIXES.md
+/CHECKLIST_FIXES_AUDITORIA.md
+/PROMPT_ORCA_*.md
