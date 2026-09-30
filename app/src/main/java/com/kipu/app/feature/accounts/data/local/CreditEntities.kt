@@ -82,12 +82,13 @@ interface CreditDao {
         """SELECT i.* FROM credit_installments i
            JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
            WHERE i.user_id = :userId AND t.card_id = :cardId AND i.deleted_at IS NULL
+             AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
            ORDER BY i.due_date, t.occurred_at, i.installment_number, i.id""",
     )
     fun observeInstallmentsForCard(userId: String, cardId: String): kotlinx.coroutines.flow.Flow<List<CreditInstallmentEntity>>
 
     @androidx.room.Query(
-        """SELECT COALESCE(SUM(i.principal_minor - COALESCE(a.allocated_minor, 0)), 0)
+        """SELECT COALESCE(SUM(MAX(i.principal_minor - COALESCE(a.allocated_minor, 0), 0)), 0)
            FROM credit_installments i
            JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
            LEFT JOIN (
@@ -95,9 +96,56 @@ interface CreditDao {
              FROM credit_payment_allocations GROUP BY user_id, installment_id
            ) a ON a.user_id = i.user_id AND a.installment_id = i.id
            WHERE i.user_id = :userId AND t.card_id = :cardId
-             AND i.deleted_at IS NULL AND i.status != 'VOIDED'""",
+             AND i.deleted_at IS NULL AND i.status != 'VOIDED'
+             AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'""",
     )
     fun observeOutstandingPrincipalForCard(userId: String, cardId: String): kotlinx.coroutines.flow.Flow<Long>
+
+    @androidx.room.Query(
+        """SELECT COALESCE(SUM(MAX(i.principal_minor - COALESCE(a.allocated_minor, 0), 0)), 0)
+           FROM credit_installments i
+           JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
+           LEFT JOIN (
+             SELECT user_id, installment_id, SUM(allocated_minor) AS allocated_minor
+             FROM credit_payment_allocations GROUP BY user_id, installment_id
+           ) a ON a.user_id = i.user_id AND a.installment_id = i.id
+           WHERE i.user_id = :userId AND t.card_id = :cardId
+             AND i.deleted_at IS NULL AND i.status != 'VOIDED'
+             AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'""",
+    )
+    suspend fun getOutstandingPrincipalForCard(userId: String, cardId: String): Long
+
+    @androidx.room.Query(
+        """SELECT CASE WHEN COALESCE(SUM(CASE
+                WHEN t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
+                THEN le.signed_amount_minor ELSE 0 END), 0) < 0
+             THEN -COALESCE(SUM(CASE
+                WHEN t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
+                THEN le.signed_amount_minor ELSE 0 END), 0)
+             ELSE 0 END
+           FROM cards c
+           LEFT JOIN ledger_entries le ON le.user_id = c.user_id AND le.account_id = c.account_id
+                AND le.role = 'LIABILITY'
+           LEFT JOIN transactions t ON t.user_id = le.user_id AND t.id = le.transaction_id
+           WHERE c.user_id = :userId AND c.id = :cardId AND c.type = 'CREDIT'""",
+    )
+    fun observeLedgerOutstandingPrincipalForCard(userId: String, cardId: String): kotlinx.coroutines.flow.Flow<Long>
+
+    @androidx.room.Query(
+        """SELECT CASE WHEN COALESCE(SUM(CASE
+                WHEN t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
+                THEN le.signed_amount_minor ELSE 0 END), 0) < 0
+             THEN -COALESCE(SUM(CASE
+                WHEN t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
+                THEN le.signed_amount_minor ELSE 0 END), 0)
+             ELSE 0 END
+           FROM cards c
+           LEFT JOIN ledger_entries le ON le.user_id = c.user_id AND le.account_id = c.account_id
+                AND le.role = 'LIABILITY'
+           LEFT JOIN transactions t ON t.user_id = le.user_id AND t.id = le.transaction_id
+           WHERE c.user_id = :userId AND c.id = :cardId AND c.type = 'CREDIT'""",
+    )
+    suspend fun getLedgerOutstandingPrincipalForCard(userId: String, cardId: String): Long
 
     @androidx.room.Query(
         """SELECT i.*, (i.principal_minor - COALESCE(a.allocated_minor, 0)) AS outstanding_minor,
@@ -110,6 +158,7 @@ interface CreditDao {
            ) a ON a.user_id = i.user_id AND a.installment_id = i.id
            WHERE i.user_id = :userId AND t.card_id = :cardId
              AND i.deleted_at IS NULL AND i.status != 'VOIDED'
+             AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
              AND i.principal_minor > COALESCE(a.allocated_minor, 0)
            ORDER BY i.due_date, t.occurred_at, i.installment_number, i.id""",
     )
@@ -121,6 +170,9 @@ interface CreditDao {
            ORDER BY installment_number""",
     )
     suspend fun getInstallmentsForTransaction(userId: String, transactionId: String): List<CreditInstallmentEntity>
+
+    @androidx.room.Query("SELECT * FROM credit_installments WHERE user_id = :userId AND id = :installmentId AND deleted_at IS NULL")
+    suspend fun getInstallmentById(userId: String, installmentId: String): CreditInstallmentEntity?
 
     @androidx.room.Query(
         """SELECT * FROM credit_payment_allocations
@@ -134,6 +186,12 @@ interface CreditDao {
 
     @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.ABORT)
     suspend fun insertAllocations(allocations: List<CreditPaymentAllocationEntity>)
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.IGNORE)
+    suspend fun insertPulledInstallments(installments: List<CreditInstallmentEntity>)
+
+    @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.IGNORE)
+    suspend fun insertPulledAllocations(allocations: List<CreditPaymentAllocationEntity>)
 
     @androidx.room.Insert(onConflict = androidx.room.OnConflictStrategy.ABORT)
     suspend fun insertInstallment(installment: CreditInstallmentEntity)
@@ -152,4 +210,35 @@ interface CreditDao {
         revision: Long,
         updatedAt: Long,
     ): Int
+
+    @androidx.room.Query(
+        """UPDATE credit_installments SET id = :remoteId, due_date = :dueDate,
+           principal_minor = :principalMinor, interest_minor = :interestMinor, status = :status,
+           revision = :revision, updated_at = :updatedAt
+           WHERE user_id = :userId AND transaction_id = :transactionId AND installment_number = :installmentNumber""",
+    )
+    suspend fun adoptRemoteInstallmentId(
+        userId: String,
+        transactionId: String,
+        installmentNumber: Int,
+        remoteId: String,
+        dueDate: Long,
+        principalMinor: Long,
+        interestMinor: Long,
+        status: String,
+        revision: Long,
+        updatedAt: Long,
+    ): Int
+
+    @androidx.room.Query(
+        """SELECT COALESCE(SUM(allocated_minor), 0) FROM credit_payment_allocations
+           WHERE user_id = :userId AND installment_id = :installmentId""",
+    )
+    suspend fun getAllocatedMinorForInstallment(userId: String, installmentId: String): Long
+
+    @androidx.room.Query("DELETE FROM credit_installments WHERE user_id = :userId AND transaction_id = :transactionId")
+    suspend fun deleteInstallmentsForTransaction(userId: String, transactionId: String): Int
+
+    @androidx.room.Query("DELETE FROM credit_payment_allocations WHERE user_id = :userId AND payment_transaction_id = :transactionId")
+    suspend fun deleteAllocationsForPayment(userId: String, transactionId: String): Int
 }

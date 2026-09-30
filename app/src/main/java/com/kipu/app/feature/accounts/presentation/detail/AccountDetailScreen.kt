@@ -19,6 +19,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +84,7 @@ fun AccountDetailScreen(
     val instruments by viewModel.instrumentsUiState.collectAsStateWithLifecycle()
     val dashboard by viewModel.dashboardUiState.collectAsStateWithLifecycle()
     val creditNotifications by viewModel.creditNotifications.collectAsStateWithLifecycle()
+    val purchaseCategories by viewModel.purchaseCategories.collectAsStateWithLifecycle()
     val account = if (isCard) {
         null
     } else {
@@ -108,7 +111,16 @@ fun AccountDetailScreen(
     var showPurchaseDraft by remember(instrumentId) { mutableStateOf(false) }
     var purchaseMerchant by remember(instrumentId) { mutableStateOf("") }
     var purchaseAmount by remember(instrumentId) { mutableStateOf("") }
+    var purchaseCategoryId by remember(instrumentId) { mutableStateOf<String?>(null) }
+    var purchaseCategoryMenuExpanded by remember(instrumentId) { mutableStateOf(false) }
     var purchaseCandidate by remember(instrumentId) { mutableStateOf<PurchaseCandidate?>(null) }
+    val selectedPurchaseCategory = purchaseCategories.firstOrNull { it.id == purchaseCategoryId }
+
+    LaunchedEffect(purchaseCategories, purchaseCategoryId) {
+        if (purchaseCategoryId != null && purchaseCategories.none { it.id == purchaseCategoryId }) {
+            purchaseCategoryId = null
+        }
+    }
 
     LaunchedEffect(viewModel, instrumentId, isCard) {
         viewModel.refreshCreditUtilizationNotifications(instrumentId.takeIf { isCard })
@@ -210,23 +222,57 @@ fun AccountDetailScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                     )
+                    Box {
+                        OutlinedButton(
+                            onClick = { purchaseCategoryMenuExpanded = true },
+                            enabled = purchaseCategories.isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(selectedPurchaseCategory?.name ?: "Seleccionar categoría de gasto")
+                        }
+                        DropdownMenu(
+                            expanded = purchaseCategoryMenuExpanded,
+                            onDismissRequest = { purchaseCategoryMenuExpanded = false },
+                        ) {
+                            purchaseCategories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category.name) },
+                                    onClick = {
+                                        purchaseCategoryId = category.id
+                                        purchaseCategoryMenuExpanded = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (purchaseCategories.isEmpty()) {
+                        Text("No hay categorías de gasto disponibles.", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     val amountMinor = MoneyInputParser.parseMinorUnits(purchaseAmount)
-                    if (amountMinor != null && amountMinor > 0L && purchaseMerchant.isNotBlank()) {
+                    if (isValidCreditPurchaseDraft(amountMinor, purchaseMerchant, selectedPurchaseCategory?.id)) {
                         purchaseCandidate = PurchaseCandidate(
                             id = UUID.randomUUID().toString(),
                             cardId = card.id,
-                            amount = Money(amountMinor, card.currency),
+                            amount = Money(requireNotNull(amountMinor), card.currency),
                             merchant = purchaseMerchant.trim(),
                             occurredAt = Instant.now(),
                             suggestedInstallments = 3,
+                            categoryId = requireNotNull(selectedPurchaseCategory).id,
                         )
                         showPurchaseDraft = false
                     } else {
-                        coroutineScope.launch { snackbarHostState.showSnackbar("Indica un comercio y un importe válido.") }
+                        coroutineScope.launch {
+                            val message = if (selectedPurchaseCategory == null) {
+                                "Selecciona una categoría para clasificar la compra."
+                            } else {
+                                "Indica un comercio y un importe válido."
+                            }
+                            snackbarHostState.showSnackbar(message)
+                        }
                     }
                 }) { Text("Ver simulación") }
             },
@@ -247,14 +293,18 @@ fun AccountDetailScreen(
                         card = creditCard,
                         teaBps = null,
                         onConfirmPurchase = { installments ->
-                            viewModel.confirmCreditPurchase(
-                                cardId = creditCard.id,
-                                amount = candidate.amount,
-                                merchant = candidate.merchant,
-                                effectiveAt = candidate.occurredAt,
-                                installments = installments,
-                            )
-                            purchaseCandidate = null
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                viewModel.confirmCreditPurchase(
+                                    cardId = creditCard.id,
+                                    amount = candidate.amount,
+                                    merchant = candidate.merchant,
+                                    effectiveAt = candidate.occurredAt,
+                                    installments = installments,
+                                    categoryId = requireNotNull(candidate.categoryId),
+                                )
+                                purchaseCandidate = null
+                            }
                         },
                         onRejectPurchase = { purchaseCandidate = null },
                     )
@@ -633,4 +683,5 @@ private fun AccountType.toDetailLabel(): String = when (this) {
     AccountType.SAVINGS -> "Cuenta de ahorros"
     AccountType.BANK -> "Cuenta corriente"
     AccountType.DIGITAL_WALLET -> "Billetera digital"
+    AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
 }

@@ -17,6 +17,9 @@ class ConfirmCreditPurchase @Inject constructor(
         effectiveAt: Instant = Instant.now(),
         installments: Int = 1,
         operationId: OperationId = OperationId.generate(),
+        categoryId: String,
+        merchantId: String? = null,
+        note: String? = null,
     ): Result<Unit> {
         return repository.confirmCreditPurchase(
             cardId = cardId,
@@ -25,6 +28,9 @@ class ConfirmCreditPurchase @Inject constructor(
             effectiveAt = effectiveAt,
             installments = installments,
             operationId = operationId,
+            categoryId = categoryId,
+            merchantId = merchantId,
+            note = note,
         )
     }
 }

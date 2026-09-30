@@ -1,0 +1,21 @@
+﻿summary|31|transactions|41|ledger_entries
+hu10_transaction|4936efe6-4b5a-327e-a4ab-0c69c4a473bb|EXPENSE|2450000|CARD_PURCHASE|QA-HU10-50|PENDING
+hu10_transaction|89549a9d-0320-3ba3-948f-8665db9ea7d0|EXPENSE|1500000|CARD_PURCHASE|QA-HU10-80|PENDING
+hu10_transaction|5a4611af-5a8e-3acf-9246-aeae6085f9b8|EXPENSE|1000000|CARD_PURCHASE|QA-HU10-100|PENDING
+recent_payment|817ca207-7a3d-3e51-843f-0e487033b078|TRANSFER|4950000|CARD_PAYMENT|PENDING
+recent_payment|3d0e6923-fa04-37e4-bf01-139b81173411|TRANSFER|100000|CARD_PAYMENT|PENDING
+ledger_balance|Sueldo|SAVINGS|287500
+ledger_balance|Pasivo tarjeta •••• 1234|CREDIT_LIABILITY|-50000
+ledger_balance|Efectivo|CASH|101878
+ledger_balance|Pasivo tarjeta •••• 7548|CREDIT_LIABILITY|0
+amex_card|American Express Platinum|1234|archived=0|limit_minor=5000000
+transaction_status|ACTIVE|FAILED_PERMANENT|EXPENSE|1
+transaction_status|ACTIVE|MIGRATED_LOCAL|EXPENSE|3
+transaction_status|ACTIVE|MIGRATED_LOCAL|INCOME|5
+transaction_status|ACTIVE|PENDING|EXPENSE|11
+transaction_status|ACTIVE|PENDING|INCOME|1
+transaction_status|ACTIVE|PENDING|TRANSFER|10
+movement_outbox|FAILED_PERMANENT|1
+movement_outbox|PENDING|9
+instrument_outbox|ERROR|1
+instrument_outbox|PENDING|31

@@ -33,7 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -41,7 +40,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +60,7 @@ import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
+import com.kipu.app.feature.notifications.presentation.UnreadNotificationBadge
 
 import androidx.compose.material.icons.filled.Settings
 
@@ -75,6 +74,8 @@ fun DashboardScreen(
     onAccountClick: (String) -> Unit = {},
     onCardClick: (String) -> Unit = onAccountClick,
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
+    unreadNotificationCount: Int = 0,
     feedbackMessage: String? = null,
     onFeedbackConsumed: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -82,7 +83,6 @@ fun DashboardScreen(
     val state by viewModel.dashboardUiState.collectAsState()
     val instruments by viewModel.instrumentsUiState.collectAsState()
     val creditNotifications by viewModel.creditNotifications.collectAsState()
-    var showAddInstrumentSheet by remember { mutableStateOf(false) }
     var showQuotaSelection by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -106,6 +106,10 @@ fun DashboardScreen(
                         )
                     },
                     actions = {
+                        UnreadNotificationBadge(
+                            unreadCount = unreadNotificationCount,
+                            onClick = onNavigateToNotifications,
+                        )
                         IconButton(onClick = onNavigateToMovements) {
                             Icon(
                                 imageVector = Icons.Default.Payments,
@@ -122,7 +126,7 @@ fun DashboardScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { showAddInstrumentSheet = true }) {
+                FloatingActionButton(onClick = onNavigateToNewAccount) {
                     Icon(Icons.Default.Add, contentDescription = "Añadir instrumento")
                 }
             },
@@ -295,45 +299,6 @@ fun DashboardScreen(
                 }
             }
         }
-    if (showAddInstrumentSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showAddInstrumentSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("Añadir instrumento", style = MaterialTheme.typography.titleLarge)
-                Button(
-                    onClick = {
-                        showAddInstrumentSheet = false
-                        onNavigateToNewAccount()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                ) {
-                    Icon(Icons.Default.AccountBalance, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Nueva cuenta")
-                }
-                Button(
-                    onClick = {
-                        showAddInstrumentSheet = false
-                        onNavigateToNewCard()
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                ) {
-                    Icon(Icons.Default.CreditCard, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Nueva tarjeta")
-                }
-            }
-        }
-    }
     if (showQuotaSelection) {
         val accounts = instruments.activeAccounts.filter { it.isComputableForQuota }
         val cards = instruments.activeCards.filter { it.isComputableForQuota }
@@ -395,6 +360,7 @@ private fun AccountType.toDashboardLabel(): String = when (this) {
     AccountType.SAVINGS -> "Ahorros"
     AccountType.BANK -> "Corriente"
     AccountType.DIGITAL_WALLET -> "Billetera"
+    AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
 }
 
 @Composable
@@ -594,6 +560,7 @@ fun LiquidAccountCard(
                             AccountType.SAVINGS -> "Ahorros"
                             AccountType.BANK -> "Corriente"
                             AccountType.DIGITAL_WALLET -> "Billetera"
+                            AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
                         }
                         Text(
                             text = "$typeLabel • ${account.currency.name}",

@@ -6,20 +6,31 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kipu.app.core.database.KipuDatabase
 import com.kipu.app.feature.accounts.data.local.AccountEntity
+import com.kipu.app.feature.accounts.data.local.CardEntity
+import com.kipu.app.feature.accounts.data.local.CreditInstallmentEntity
 import com.kipu.app.feature.accounts.data.local.FinancialMovementEntity
 import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
+import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.data.remote.RegisterTransactionRequestDto
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -128,6 +139,123 @@ class MovementLocalDataSourceTest {
         assertEquals(4_200L, dao.calculateLedgerSumForAccount(userId, "destination"))
         assertEquals(-4_200L, dao.getBalanceProjection(userId, "source")?.balanceMinor)
         assertEquals(4_200L, dao.getBalanceProjection(userId, "destination")?.balanceMinor)
+    }
+
+    @Test
+    fun creditPurchasePersistsAndMapsFromObservedRoomFlowWithLiabilityLedgerOnly() = runTest {
+        val cardId = UUID.randomUUID().toString()
+        val liabilityAccountId = UUID.randomUUID().toString()
+        val transactionId = UUID.randomUUID().toString()
+        database.accountDao().insert(
+            AccountEntity(
+                id = liabilityAccountId,
+                userId = userId,
+                creationOperationId = UUID.randomUUID().toString(),
+                alias = "Internal card liability",
+                type = "CREDIT_LIABILITY",
+                currency = "PEN",
+                presetId = null,
+                color = null,
+                icon = null,
+                initialBalanceMinorUnits = 0L,
+                openedAt = 1L,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        database.cardDao().insert(
+            CardEntity(
+                id = cardId,
+                userId = userId,
+                creationOperationId = UUID.randomUUID().toString(),
+                accountId = liabilityAccountId,
+                alias = "BCP Visa",
+                type = "CREDIT",
+                currency = "PEN",
+                network = "VISA",
+                issuer = "BCP",
+                lastFourDigits = "7548",
+                creditLimitMinorUnits = 100_000L,
+                billingDay = 15,
+                dueDay = 5,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        val initialEmission = CompletableDeferred<Unit>()
+        val mappedPurchase = CompletableDeferred<Transaction>()
+        val observer = launch(Dispatchers.IO) {
+            dao.observeTransactions(userId).collect { rows ->
+                val domainRows = rows.map(TransactionEntity::toDomain)
+                if (domainRows.isEmpty()) initialEmission.complete(Unit)
+                else domainRows.singleOrNull()?.let(mappedPurchase::complete)
+            }
+        }
+
+        try {
+            withTimeout(5_000L) { initialEmission.await() }
+            dao.insertTransaction(
+                TransactionEntity(
+                    id = transactionId,
+                    userId = userId,
+                    type = "EXPENSE",
+                    amountMinor = 12_500L,
+                    currencyCode = "PEN",
+                    categoryId = "category-id",
+                    occurredAt = 10_000L,
+                    status = "ACTIVE",
+                    syncStatus = "PENDING",
+                    createdAt = 10_000L,
+                    updatedAt = 10_000L,
+                    cardId = cardId,
+                    operationKind = "CARD_PURCHASE",
+                    installmentCount = 1,
+                ),
+            )
+            val mapped = withTimeout(5_000L) { mappedPurchase.await() }
+            dao.insertLedgerEntries(
+                listOf(
+                    LedgerEntryEntity(
+                        id = UUID.randomUUID().toString(),
+                        userId = userId,
+                        transactionId = transactionId,
+                        accountId = liabilityAccountId,
+                        role = "LIABILITY",
+                        signedAmountMinor = -12_500L,
+                        currencyCode = "PEN",
+                        createdAt = 10_000L,
+                    ),
+                ),
+            )
+            database.creditDao().insertInstallment(
+                CreditInstallmentEntity(
+                    id = UUID.randomUUID().toString(),
+                    userId = userId,
+                    transactionId = transactionId,
+                    installmentNumber = 1,
+                    dueDate = 20_000L,
+                    principalMinor = 12_500L,
+                    interestMinor = 0L,
+                    status = "PENDING",
+                    revision = 1L,
+                    createdAt = 10_000L,
+                    updatedAt = 10_000L,
+                ),
+            )
+
+            assertEquals(cardId, mapped.cardId)
+            assertEquals("CARD_PURCHASE", mapped.operationKind)
+            assertEquals(1, mapped.installmentCount)
+            assertNull(mapped.sourceAccountId)
+            val entries = dao.getLedgerEntriesForTransaction(userId, transactionId)
+            assertEquals(1, entries.size)
+            assertEquals("LIABILITY", entries.single().role)
+            assertEquals(-12_500L, entries.single().signedAmountMinor)
+            assertEquals(liabilityAccountId, entries.single().accountId)
+            assertEquals(12_500L, database.creditDao().getLedgerOutstandingPrincipalForCard(userId, cardId))
+        } finally {
+            observer.cancelAndJoin()
+        }
     }
 
     @Test

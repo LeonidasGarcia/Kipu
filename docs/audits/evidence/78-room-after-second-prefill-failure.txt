@@ -1,0 +1,21 @@
+ROOM QA SNAPSHOT 2026-09-28 — TRAS SEGUNDA FALLA DE CONFIRMACIÓN (1,000.00)
+TRANSACTION COUNT: 12
+CARD_PAYMENT COUNT: 3
+
+BALANCE PROJECTIONS
+{'alias': 'Efectivo', 'balance_minor': 102000, 'currency_code': 'PEN'}
+{'alias': 'Pasivo tarjeta •••• 1234', 'balance_minor': -50000, 'currency_code': 'PEN'}
+{'alias': 'Pasivo tarjeta •••• 7548', 'balance_minor': -100000, 'currency_code': 'PEN'}
+{'alias': 'Sueldo', 'balance_minor': 387500, 'currency_code': 'PEN'}
+
+LATEST TRANSACTIONS
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 100000, 'merchant_provisional_text': 'qa_test_parser_2'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 106000, 'merchant_provisional_text': None}
+{'type': 'EXPENSE', 'operation_kind': 'CARD_PURCHASE', 'amount_minor': 100000, 'merchant_provisional_text': 'qa_test_parser'}
+{'type': 'TRANSFER', 'operation_kind': 'CARD_PAYMENT', 'amount_minor': 4000, 'merchant_provisional_text': None}
+
+LATEST LEDGER
+{'role': 'LIABILITY', 'signed_amount_minor': -100000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'role': 'SOURCE', 'signed_amount_minor': -106000, 'alias': 'Sueldo'}
+{'role': 'LIABILITY', 'signed_amount_minor': 106000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'role': 'LIABILITY', 'signed_amount_minor': -100000, 'alias': 'Pasivo tarjeta •••• 7548'}

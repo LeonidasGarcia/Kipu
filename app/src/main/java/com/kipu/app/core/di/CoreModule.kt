@@ -29,6 +29,10 @@ object CoreModule {
                 com.kipu.app.core.database.MIGRATION_8_9,
                 com.kipu.app.core.database.MIGRATION_9_10,
                 com.kipu.app.core.database.MIGRATION_10_11,
+                com.kipu.app.core.database.MIGRATION_11_12,
+                com.kipu.app.core.database.MIGRATION_12_13,
+                com.kipu.app.core.database.MIGRATION_13_14,
+                com.kipu.app.core.database.MIGRATION_14_15,
             )
             .build()
 
@@ -52,5 +56,7 @@ object CoreModule {
     @Provides fun merchantCatalogDao(database: KipuDatabase): com.kipu.app.feature.categories.data.local.MerchantCatalogDao = database.merchantCatalogDao()
     @Provides fun movementDao(database: KipuDatabase): com.kipu.app.feature.movements.data.local.MovementDao = database.movementDao()
     @Provides fun creditDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.CreditDao = database.creditDao()
+    @Provides fun appNotificationDao(database: KipuDatabase): com.kipu.app.feature.notifications.data.local.AppNotificationDao = database.appNotificationDao()
+    @Provides fun notificationSyncOutboxDao(database: KipuDatabase): com.kipu.app.feature.notifications.data.local.NotificationSyncOutboxDao = database.notificationSyncOutboxDao()
     @Provides fun clock(): Clock = Clock.systemUTC()
 }

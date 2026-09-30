@@ -314,26 +314,6 @@ class MovementLocalDataSource @Inject constructor(
         }
     }
 
-    fun TransactionEntity.toDomain(): Transaction = Transaction(
-        id = id,
-        userId = userId,
-        type = MovementType.fromString(type),
-        amountMinor = amountMinor,
-        currency = currencyCode,
-        sourceAccountId = sourceAccountId,
-        destinationAccountId = destinationAccountId,
-        categoryId = categoryId,
-        merchantId = merchantId,
-        merchantProvisionalText = merchantProvisionalText,
-        legacyKind = legacyKind,
-        occurredAt = occurredAt,
-        note = note,
-        status = TransactionStatus.fromString(status),
-        syncStatus = MovementSyncStatus.fromString(syncStatus),
-        createdAt = createdAt,
-        updatedAt = updatedAt,
-    )
-
     private suspend fun isPlanLockedCategory(
         userId: String,
         category: com.kipu.app.feature.categories.data.local.CategoryEntity,

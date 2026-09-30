@@ -95,7 +95,7 @@ Common fields:
 | `id`, `userId` | typed UUID | Stable and immutable |
 | `alias` | String? | Trimmed, 1..80 when present; required and distinct when visible identity collides |
 | `issuer` | String | Trimmed, 1..80; safe display value |
-| `network` | `VISA`, `MASTERCARD`, `AMEX`, `OTHER` | `OTHER` usa identidad y apariencia genericas |
+| `network` | `VISA`, `MASTERCARD`, `AMEX`, `DINERS`, `OTHER` | `OTHER` usa identidad y apariencia genericas |
 | `lastFourDigits` | String | Exactly four ASCII digits |
 | `currency` | `PEN`, `USD` | Debit derives from linked account; credit explicit |
 | `preset`, `iconToken`, `colorToken` | appearance values | No financial effect |
@@ -192,7 +192,7 @@ Primary key `(user_id, id)`. Indexes: `(user_id, is_archived)`, `(user_id, type)
 | `id` | TEXT | UUID; composite PK with owner |
 | `user_id` | TEXT | not null, indexed |
 | `creation_operation_id` | TEXT | not null, unique per owner |
-| `account_id` | TEXT? | required for DEBIT; null for CREDIT |
+| `account_id` | TEXT | required for DEBIT and CREDIT; asset for debit, `CREDIT_LIABILITY` for credit |
 | `alias` | TEXT? | null or length 1..80; required/distinct on collision |
 | `type` | TEXT | DEBIT/CREDIT |
 | `currency` | TEXT | PEN/USD |
@@ -209,7 +209,7 @@ Primary key `(user_id, id)`. Indexes: `(user_id, is_archived)`, `(user_id, type)
 
 Constraints/indices:
 
-- Composite FK `(user_id, account_id) -> accounts(user_id, id)` for debit link.
+- Composite FK `(user_id, account_id) -> accounts(user_id, id)` for both card types. The linked account type and currency must match the card's accounting role.
 - Primary key `(user_id, id)` and unique `(user_id, creation_operation_id)`.
 - Index `(user_id, is_archived, type)`.
 - Non-unique index `(user_id, issuer, network, last_four_digits)` to detect/warn collisions.
@@ -313,7 +313,7 @@ One transaction validates linked account owner, lifecycle, type and currency; co
 
 ### RegisterCreditCard
 
-One transaction validates limit/days/currency, counts quota, checks collision acknowledgement/alias, inserts card and outbox. It does not insert liability or expense.
+One Room transaction validates owner, limit/days/currency, quota, collision acknowledgement and alias; creates or reuses the card's zero-balance `CREDIT_LIABILITY` account; then inserts the card and registration outbox command. Registration creates no purchase, installment schedule, or expense.
 
 ### UpdateAppearance
 
@@ -398,6 +398,8 @@ Before final naming, the checked-in baseline must be clean-reset and compared wi
 
 Observed linked-project schema is comparison evidence, not an accepted target. T075 confirmed that its migration history and schema drift from the checked-in local baseline: remote `cards` retains legacy alias columns, remote `app_notifications` has `deleted_at`, and remote `internal.sync_changes` uses `occurred_at` while local uses `created_at`. Canonical `credit_products`, `credit_installments` and `credit_payment_allocations` are present in both. Purchase/payment RPCs still use the legacy movement path and must be reconciled through new forward-only migrations; preserve remote rows/history and do not edit applied migration files.
 
+Sprint 3 extends the remote `public.cards` projection with `currency_code CHAR(3) NOT NULL REFERENCES public.currencies(code)` and `issuer TEXT NOT NULL`. Debit currency is copied from its owner-scoped linked asset account. Credit currency is backfilled only from a legacy card currency, its linked account, or exactly one confirmed transaction currency; no currency outside the Android card domain (`PEN`, `USD`) is accepted. Missing or unsupported currency, invalid last-four digits, or incomplete/type-incompatible credit terms stop migration for explicit data repair instead of guessing. Legacy issuer comes from the card's catalog institution name/code when available, otherwise the safe display value `Desconocido`. New credit-card registration creates the owner-scoped `CREDIT_LIABILITY` account and links it through `account_id`; an older link to a liquid payment account is preserved as an asset while the card link is redirected. New card registration persists the submitted currency and issuer. `account_id` is required for both types after the forward migration.
+
 Remote-only rules:
 
 - Composite ownership references include `user_id`.
@@ -413,7 +415,7 @@ Remote-only rules:
 |-------|------|
 | `user_id`, `operation_id` | Composite primary identity |
 | `contract_version`, `command_type` | Included in canonical hash |
-| `payload_hash` | Server-computed SHA-256 |
+| `request_hash` | Server-computed SHA-256 over the normalized typed command; local outbox hashes are not compared with it |
 | `result_code` | APPLIED/DUPLICATE-compatible deterministic result |
 | `response_json` | Safe projection only, no raw payload |
 | `created_at` | Server time |
@@ -428,8 +430,9 @@ The following are projections/uses of existing canonical entities, not additiona
 
 - `public.credit_products` is the sole reference catalog. Reconcile the official `KIPU_CATALOGO_TARJETAS_CREDITO_PERU_2026.md` snapshot dated `2026-09-24` into this canonical table: 44 confirmed products (BCP 18, BBVA 10, Interbank 16). Extend the existing table only where fields are missing: `reference_tea_pen_min_bps`, `reference_tea_pen_max_bps`, `reference_tea_usd_min_bps`, `reference_tea_usd_max_bps` (nullable integer basis points); `membership_fee_pen_minor` and `membership_fee_usd_minor` (nullable `BIGINT`); `membership_terms`; `catalog_as_of_date`; `source_reference`; `source_status`; and `source_notes`. Preserve published ranges and source caveats. An unpublished or conflicted value is explicit, never inferred. Keep the legacy `reference_tea_bps` only for compatibility; do not use it as a currency-specific estimate unless its currency and source are explicit. `effective_to` is populated only for a source-published end date; software does not mark the snapshot stale by age. The UI label is `Tasa referencial al 24/09/2026`.
 - `public.cards.personal_tea_bps` stores the user's per-card rate. `CardEntity` must persist the same nullable integer in Room; changing it affects future simulations only.
+- A `CARD` pull projection includes every required `CardEntity` field, including its owner-scoped linked account (an asset for debit and `CREDIT_LIABILITY` for credit), explicit currency, issuer, masked last four, credit parameters, lifecycle, appearance, personal rate, creation time and revision. A fresh device must not infer credit-card currency from the profile. Credit-card registration creates or backfills the internal liability account and emits its `ACCOUNT` projection.
 - `public.credit_installments` is the persisted confirmed-purchase schedule. Its local Room projection uses owner-scoped UUIDs, `transaction_id`, installment number, due date, `principal_minor: Long`, `interest_minor: Long`, status and revision. It does not persist a draft simulation.
-- `public.credit_payment_allocations` is the immutable relation between a payment transaction and installments. Its Room projection uses `allocated_minor: Long > 0` and owner-composite references. Allocate only outstanding installment principal in ascending `due_date`; for equal dates, order by purchase occurrence time, installment number and stable installment ID. A partial allocation reduces the oldest installment's principal and its status becomes `PARTIALLY_PAID`; do not advance to a later installment while the older one has a balance. The allocation sum equals the payment transaction amount. Allocation rows and installment status changes are applied atomically with the payment transaction.
+- `public.credit_payment_allocations` is the immutable relation between a payment transaction and installments. Its Room projection uses `allocated_minor: Long > 0` and owner-composite references. Allocate only outstanding installment principal in ascending `due_date`; for equal dates, order by purchase occurrence time, installment number and stable installment ID. A partial allocation reduces the oldest installment's principal and its status becomes `PARTIAL`; do not advance to a later installment while the older one has a balance. The allocation sum equals the payment transaction amount. Allocation rows and installment status changes are applied atomically with the payment transaction.
 - Existing `public.app_notifications` remains the notification-center projection owned by EP-NOT. EP-CTA produces an idempotent threshold-crossing event; it does not add `credit_alerts` or another notifications table.
 - Simulated schedules are transient domain/UI values. They do not require an `installment_simulations` table or ledger entries. A confirmed purchase stores only its confirmed transaction and canonical installment rows.
 
@@ -437,7 +440,11 @@ No separate `credit_limit_history` table is added in this sprint. A line reducti
 
 ### Room projections for Sprint 3
 
-Add the missing local projections for `credit_installments` and `credit_payment_allocations` in the next Room schema version. Use Kotlin `Long` for every minor-unit value, validate amounts/ranges in domain mappers, index all queries by `(user_id, ...)`, and use owner-composite foreign keys. Do not persist a second current debt or available-credit balance; derive both from confirmed ledger effects and the configured credit limit.
+Add local projections for `credit_installments` and `credit_payment_allocations`. Use Kotlin `Long` for every minor-unit value, validate amounts/ranges in domain mappers, index all queries by `(user_id, ...)`, and use owner-composite foreign keys. Do not persist a second current debt or available-credit balance.
+
+### Credit purchase and cash ledger boundary
+
+A confirmed `EXPENSE/CARD_PURCHASE` has `card_id`, no liquid `source_account_id`, and writes one negative `LIABILITY` ledger entry to the card's `CREDIT_LIABILITY` account for the confirmed amount. A confirmed `TRANSFER/CARD_PAYMENT` writes the negative `SOURCE` entry to the paying asset account and an equal positive `LIABILITY` entry to the card liability account, then atomically allocates that amount against outstanding installments. The two payment entries sum to zero; the payment is not a second expense. Credit liability balance is authoritative for debt and is reconciled against outstanding installment principal and immutable payment allocations. Room, pull, dashboard metrics and reporting preserve this distinction.
 
 Threshold state remains derived from consecutive committed utilization values. Emit a stable event identity from the operation that crosses a threshold; retries of that operation cannot emit a duplicate. A fall below a threshold re-arms the next crossing. Persist/present the event only through the agreed EP-NOT `app_notifications` contract.
 

@@ -10,6 +10,7 @@ enum class CardNetwork {
     VISA,
     MASTERCARD,
     AMEX,
+    DINERS,
     OTHER,
 }
 
@@ -38,6 +39,7 @@ sealed interface Card {
     val lastFourDigits: String
     val currency: Currency
     val preset: CardPreset?
+    val stylePresetId: String?
     val colorToken: String?
     val iconToken: String?
     val isArchived: Boolean
@@ -93,6 +95,7 @@ data class DebitCard(
     override val currency: Currency,
     val linkedAccountId: AccountId,
     override val preset: CardPreset? = null,
+    override val stylePresetId: String? = null,
     override val colorToken: String? = null,
     override val iconToken: String? = null,
     override val isArchived: Boolean = false,
@@ -119,6 +122,7 @@ data class CreditCard(
     val dueDay: Int,
     val personalTeaBps: Int? = null,
     override val preset: CardPreset? = null,
+    override val stylePresetId: String? = null,
     override val colorToken: String? = null,
     override val iconToken: String? = null,
     override val isArchived: Boolean = false,
@@ -126,6 +130,9 @@ data class CreditCard(
     override val remoteRevision: Long = 0L,
     override val createdAt: Instant = Instant.now(),
     override val updatedAt: Instant = Instant.now(),
+    val liabilityAccountId: AccountId = AccountId(
+        CreditLiabilityAccountIds.accountId(userId.value, id.value),
+    ),
 ) : Card {
     init {
         validateCardCommon()

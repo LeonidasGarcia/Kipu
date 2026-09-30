@@ -1,0 +1,19 @@
+Live Room snapshot: 2026-09-28, Samsung SM-S926B / R5CX10W7CZD; read-only export with kipu.db + WAL + SHM via run-as.
+No purchase, payment, transaction, or TEA value was saved during the HU-11 inspection.
+Transactions: 26
+Ledger entries: 35
+Accounts (alias | type | archived | ledger balance minor units):
+Efectivo | CASH | 0 | 101878
+Pasivo tarjeta •••• 1234 | CREDIT_LIABILITY | 0 | -50000
+Pasivo tarjeta •••• 7548 | CREDIT_LIABILITY | 0 | 0
+QA_EFECTIVO | CASH | 1 | 0
+QA_SAVINGS | SAVINGS | 1 | 0
+Sueldo | SAVINGS | 0 | 287500
+Cards (alias | type | network | last 4 | limit minor units | archived | personal_tea_bps):
+American Express Platinum | CREDIT | AMEX | 1234 | 5000000 | 1 | NULL
+NULL | CREDIT | VISA | 7548 | 1000000 | 1 | NULL
+oro | DEBIT | VISA | 7548 | NULL | 0 | NULL
+instrument_sync_outbox state counts: [('ERROR', 1), ('PENDING', 26)]
+movement_outbox state counts: [('FAILED_PERMANENT', 1), ('PENDING', 8)]
+Dashboard evidence 220-restored-dashboard.png/xml shows Free 2/4, liquid assets S/ 3,893.78, cash S/ 1,018.78, salary S/ 2,875.00, and Amex debt S/ 500.00.
+Amex was temporarily reactivated to open the rate page and archived again. Its final local state is archived; the dashboard returned to 2/4. The outbox counts above include pending local sync work; no backend synchronization was verified.

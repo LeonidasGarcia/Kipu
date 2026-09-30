@@ -1,0 +1,19 @@
+ROOM QA SNAPSHOT 2026-09-28 — TRAS DESCARTAR POSIBLE DUPLICADO
+
+COUNTS
+{'transactions': 14, 'ledger_entries': 19}
+
+BALANCES
+{'alias': 'Efectivo', 'balance_minor': 101900}
+{'alias': 'Pasivo tarjeta •••• 1234', 'balance_minor': -50000}
+{'alias': 'Pasivo tarjeta •••• 7548', 'balance_minor': 0}
+{'alias': 'Sueldo', 'balance_minor': 287500}
+
+DUPLICATE TEST ROWS
+{'id': '01231153-faae-47ab-8e1b-5bf8e7e41bb2', 'amount_minor': 100, 'source_account_id': '4e4bef0a-8056-44fc-9a3f-c38e6aea8b03', 'category_id': 'c56d0946-be26-483d-87dc-3a4893059794', 'merchant_provisional_text': 'HBO'}
+
+DUPLICATE TEST LEDGER
+{'transaction_id': '01231153-faae-47ab-8e1b-5bf8e7e41bb2', 'signed_amount_minor': -100, 'alias': 'Efectivo'}
+{'transaction_id': '3d0e6923-fa04-37e4-bf01-139b81173411', 'signed_amount_minor': -100000, 'alias': 'Sueldo'}
+{'transaction_id': '3d0e6923-fa04-37e4-bf01-139b81173411', 'signed_amount_minor': 100000, 'alias': 'Pasivo tarjeta •••• 7548'}
+{'transaction_id': 'bccc1ff2-d2cc-36e7-aa70-96198f567f32', 'signed_amount_minor': -100000, 'alias': 'Pasivo tarjeta •••• 7548'}

@@ -74,7 +74,7 @@ class FinancialInstrumentsApi @Inject constructor(
                 url {
                     parameters.append(
                         "select",
-                        "id,institution_code,institution_name,product_name,card_network,reference_tea_bps,reference_tea_pen_min_bps,reference_tea_pen_max_bps,reference_tea_usd_min_bps,reference_tea_usd_max_bps,published_tea_summary,published_tcea_summary,membership_fee_pen_minor,membership_fee_usd_minor,membership_condition,source_url,verification_status,catalog_as_of,effective_from,effective_to",
+                        "id,institution_code,product_name,card_network,reference_tea_bps,reference_tea_pen_min_bps,reference_tea_pen_max_bps,reference_tea_usd_min_bps,reference_tea_usd_max_bps,published_tea_summary,published_tcea_summary,membership_fee_pen_minor,membership_fee_usd_minor,membership_condition,source_url,verification_status,catalog_as_of,effective_from,effective_to",
                     )
                     parameters.append("is_catalog_listed", "eq.true")
                     parameters.append("order", "institution_code.asc,product_name.asc")

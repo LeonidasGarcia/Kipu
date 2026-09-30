@@ -1,0 +1,23 @@
+﻿snapshot|2026-09-28|transactions=31|ledger_entries=41
+hu10_purchase|QA-HU10-50|2450000|status=ACTIVE|sync=PENDING
+hu10_purchase|QA-HU10-80|1500000|status=ACTIVE|sync=PENDING
+hu10_purchase|QA-HU10-100|1000000|status=ACTIVE|sync=PENDING
+compensation_income|income|4950000|status=ACTIVE|sync=PENDING
+compensation_payment|card_payment|4950000|status=ACTIVE|sync=PENDING
+ledger_balance|Sueldo|SAVINGS|287500
+ledger_balance|Pasivo tarjeta •••• 1234|CREDIT_LIABILITY|-50000
+ledger_balance|Efectivo|CASH|101878
+ledger_balance|Pasivo tarjeta •••• 7548|CREDIT_LIABILITY|0
+card|American Express Platinum|1234|archived=1|limit_minor=5000000
+transaction_status|ACTIVE|FAILED_PERMANENT|EXPENSE|1
+transaction_status|ACTIVE|MIGRATED_LOCAL|EXPENSE|3
+transaction_status|ACTIVE|MIGRATED_LOCAL|INCOME|5
+transaction_status|ACTIVE|PENDING|EXPENSE|11
+transaction_status|ACTIVE|PENDING|INCOME|1
+transaction_status|ACTIVE|PENDING|TRANSFER|10
+movement_outbox|FAILED_PERMANENT|1
+movement_outbox|PENDING|9
+instrument_outbox|ERROR|1
+instrument_outbox|PENDING|32
+sync_outbox|IN_FLIGHT|1
+notification_count|0

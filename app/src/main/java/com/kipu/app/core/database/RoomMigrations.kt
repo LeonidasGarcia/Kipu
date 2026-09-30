@@ -2,6 +2,8 @@ package com.kipu.app.core.database
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import android.content.ContentValues
+import com.kipu.app.feature.accounts.domain.model.CreditLiabilityAccountIds
 
 /**
  * Migration 1 -> 2: Adds EP-APS tables for profile caching, preference outbox,
@@ -632,6 +634,205 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
                   SELECT 1 FROM `credit_installments` i WHERE i.`user_id` = t.`user_id` AND i.`transaction_id` = t.`id`
               )
         """.trimIndent())
+    }
+}
+
+/** Migration 11 -> 12: adds account-scoped notification cache and desired-state sync outbox. */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `app_notifications` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `title` TEXT NOT NULL,
+                `body` TEXT NOT NULL,
+                `notification_type` TEXT NOT NULL,
+                `reference_entity_type` TEXT,
+                `reference_entity_id` TEXT,
+                `is_read` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `deleted_at` INTEGER,
+                `event_payload` TEXT NOT NULL DEFAULT '{}',
+                PRIMARY KEY(`user_id`, `id`)
+            )""".trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `app_notifications_user_created_idx` ON `app_notifications` (`user_id`, `created_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `app_notifications_user_read_created_idx` ON `app_notifications` (`user_id`, `is_read`, `created_at`)")
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS `notification_sync_outbox` (
+                `operation_id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `notification_id` TEXT NOT NULL,
+                `is_read` INTEGER,
+                `deleted_at` INTEGER,
+                `attempt_count` INTEGER NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                PRIMARY KEY(`operation_id`)
+            )""".trimIndent(),
+        )
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `notification_outbox_owner_notice_uq` ON `notification_sync_outbox` (`user_id`, `notification_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `notification_outbox_owner_created_idx` ON `notification_sync_outbox` (`user_id`, `created_at`)")
+    }
+}
+
+/** Migration 12 -> 13: stores the nullable visual preset separately from legacy card preset/color/icon fields. */
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `cards` ADD COLUMN `style_preset_id` TEXT DEFAULT NULL")
+    }
+}
+
+/** Migration 13 -> 14: recovers leased instrument commands and retains acknowledged causal predecessors. */
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `instrument_sync_outbox` ADD COLUMN `lease_expires_at` INTEGER")
+        db.execSQL("UPDATE `instrument_sync_outbox` SET `state` = 'PENDING', `lease_expires_at` = NULL WHERE `state` = 'IN_FLIGHT'")
+        db.execSQL("UPDATE `instrument_sync_outbox` SET `predecessor_operation_id` = NULL WHERE `predecessor_operation_id` IS NOT NULL AND NOT EXISTS (SELECT 1 FROM `instrument_sync_outbox` AS predecessor WHERE predecessor.`user_id` = `instrument_sync_outbox`.`user_id` AND predecessor.`operation_id` = `instrument_sync_outbox`.`predecessor_operation_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_state_lease_expires_at` ON `instrument_sync_outbox` (`user_id`, `state`, `lease_expires_at`)")
+    }
+}
+
+/** Migration 14 -> 15: link credit cards to hidden liability accounts and backfill their ledger effects. */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        val cards = db.query(
+            "SELECT user_id, id, last_four_digits, currency, created_at, account_id " +
+                "FROM cards WHERE type = 'CREDIT' ORDER BY user_id, id",
+        )
+        cards.use { cursor ->
+            val userIndex = cursor.getColumnIndexOrThrow("user_id")
+            val cardIndex = cursor.getColumnIndexOrThrow("id")
+            val lastFourIndex = cursor.getColumnIndexOrThrow("last_four_digits")
+            val currencyIndex = cursor.getColumnIndexOrThrow("currency")
+            val createdAtIndex = cursor.getColumnIndexOrThrow("created_at")
+            val accountIndex = cursor.getColumnIndexOrThrow("account_id")
+
+            while (cursor.moveToNext()) {
+                val userId = cursor.getString(userIndex)
+                val cardId = cursor.getString(cardIndex)
+                val existingAccountId = if (cursor.isNull(accountIndex)) null else cursor.getString(accountIndex)
+                val existingLiabilityId = existingAccountId?.takeIf { candidateId ->
+                    db.query(
+                        "SELECT 1 FROM accounts WHERE user_id = ? AND id = ? AND type = 'CREDIT_LIABILITY' " +
+                            "AND currency = ? AND is_archived = 0 AND initial_balance_minor_units = 0",
+                        arrayOf(userId, candidateId, cursor.getString(currencyIndex)),
+                    ).use { accountCursor -> accountCursor.moveToFirst() }
+                }
+                // Preserve valid existing liabilities. Old links to liquid payment
+                // accounts stay intact as assets while the card is redirected.
+                val accountId = existingLiabilityId ?: CreditLiabilityAccountIds.accountId(userId, cardId)
+                val openedAt = cursor.getLong(createdAtIndex)
+                val accountValues = ContentValues().apply {
+                    put("id", accountId)
+                    put("user_id", userId)
+                    put("creation_operation_id", CreditLiabilityAccountIds.creationOperationId(userId, cardId))
+                    put("alias", "Pasivo tarjeta •••• ${cursor.getString(lastFourIndex)}")
+                    put("type", "CREDIT_LIABILITY")
+                    put("currency", cursor.getString(currencyIndex))
+                    putNull("preset_id")
+                    putNull("color")
+                    putNull("icon")
+                    put("initial_balance_minor_units", 0L)
+                    put("opened_at", openedAt)
+                    put("is_archived", 0)
+                    put("remote_revision", 0L)
+                    put("created_at", openedAt)
+                    put("updated_at", openedAt)
+                }
+                db.insert("accounts", android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE, accountValues)
+
+                val linkedAccount = db.query(
+                    "SELECT type, currency, is_archived, initial_balance_minor_units FROM accounts WHERE user_id = ? AND id = ?",
+                    arrayOf(userId, accountId),
+                )
+                linkedAccount.use { accountCursor ->
+                    check(accountCursor.moveToFirst() &&
+                        accountCursor.getString(0) == "CREDIT_LIABILITY" &&
+                        accountCursor.getString(1) == cursor.getString(currencyIndex) &&
+                        accountCursor.getInt(2) == 0 && accountCursor.getLong(3) == 0L
+                    ) { "Credit card $cardId has an incompatible liability account" }
+                }
+                db.execSQL(
+                    "UPDATE cards SET account_id = ? WHERE user_id = ? AND id = ?",
+                    arrayOf(accountId, userId, cardId),
+                )
+            }
+        }
+
+        val invalidLinks = db.query(
+            "SELECT COUNT(*) FROM cards c LEFT JOIN accounts a ON a.user_id = c.user_id AND a.id = c.account_id " +
+                "WHERE c.type = 'CREDIT' AND (a.id IS NULL OR a.type != 'CREDIT_LIABILITY' OR a.currency != c.currency " +
+                "OR a.is_archived != 0 OR a.initial_balance_minor_units != 0)",
+        )
+        invalidLinks.use { cursor ->
+            check(cursor.moveToFirst() && cursor.getLong(0) == 0L) { "Credit card liability-account repair is incomplete" }
+        }
+
+        val invalidPaymentSchedules = db.query(
+            "SELECT COUNT(*) FROM transactions t WHERE t.operation_kind = 'CARD_PAYMENT' " +
+                "AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT' " +
+                "AND COALESCE((SELECT SUM(a.allocated_minor) FROM credit_payment_allocations a " +
+                "WHERE a.user_id = t.user_id AND a.payment_transaction_id = t.id), 0) != t.amount_minor",
+        )
+        invalidPaymentSchedules.use { cursor ->
+            check(cursor.moveToFirst() && cursor.getLong(0) == 0L) {
+                "Active card payment allocations do not match their transaction amounts"
+            }
+        }
+
+        val invalidExistingLiability = db.query(
+            "SELECT COUNT(*) FROM ledger_entries le JOIN transactions t " +
+                "ON t.user_id = le.user_id AND t.id = le.transaction_id JOIN cards c " +
+                "ON c.user_id = t.user_id AND c.id = t.card_id " +
+                "WHERE le.role = 'LIABILITY' AND t.operation_kind IN ('CARD_PURCHASE','CARD_PAYMENT') " +
+                "AND (le.account_id != c.account_id OR le.currency_code != c.currency OR " +
+                "le.signed_amount_minor != CASE WHEN t.operation_kind = 'CARD_PURCHASE' THEN -t.amount_minor ELSE t.amount_minor END)",
+        )
+        invalidExistingLiability.use { cursor ->
+            check(cursor.moveToFirst() && cursor.getLong(0) == 0L) {
+                "Existing card-liability ledger entries conflict with the linked card account"
+            }
+        }
+        val duplicateLiabilityEntries = db.query(
+            "SELECT COUNT(*) FROM (SELECT le.user_id, le.transaction_id FROM ledger_entries le " +
+                "JOIN transactions t ON t.user_id = le.user_id AND t.id = le.transaction_id " +
+                "WHERE le.role = 'LIABILITY' AND t.operation_kind IN ('CARD_PURCHASE','CARD_PAYMENT') " +
+                "GROUP BY le.user_id, le.transaction_id HAVING COUNT(*) > 1)",
+        )
+        duplicateLiabilityEntries.use { cursor ->
+            check(cursor.moveToFirst() && cursor.getLong(0) == 0L) {
+                "A credit transaction has more than one liability ledger entry"
+            }
+        }
+
+        db.execSQL(
+            "INSERT OR IGNORE INTO ledger_entries " +
+                "(id, user_id, transaction_id, account_id, role, signed_amount_minor, currency_code, created_at) " +
+                "SELECT 'local:liability:' || t.user_id || ':' || t.id, t.user_id, t.id, c.account_id, 'LIABILITY', " +
+                "-t.amount_minor, t.currency_code, t.occurred_at FROM transactions t JOIN cards c " +
+                "ON c.user_id = t.user_id AND c.id = t.card_id WHERE t.operation_kind = 'CARD_PURCHASE' " +
+                "AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT' " +
+                "AND NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.user_id = t.user_id " +
+                "AND le.transaction_id = t.id AND le.role = 'LIABILITY')",
+        )
+        db.execSQL(
+            "INSERT OR IGNORE INTO ledger_entries " +
+                "(id, user_id, transaction_id, account_id, role, signed_amount_minor, currency_code, created_at) " +
+                "SELECT 'local:liability:' || t.user_id || ':' || t.id, t.user_id, t.id, c.account_id, 'LIABILITY', " +
+                "t.amount_minor, t.currency_code, t.occurred_at FROM transactions t JOIN cards c " +
+                "ON c.user_id = t.user_id AND c.id = t.card_id WHERE t.operation_kind = 'CARD_PAYMENT' " +
+                "AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT' " +
+                "AND NOT EXISTS (SELECT 1 FROM ledger_entries le WHERE le.user_id = t.user_id " +
+                "AND le.transaction_id = t.id AND le.role = 'LIABILITY')",
+        )
+        db.execSQL(
+            "INSERT OR REPLACE INTO balance_projections " +
+                "(user_id, account_id, balance_minor, currency_code, last_transaction_at, updated_at) " +
+                "SELECT a.user_id, a.id, COALESCE(SUM(le.signed_amount_minor), 0), a.currency, " +
+                "COALESCE(MAX(le.created_at), a.opened_at), a.updated_at FROM accounts a " +
+                "LEFT JOIN ledger_entries le ON le.user_id = a.user_id AND le.account_id = a.id " +
+                "WHERE a.type = 'CREDIT_LIABILITY' GROUP BY a.user_id, a.id, a.currency, a.opened_at, a.updated_at",
+        )
     }
 }
 

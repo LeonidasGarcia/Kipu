@@ -1,11 +1,13 @@
 package com.kipu.app.feature.movements.data
 
 import com.kipu.app.feature.accounts.data.local.AccountDao
+import com.kipu.app.feature.accounts.data.local.CardDao
 import com.kipu.app.feature.categories.data.local.CategoryDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.movements.data.local.BalanceProjectionStore
 import com.kipu.app.feature.movements.data.local.MovementLocalDataSource
 import com.kipu.app.feature.movements.data.local.TransactionEntity
+import com.kipu.app.feature.movements.data.local.toDomain
 import com.kipu.app.feature.movements.data.sync.MovementSyncScheduler
 import com.kipu.app.feature.movements.domain.MovementRepository
 import com.kipu.app.feature.movements.domain.TransactionRequestHasher
@@ -26,6 +28,7 @@ class OfflineFirstMovementRepository @Inject constructor(
     private val hasher: TransactionRequestHasher,
     private val syncScheduler: MovementSyncScheduler,
     private val accountDao: AccountDao,
+    private val cardDao: CardDao,
     private val categoryDao: CategoryDao,
     private val merchantDao: MerchantCatalogDao,
 ) : MovementRepository {
@@ -45,15 +48,18 @@ class OfflineFirstMovementRepository @Inject constructor(
             val categoriesById = presentations.associateBy { it.categoryId }
             val merchantsById = merchants.associateBy { it.id }
             entities.map { entity ->
-                with(localDataSource) {
+                run {
                     val domain = entity.toDomain()
                     val sourceAlias = domain.sourceAccountId?.let { accountDao.getById(userId, it)?.alias }
                     val destAlias = domain.destinationAccountId?.let { accountDao.getById(userId, it)?.alias }
+                    val card = domain.cardId?.let { cardDao.getById(userId, it) }
                     val category = domain.categoryId?.let(categoriesById::get)
                     TransactionItem(
                         transaction = domain,
                         sourceAccountAlias = sourceAlias,
                         destinationAccountAlias = destAlias,
+                        cardAlias = card?.alias,
+                        cardLastFourDigits = card?.lastFourDigits,
                         categoryName = category?.name,
                         categoryIcon = category?.icon,
                         merchantName = domain.merchantProvisionalText
@@ -65,7 +71,7 @@ class OfflineFirstMovementRepository @Inject constructor(
 
     override suspend fun getTransactionById(userId: String, transactionId: String): Transaction? {
         return localDataSource.getTransactionById(userId, transactionId)?.let {
-            with(localDataSource) { it.toDomain() }
+            it.toDomain()
         }
     }
 
@@ -96,7 +102,7 @@ class OfflineFirstMovementRepository @Inject constructor(
             occurredAt = occurredAt,
             windowMillis = windowMillis,
         )
-        return entities.map { with(localDataSource) { it.toDomain() } }
+        return entities.map { it.toDomain() }
     }
 
     override fun observeBalance(userId: String, accountId: String): Flow<Long?> {

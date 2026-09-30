@@ -19,6 +19,9 @@ class CreateLiquidAccount @Inject constructor(
         account: Account,
         operationId: OperationId = OperationId.generate(),
     ): Result<Account> {
+        if (account.type == com.kipu.app.feature.accounts.domain.model.AccountType.CREDIT_LIABILITY) {
+            return Result.failure(IllegalArgumentException("Credit liability accounts are managed by their card"))
+        }
         if (account.isComputableForQuota) {
             val currentCount = repository.getActiveComputableCount()
             if (currentCount >= FinancialInstrumentsRepository.FREE_TIER_MAX_COMPUTABLE_INSTRUMENTS) {

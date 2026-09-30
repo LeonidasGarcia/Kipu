@@ -85,6 +85,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.R
 import com.kipu.app.feature.categories.presentation.components.MerchantPickerBottomSheet
 import com.kipu.app.feature.categories.presentation.components.MerchantPickerViewModel
+import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.movements.domain.model.MovementType
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -146,6 +147,7 @@ fun QuickMovementBottomSheet(
             onTypeSelected = viewModel::onTypeSelected,
             onAmountChanged = viewModel::onAmountChanged,
             onSourceAccountSelected = viewModel::onSourceAccountSelected,
+            onSourceCardSelected = viewModel::onSourceCardSelected,
             onDestinationAccountSelected = viewModel::onDestinationAccountSelected,
             onCategorySelected = viewModel::onCategorySelected,
             onOpenMerchantPicker = { showMerchantPicker = true },
@@ -231,6 +233,7 @@ fun QuickMovementContent(
     onTypeSelected: (MovementType) -> Unit,
     onAmountChanged: (String) -> Unit,
     onSourceAccountSelected: (String) -> Unit,
+    onSourceCardSelected: (String) -> Unit,
     onDestinationAccountSelected: (String) -> Unit,
     onCategorySelected: (CategoryOption) -> Unit,
     onOpenMerchantPicker: () -> Unit,
@@ -385,11 +388,14 @@ fun QuickMovementContent(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Source Account Selector
-        AccountDropdownSelector(
+        SourceInstrumentDropdownSelector(
             label = if (uiState.type == MovementType.INCOME) "Cuenta destino" else stringResource(R.string.movement_source_account),
             accounts = uiState.availableAccounts,
+            creditCards = if (uiState.type == MovementType.EXPENSE) uiState.availableCreditCards else emptyList(),
             selectedAccountId = uiState.selectedSourceAccountId,
+            selectedCardId = uiState.selectedSourceCardId,
             onAccountSelected = onSourceAccountSelected,
+            onCardSelected = onSourceCardSelected,
             error = uiState.accountError,
             modifier = Modifier.testTag("selector_source_account"),
         )
@@ -402,7 +408,7 @@ fun QuickMovementContent(
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Spacer(modifier = Modifier.height(16.dp))
-                AccountDropdownSelector(
+                SourceInstrumentDropdownSelector(
                     label = stringResource(R.string.movement_destination_account),
                     accounts = uiState.availableAccounts.filter {
                         it.id.value != uiState.selectedSourceAccountId && it.currency.name == uiState.currency
@@ -616,17 +622,21 @@ fun QuickMovementContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AccountDropdownSelector(
+private fun SourceInstrumentDropdownSelector(
     label: String,
     accounts: List<com.kipu.app.feature.accounts.domain.model.Account>,
+    creditCards: List<CreditCard> = emptyList(),
     selectedAccountId: String?,
+    selectedCardId: String? = null,
     onAccountSelected: (String) -> Unit,
+    onCardSelected: (String) -> Unit = {},
     error: String?,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
     val selectedAccount = accounts.find { it.id.value == selectedAccountId }
+    val selectedCard = creditCards.find { it.id.value == selectedCardId }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -641,7 +651,9 @@ private fun AccountDropdownSelector(
             modifier = Modifier.fillMaxWidth()
         ) {
             OutlinedTextField(
-                value = selectedAccount?.alias ?: "Selecciona una cuenta",
+                value = selectedAccount?.let { "${it.alias} · ${accountTypeLabel(it.type)}" }
+                    ?: selectedCard?.let { "${it.alias ?: it.issuer} ${it.network.name} •••• ${it.lastFourDigits} · Tarjeta de crédito" }
+                    ?: "Selecciona una cuenta o tarjeta",
                 onValueChange = {},
                 readOnly = true,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -660,7 +672,7 @@ private fun AccountDropdownSelector(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                if (accounts.isEmpty()) {
+                if (accounts.isEmpty() && creditCards.isEmpty()) {
                     DropdownMenuItem(
                         text = { Text("No hay cuentas disponibles") },
                         onClick = { expanded = false },
@@ -685,10 +697,36 @@ private fun AccountDropdownSelector(
                             }
                         )
                     }
+                    creditCards.forEach { card ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(card.alias ?: "${card.issuer} ${card.network.name}", fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "•••• ${card.lastFourDigits} · Tarjeta de crédito · ${card.currency.name}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.onSurfaceVariant,
+                                    )
+                                }
+                            },
+                            onClick = {
+                                onCardSelected(card.id.value)
+                                expanded = false
+                            },
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+private fun accountTypeLabel(type: com.kipu.app.feature.accounts.domain.model.AccountType): String = when (type) {
+    com.kipu.app.feature.accounts.domain.model.AccountType.SAVINGS -> "Ahorros"
+    com.kipu.app.feature.accounts.domain.model.AccountType.BANK -> "Cuenta bancaria"
+    com.kipu.app.feature.accounts.domain.model.AccountType.DIGITAL_WALLET -> "Billetera"
+    com.kipu.app.feature.accounts.domain.model.AccountType.CASH -> "Efectivo"
+    com.kipu.app.feature.accounts.domain.model.AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
 }
 
 @Composable

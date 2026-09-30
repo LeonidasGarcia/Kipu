@@ -50,6 +50,9 @@ interface AccountDao {
     @Query("UPDATE accounts SET is_archived = :isArchived, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
     suspend fun setArchived(userId: String, id: String, isArchived: Boolean, nowMicros: Long)
 
+    @Query("UPDATE accounts SET remote_revision = :revision, updated_at = :nowMicros WHERE user_id = :userId AND id = :id")
+    suspend fun updateRemoteRevision(userId: String, id: String, revision: Long, nowMicros: Long): Int
+
     @Query("DELETE FROM accounts WHERE user_id = :userId AND id = :id")
     suspend fun delete(userId: String, id: String)
 }

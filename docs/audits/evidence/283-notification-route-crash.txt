@@ -1,0 +1,39 @@
+# Evidencia enfocada: crash al abrir el centro de notificaciones
+
+Fecha y hora local del dispositivo: 2026-09-28 (America/Lima). Fuente: buffer de crash y ApplicationExitInfo guardados en 282-app-exit-diagnostics.txt. El buffer contiene además eventos antiguos; aquí se transcriben solo los tres crashes de esta sesión.
+
+## Reproducciones observadas
+
+Se activó la acción accesible «Notificaciones» del dashboard. En cada ocasión la navegación elevó una excepción y Android devolvió la app al launcher. La traza identifica el callback de notificaciones, no el botón contiguo de historial.
+
+### 13:42:47 dispositivo
+09-28 13:42:47.156 17531 17531 E AndroidRuntime: FATAL EXCEPTION: main
+09-28 13:42:47.156 17531 17531 E AndroidRuntime: Process: com.kipu.app, PID: 17531
+09-28 13:42:47.156 17531 17531 E AndroidRuntime: java.lang.IllegalArgumentException: Navigation destination that matches route notifications/center cannot be found in the navigation graph ComposeNavGraph(0x0) startDestination={Destination(0xe0dc478f) route=auth/login}
+09-28 13:42:47.156 17531 17531 E AndroidRuntime: 	at com.kipu.app.navigation.NotificationsNavigationKt.navigateToNotifications(NotificationsNavigation.kt:18)
+09-28 13:42:47.156 17531 17531 E AndroidRuntime: 	at com.kipu.app.navigation.AccountsNavigationKt$accountsDestinations$1$7$1.invoke(AccountsNavigation.kt:76)
+09-28 13:42:47.156 17531 17531 E AndroidRuntime: 	at com.kipu.app.navigation.AccountsNavigationKt$accountsDestinations$1$7$1.invoke(AccountsNavigation.kt:76)
+
+### 13:45:35 dispositivo
+09-28 13:45:35.985 15357 15357 E AndroidRuntime: FATAL EXCEPTION: main
+09-28 13:45:35.985 15357 15357 E AndroidRuntime: Process: com.kipu.app, PID: 15357
+09-28 13:45:35.985 15357 15357 E AndroidRuntime: java.lang.IllegalArgumentException: Navigation destination that matches route notifications/center cannot be found in the navigation graph ComposeNavGraph(0x0) startDestination={Destination(0xe0dc478f) route=auth/login}
+09-28 13:45:35.985 15357 15357 E AndroidRuntime: 	at com.kipu.app.navigation.NotificationsNavigationKt.navigateToNotifications(NotificationsNavigation.kt:18)
+09-28 13:45:35.985 15357 15357 E AndroidRuntime: 	at com.kipu.app.navigation.AccountsNavigationKt$accountsDestinations$1$7$1.invoke(AccountsNavigation.kt:76)
+09-28 13:45:35.985 15357 15357 E AndroidRuntime: 	at com.kipu.app.navigation.AccountsNavigationKt$accountsDestinations$1$7$1.invoke(AccountsNavigation.kt:76)
+
+### 13:57:33 dispositivo
+09-28 13:57:33.365 18072 18072 E AndroidRuntime: FATAL EXCEPTION: main
+09-28 13:57:33.365 18072 18072 E AndroidRuntime: Process: com.kipu.app, PID: 18072
+09-28 13:57:33.365 18072 18072 E AndroidRuntime: java.lang.IllegalArgumentException: Navigation destination that matches route notifications/center cannot be found in the navigation graph ComposeNavGraph(0x0) startDestination={Destination(0xe0dc478f) route=auth/login}
+09-28 13:57:33.365 18072 18072 E AndroidRuntime: 	at com.kipu.app.navigation.NotificationsNavigationKt.navigateToNotifications(NotificationsNavigation.kt:18)
+09-28 13:57:33.365 18072 18072 E AndroidRuntime: 	at com.kipu.app.navigation.AccountsNavigationKt$accountsDestinations$1$7$1.invoke(AccountsNavigation.kt:76)
+09-28 13:57:33.365 18072 18072 E AndroidRuntime: 	at com.kipu.app.navigation.AccountsNavigationKt$accountsDestinations$1$7$1.invoke(AccountsNavigation.kt:76)
+
+## Contraste estático del grafo activo
+
+- `MainActivity.kt:163-204` construye el NavHost usado en runtime; allí instala auth, plan selection, settings, accounts y movements, pero no llama `notificationDestinations(navController)`.
+- `AccountsNavigation.kt:76` vincula la campana del dashboard con `navigateToNotifications`; `NotificationsNavigation.kt:15-18` navega a `notifications/center`.
+- `KipuNavHost.kt:28` sí registra `notificationDestinations`, pero ese helper no es el NavHost que se construye directamente en `MainActivity`.
+
+Conclusión: ruta sin registrar en el grafo activo, reproducida tres veces con crash. La captura 281 muestra el launcher tras la última salida.

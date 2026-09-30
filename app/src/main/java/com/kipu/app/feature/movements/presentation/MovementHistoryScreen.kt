@@ -319,8 +319,11 @@ fun TransactionRow(
             MovementType.TRANSFER -> "Transferencia"
         }
 
-    val subtitle = when (tx.type) {
-        MovementType.TRANSFER -> "${item.sourceAccountAlias ?: "Origen"} → ${item.destinationAccountAlias ?: "Destino"}"
+    val cardLabel = item.cardAlias ?: item.cardLastFourDigits?.let { "•••• $it" } ?: "Tarjeta"
+    val subtitle = when {
+        tx.operationKind.equals("CARD_PURCHASE", ignoreCase = true) -> cardLabel
+        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "${item.sourceAccountAlias ?: "Origen"} → $cardLabel"
+        tx.type == MovementType.TRANSFER -> "${item.sourceAccountAlias ?: "Origen"} → ${item.destinationAccountAlias ?: "Destino"}"
         else -> item.sourceAccountAlias ?: "Cuenta"
     }
 

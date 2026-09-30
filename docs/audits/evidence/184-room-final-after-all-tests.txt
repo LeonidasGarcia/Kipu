@@ -1,0 +1,30 @@
+ROOM QA FINAL SNAPSHOT — 2026-09-28
+Database copied from the live app with kipu.db, WAL, and SHM; Room schema version 15.
+
+COUNTS
+transactions: 26
+ledger_entries: 35
+
+ACTIVE ACCOUNT BALANCES (minor units, sum of ledger entries)
+Efectivo / CASH / initial_balance_minor_units=2000 / archived=0 / balance=101878 PEN (S/ 1,018.78)
+Sueldo / SAVINGS / initial_balance_minor_units=1000000 / archived=0 / balance=287500 PEN (S/ 2,875.00)
+Pasivo tarjeta 7548 / CREDIT_LIABILITY / archived=0 / balance=0 PEN
+Pasivo tarjeta 1234 / CREDIT_LIABILITY / archived=0 / balance=-50000 PEN (S/ -500.00)
+QA_EFECTIVO / CASH / initial_balance_minor_units=0 / archived=1 / no ledger entries
+QA_SAVINGS / SAVINGS / initial_balance_minor_units=0 / archived=1 / no ledger entries
+
+CARDS
+BCP Visa credit 7548 / is_archived=1
+Interbank Amex credit 1234 / is_archived=1
+BCP Visa debit / is_archived=0
+
+QA BALANCE CORRECTION TRAIL
+Original opening movement: +2000 minor (S/ 20.00)
+Correction target S/ 21.00: reversal -2000, adjustment +2100; net +100.
+Correction target S/ 20.00: reversal -2000, adjustment +2000; net 0; BUG-FIN-03 reproduction, prior +100 remains.
+QA compensation target S/ 19.00: reversal -2000, adjustment +1900; net -100; restores effective opening total and cash balance to the pre-test value. This compensation is evidence of the repeated-correction defect, not a product fix.
+
+SYNC
+movement_outbox: 8 PENDING, 1 FAILED_PERMANENT at snapshot time. Local persistence does not assert backend synchronization.
+
+See sibling directory 184-room-final/ for the copied database and WAL/SHM files.

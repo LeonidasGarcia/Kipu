@@ -72,6 +72,7 @@ data class RegisterCardRequestDto(
     @SerialName("billing_day") val billingDay: Int? = null,
     @SerialName("due_day") val dueDay: Int? = null,
     @SerialName("preset_id") val presetId: String? = null,
+    @SerialName("style_preset_id") val stylePresetId: String? = null,
     @SerialName("color") val color: String? = null,
     @SerialName("icon") val icon: String? = null,
     @SerialName("payload_hash") val payloadHash: String,
@@ -169,8 +170,18 @@ data class CreditCommandResponseDto(
     @SerialName("allocated_total_minor") val allocatedTotalMinor: Long? = null,
     @SerialName("remaining_debt_minor") val remainingDebtMinor: Long? = null,
     @SerialName("allocations") val allocations: List<CreditPaymentAllocationDto> = emptyList(),
+    @SerialName("installments") val installments: List<CreditInstallmentResponseDto> = emptyList(),
     @SerialName("server_updated_at") val serverUpdatedAt: String? = null,
     @SerialName("error") val error: CreditCommandErrorDto? = null,
+)
+
+@Serializable
+data class CreditInstallmentResponseDto(
+    @SerialName("id") val id: String,
+    @SerialName("installment_number") val installmentNumber: Int,
+    @SerialName("due_date") val dueDate: String,
+    @SerialName("principal_minor") val principalMinor: Long,
+    @SerialName("interest_minor") val interestMinor: Long = 0L,
 )
 
 @Serializable

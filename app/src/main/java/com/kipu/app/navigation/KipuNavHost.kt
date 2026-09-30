@@ -25,4 +25,5 @@ fun NavGraphBuilder.appDestinations(
     accountsDestinations(navController = navController)
     movementDestinations(navController = navController)
     movementsDestinations(navController = navController)
+    notificationDestinations(navController = navController)
 }

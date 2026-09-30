@@ -60,6 +60,15 @@ interface MovementDao {
     @Query("UPDATE transactions SET sync_status = :syncStatus, updated_at = :updatedAt WHERE user_id = :userId AND id = :transactionId")
     suspend fun updateTransactionSyncStatus(userId: String, transactionId: String, syncStatus: String, updatedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE transactions SET status = 'FAILED', sync_status = 'FAILED_PERMANENT', updated_at = :updatedAt WHERE user_id = :userId AND id = :transactionId")
+    suspend fun markTransactionRejected(userId: String, transactionId: String, updatedAt: Long = System.currentTimeMillis()): Int
+
+    @Query("DELETE FROM ledger_entries WHERE user_id = :userId AND transaction_id = :transactionId")
+    suspend fun deleteLedgerEntriesForTransaction(userId: String, transactionId: String): Int
+
+    @Query("UPDATE local_command_receipts SET status = 'REJECTED', updated_at = :updatedAt WHERE user_id = :userId AND transaction_id = :transactionId")
+    suspend fun markReceiptsRejectedForTransaction(userId: String, transactionId: String, updatedAt: Long = System.currentTimeMillis()): Int
+
     // Ledger Entries
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertLedgerEntries(entries: List<LedgerEntryEntity>)
