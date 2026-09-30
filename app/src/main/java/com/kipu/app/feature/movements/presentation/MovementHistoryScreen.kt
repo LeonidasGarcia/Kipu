@@ -63,6 +63,7 @@ import com.kipu.app.R
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.TransactionItem
+import com.kipu.app.feature.movements.domain.model.TransactionStatus
 import com.kipu.app.ui.component.MoneyText
 import com.kipu.app.ui.component.formatMinorUnits
 import com.kipu.app.ui.theme.KipuExpense
@@ -72,6 +73,7 @@ import com.kipu.app.ui.theme.KipuIncome
 @Composable
 fun MovementHistoryRoute(
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToNewAccount: () -> Unit = {},
     viewModel: MovementHistoryViewModel = hiltViewModel(),
     modifier: Modifier = Modifier,
 ) {
@@ -79,6 +81,15 @@ fun MovementHistoryRoute(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val colorScheme = MaterialTheme.colorScheme
+    val mostUsedAccountId = remember(uiState.allTransactions) {
+        uiState.allTransactions.asSequence()
+            .filter { it.transaction.status == TransactionStatus.ACTIVE }
+            .mapNotNull { it.transaction.sourceAccountId }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+    }
     val searchDescription = stringResource(R.string.movements_search_placeholder)
     val filterChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = colorScheme.primaryContainer,
@@ -289,6 +300,11 @@ fun MovementHistoryRoute(
     if (uiState.showRegisterSheet) {
         QuickMovementBottomSheet(
             onDismissRequest = viewModel::onCloseRegisterSheet,
+            onNavigateToNewAccount = onNavigateToNewAccount,
+            mostUsedAccountId = mostUsedAccountId,
+            onSaved = { movementType ->
+                if (movementType == MovementType.TRANSFER) viewModel.showAllTransactionsAfterTransfer()
+            },
             onMessage = { message ->
                 scope.launch { snackbarHostState.showSnackbar(message) }
             },
@@ -311,18 +327,22 @@ fun TransactionRow(
         "CARD_PAYMENT_CASH" -> "Pago de tarjeta"
         else -> null
     }
-    val title = legacyTitle ?: item.merchantName?.takeIf { it.isNotBlank() }
-        ?: item.categoryName?.takeIf { it.isNotBlank() }
-        ?: when (tx.type) {
-            MovementType.EXPENSE -> "Gasto"
-            MovementType.INCOME -> "Ingreso"
-            MovementType.TRANSFER -> "Transferencia"
-        }
+    val title = when {
+        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "Pago de tarjeta"
+        legacyTitle != null -> legacyTitle
+        else -> item.merchantName?.takeIf { it.isNotBlank() }
+            ?: item.categoryName?.takeIf { it.isNotBlank() }
+            ?: when (tx.type) {
+                MovementType.EXPENSE -> "Gasto"
+                MovementType.INCOME -> "Ingreso"
+                MovementType.TRANSFER -> "Transferencia"
+            }
+    }
 
     val cardLabel = item.cardAlias ?: item.cardLastFourDigits?.let { "•••• $it" } ?: "Tarjeta"
     val subtitle = when {
         tx.operationKind.equals("CARD_PURCHASE", ignoreCase = true) -> cardLabel
-        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "${item.sourceAccountAlias ?: "Origen"} → $cardLabel"
+        tx.operationKind.equals("CARD_PAYMENT", ignoreCase = true) -> "${item.sourceAccountAlias ?: "Cuenta"} → $cardLabel"
         tx.type == MovementType.TRANSFER -> "${item.sourceAccountAlias ?: "Origen"} → ${item.destinationAccountAlias ?: "Destino"}"
         else -> item.sourceAccountAlias ?: "Cuenta"
     }
@@ -343,7 +363,7 @@ fun TransactionRow(
 
     Surface(
         shape = MaterialTheme.shapes.large,
-        color = colorScheme.surfaceContainerLowest,
+        color = colorScheme.surface,
         border = BorderStroke(1.dp, colorScheme.outlineVariant),
         modifier = modifier
             .testTag("tx_row_${tx.id}"),

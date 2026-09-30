@@ -6,6 +6,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
@@ -24,21 +25,21 @@ private val DarkColorScheme = darkColorScheme(
     onTertiaryContainer = KipuOnTertiaryContainer,
     background = KipuDarkBackground,
     onBackground = KipuInverseOnSurface,
-    surface = KipuDarkBackground,
+    surface = KipuDarkSurface,
     onSurface = KipuInverseOnSurface,
     surfaceVariant = KipuInverseSurface,
-    onSurfaceVariant = KipuOutlineVariant,
+    onSurfaceVariant = KipuDarkOnSurfaceVariant,
     surfaceContainerLowest = KipuDarkBackground,
-    surfaceContainerLow = KipuInverseSurface,
-    surfaceContainer = KipuInverseSurface,
-    surfaceContainerHigh = KipuInverseSurface,
-    surfaceContainerHighest = KipuInverseSurface,
-    outline = KipuOutlineVariant,
-    outlineVariant = KipuOutline,
-    error = KipuError,
-    onError = KipuOnError,
-    errorContainer = KipuErrorContainer,
-    onErrorContainer = KipuOnErrorContainer,
+    surfaceContainerLow = KipuDarkSurface,
+    surfaceContainer = KipuDarkSurfaceVariant,
+    surfaceContainerHigh = Color(0xFF202D44),
+    surfaceContainerHighest = Color(0xFF26344B),
+    outline = KipuDarkOutline,
+    outlineVariant = KipuDarkOutlineVariant,
+    error = Color(0xFFFCA5A5),
+    onError = Color(0xFF450A0A),
+    errorContainer = Color(0xFF501D21),
+    onErrorContainer = Color(0xFFFCA5A5),
     inverseSurface = KipuBackground,
     inverseOnSurface = KipuOnSurface,
     inversePrimary = KipuPrimary,
@@ -71,7 +72,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerHighest = KipuSurfaceContainerHighest,
     outline = KipuOutline,
     outlineVariant = KipuOutlineVariant,
-    error = KipuError,
+    error = KipuErrorLight,
     onError = KipuOnError,
     errorContainer = KipuErrorContainer,
     onErrorContainer = KipuOnErrorContainer,

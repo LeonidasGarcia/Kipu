@@ -14,6 +14,7 @@ import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheDao
 import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
+import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.categories.data.remote.CreateCategoryRequestDto
 import com.kipu.app.feature.categories.data.remote.ResolveCategoryConflictRequestDto
 import com.kipu.app.feature.categories.data.remote.SetCategoryActiveRequestDto
@@ -32,6 +33,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MerchantCategoryFilter
 import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
 import com.kipu.app.feature.plans.domain.FeatureAccessPolicy
@@ -49,6 +51,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -83,14 +86,17 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         val access = featureAccessCacheDao.observe(UUID.fromString(userId.value))
         return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access) { entities, selected, cache ->
             val activeRoots = entities.filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-            val quota = quotaPolicy.evaluate(
-                group = QuotaGroup.CUSTOM_CATEGORIES,
-                activeResourceIds = activeRoots.map { it.id },
-                selectedResourceIds = selected,
-                limits = FreePlanLimits(),
-                premiumVerified = cache.isPremiumVerified(),
-            )
-            val lockedRoots = quota.planLockedResourceIds
+            val groupedRoots = activeRoots.groupBy { it.categoryType }
+            val lockedRoots = groupedRoots.flatMap { (_, roots) ->
+                val quota = quotaPolicy.evaluate(
+                    group = QuotaGroup.CUSTOM_CATEGORIES,
+                    activeResourceIds = roots.map { it.id },
+                    selectedResourceIds = selected,
+                    limits = FreePlanLimits(customCategories = 5),
+                    premiumVerified = cache.isPremiumVerified(),
+                )
+                quota.planLockedResourceIds
+            }.toSet()
             entities.map { entity ->
                 val rootId = entity.parentId ?: entity.id
                 Category(
@@ -115,10 +121,14 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         require(currentUserId() == userId.value) { "No active owner session" }
         val activeRoots = categoryDao.getCategoriesForUser(userId.value)
             .filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-            .map { it.id }
-            .toSet()
-        require(categoryIds.map { it.value }.all(activeRoots::contains)) { "Selection includes unavailable categories" }
-        require(categoryIds.size <= FreePlanLimits().customCategories) { "Free category selection exceeds its limit" }
+        val activeRootTypes = activeRoots.associate { it.id to it.categoryType }
+        require(categoryIds.map { it.value }.all(activeRootTypes::containsKey)) { "Selection includes unavailable categories" }
+        require(categoryIds.size <= FreePlanLimits().customExpenseCategories + FreePlanLimits().customIncomeCategories) {
+            "Free category selection exceeds its total limit"
+        }
+        require(categoryIds.groupingBy { activeRootTypes[it.value] }.eachCount().values.all { it <= FreePlanLimits().customExpenseCategories }) {
+            "Free category selection exceeds its per-type limit"
+        }
         quotaSelectionDao.replaceSelection(
             userId = userId.value,
             featureKey = QuotaGroup.CUSTOM_CATEGORIES.name,
@@ -189,12 +199,21 @@ class OfflineFirstCategoriesRepository @Inject constructor(
 
         // Validate Free quota if custom root
         if (category.isRoot && category.isCustom) {
-            val activeCount = categoryDao.countActiveCustomRoots(userId)
+            val limit = if (category.categoryType == CategoryType.INCOME) {
+                FreePlanLimits().customIncomeCategories
+            } else {
+                FreePlanLimits().customExpenseCategories
+            }
+            val activeCount = if (category.categoryType == CategoryType.GENERAL) {
+                categoryDao.countActiveCustomRoots(userId)
+            } else {
+                categoryDao.countActiveCustomRootsByType(userId, category.categoryType.name)
+            }
             val decision = featureAccessPolicy.evaluate(
                 FeatureAccessRequest(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
-                    freeLimits = FreePlanLimits(),
+                    freeLimits = FreePlanLimits(customCategories = limit),
                     effectiveEntitlement = featureAccessCacheDao.get(UUID.fromString(userId)).toEffectiveEntitlement(),
                 )
             )
@@ -270,12 +289,22 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             ?: return Result.failure(IllegalArgumentException("Category not found: ${categoryId.value}"))
 
         if (existing.parentId == null && existing.origin == "CUSTOM" && isActive && !existing.isActive) {
-            val activeCount = categoryDao.countActiveCustomRoots(userId)
+            val type = existing.categoryType ?: CategoryType.EXPENSE.name
+            val limit = if (type == CategoryType.INCOME.name) {
+                FreePlanLimits().customIncomeCategories
+            } else {
+                FreePlanLimits().customExpenseCategories
+            }
+            val activeCount = if (type == CategoryType.GENERAL.name) {
+                categoryDao.countActiveCustomRoots(userId)
+            } else {
+                categoryDao.countActiveCustomRootsByType(userId, type)
+            }
             val decision = featureAccessPolicy.evaluate(
                 FeatureAccessRequest(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
-                    freeLimits = FreePlanLimits(),
+                    freeLimits = FreePlanLimits(customCategories = limit),
                     effectiveEntitlement = featureAccessCacheDao.get(UUID.fromString(userId)).toEffectiveEntitlement(),
                 )
             )
@@ -394,16 +423,30 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     override fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>> {
         val normalized = CategoryRules.normalizeText(query)
         return merchantDao.searchMerchants(normalized).map { entities ->
-            entities.map {
-                MerchantCatalogEntry(
-                    id = MerchantId(it.id),
-                    name = it.name,
-                    normalizedName = it.normalizedName,
-                    isActive = it.isActive
-                )
-            }
+            entities.map(::toMerchantCatalogEntry)
         }
     }
+
+    override fun observeMerchantCatalog(): Flow<List<MerchantCatalogEntry>> =
+        merchantDao.getAllActiveMerchants().map { entities -> entities.map(::toMerchantCatalogEntry) }
+
+    override fun observeMerchantCategoryFilters(): Flow<List<MerchantCategoryFilter>> {
+        val userId = currentUserId() ?: return flowOf(emptyList())
+        return merchantDao.observeMerchantCategoryFilters(userId).map { filters ->
+            filters.map { MerchantCategoryFilter(CategoryId(it.categoryId), it.name) }
+        }
+    }
+
+    private fun toMerchantCatalogEntry(entity: MerchantCatalogEntity) = MerchantCatalogEntry(
+        id = MerchantId(entity.id),
+        name = entity.name,
+        normalizedName = entity.normalizedName,
+        isActive = entity.isActive,
+        defaultCategoryId = entity.defaultCategoryId?.let(::CategoryId),
+        priority = entity.priority,
+        logoKey = entity.logoKey,
+        brandColor = entity.brandColor,
+    )
 
     override fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?> {
         val userId = currentUserId() ?: return kotlinx.coroutines.flow.flowOf(null)
@@ -550,13 +593,16 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive
         }
         val selected = quotaSelectionDao.getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
-        return quotaPolicy.evaluate(
-            group = QuotaGroup.CUSTOM_CATEGORIES,
-            activeResourceIds = roots.map { it.id },
-            selectedResourceIds = selected,
-            limits = FreePlanLimits(),
-            premiumVerified = featureAccessCacheDao.get(UUID.fromString(userId)).isPremiumVerified(),
-        ).planLockedResourceIds
+        val premiumVerified = featureAccessCacheDao.get(UUID.fromString(userId)).isPremiumVerified()
+        return roots.groupBy { it.categoryType }.values.flatMap { rootsByType ->
+            quotaPolicy.evaluate(
+                group = QuotaGroup.CUSTOM_CATEGORIES,
+                activeResourceIds = rootsByType.map { it.id },
+                selectedResourceIds = selected,
+                limits = FreePlanLimits(),
+                premiumVerified = premiumVerified,
+            ).planLockedResourceIds
+        }.toSet()
     }
 }
 

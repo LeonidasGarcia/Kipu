@@ -59,6 +59,21 @@ class MovementHistoryViewModelTest {
         assertEquals(emptyList<String>(), repository.observedOwners)
     }
 
+    @Test
+    fun transferConfirmationClearsSearchAndReturnsHistoryToAllTypes() = runTest {
+        val viewModel = MovementHistoryViewModel(
+            movementRepository = repository,
+            sessionCoordinator = TestSessionCoordinator(LocalAccess.NoOwner),
+        )
+        viewModel.onFilterTypeSelected(MovementType.EXPENSE)
+        viewModel.onSearchQueryChanged("no coincide")
+
+        viewModel.showAllTransactionsAfterTransfer()
+
+        assertEquals(null, viewModel.uiState.value.selectedFilterType)
+        assertEquals("", viewModel.uiState.value.searchQuery)
+    }
+
     private class TestSessionCoordinator(initialAccess: LocalAccess) : SessionCoordinator {
         override val remoteSession = MutableStateFlow<RemoteSession>(RemoteSession.Absent)
         override val localAccess = MutableStateFlow(initialAccess)

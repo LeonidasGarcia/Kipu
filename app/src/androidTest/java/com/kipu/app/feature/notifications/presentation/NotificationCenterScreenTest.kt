@@ -18,7 +18,7 @@ class NotificationCenterScreenTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `empty center shows approved copy on first local render`() {
+    fun emptyCenterShowsApprovedCopyOnFirstLocalRender() {
         compose.setContent {
             KipuTheme {
                 NotificationCenterScreen(
@@ -41,7 +41,7 @@ class NotificationCenterScreenTest {
     }
 
     @Test
-    fun `filter chips report alert and reminder selection`() {
+    fun filterChipsReportAlertAndReminderSelection() {
         var selected: NotificationFilter? = null
         compose.setContent {
             KipuTheme {
@@ -67,7 +67,7 @@ class NotificationCenterScreenTest {
     }
 
     @Test
-    fun `billing reminder keeps supplied expected date visible and does not claim payment`() {
+    fun billingReminderKeepsExpectedDateVisibleAndDoesNotClaimPayment() {
         val reminder = AppNotification(
             id = "notice-1",
             userId = "user-1",
@@ -106,7 +106,7 @@ class NotificationCenterScreenTest {
     }
 
     @Test
-    fun `billing reminder renders structured due date as an expected future date`() {
+    fun billingReminderRendersStructuredDueDateAsExpectedFutureDate() {
         val reminder = AppNotification(
             id = "notice-2",
             userId = "user-1",

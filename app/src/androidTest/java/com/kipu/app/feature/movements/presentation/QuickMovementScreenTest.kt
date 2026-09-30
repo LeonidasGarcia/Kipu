@@ -26,6 +26,24 @@ class QuickMovementScreenTest {
         val initialState = QuickMovementUiState(
             availableCategories = listOf(
                 CategoryOption("expense-food", "Alimentación", "restaurant", CategoryType.EXPENSE),
+                CategoryOption("expense-home", "Hogar", "home", CategoryType.EXPENSE),
+                CategoryOption("expense-home-2", "Hogar", "home", CategoryType.EXPENSE),
+                CategoryOption(
+                    "expense-rent",
+                    "Alquiler",
+                    "home",
+                    CategoryType.EXPENSE,
+                    parentCategoryId = "expense-home",
+                    parentName = "Hogar",
+                ),
+                CategoryOption(
+                    "expense-rent-2",
+                    "Hipoteca",
+                    "home",
+                    CategoryType.EXPENSE,
+                    parentCategoryId = "expense-home-2",
+                    parentName = "Hogar",
+                ),
                 CategoryOption("income-salary", "Salario", "work", CategoryType.INCOME),
             ),
         )
@@ -40,7 +58,12 @@ class QuickMovementScreenTest {
                     onSourceAccountSelected = {},
                     onSourceCardSelected = {},
                     onDestinationAccountSelected = {},
-                    onCategorySelected = {},
+                    onCategorySelected = { category ->
+                        state.value = state.value.copy(
+                            selectedCategoryId = category.id,
+                            selectedCategoryName = category.displayName,
+                        )
+                    },
                     onOpenMerchantPicker = {},
                     onClearMerchant = {},
                     onNoteChanged = {},
@@ -48,6 +71,16 @@ class QuickMovementScreenTest {
                     onToggleMoreDetails = {},
                     onSave = {},
                     onClose = {},
+                    accountBalances = emptyMap(),
+                    creditCardDebts = emptyMap(),
+                    creditCardAvailableCredits = emptyMap(),
+                    mostUsedAccountId = null,
+                    onNavigateToNewAccount = {},
+                    onCreateSubcategory = { _, _, _, _, _ ->
+                        Result.failure(UnsupportedOperationException("Subcategory creation is not part of this test"))
+                    },
+                    isCreatingSubcategory = false,
+                    categoryCreationError = null,
                 )
             }
         }
@@ -55,7 +88,13 @@ class QuickMovementScreenTest {
         compose.onNodeWithTag("selector_source_account").assertIsDisplayed()
         compose.onNodeWithTag("selector_destination_account").assertDoesNotExist()
         compose.onNodeWithText("Categoría *").assertIsDisplayed()
-        compose.onNodeWithTag("chip_cat_expense-food").assertIsDisplayed()
+        compose.onNodeWithTag("category_picker_open").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("category_root_expense-home").assertIsDisplayed()
+        compose.onNodeWithTag("category_subcategory_expense-rent").assertDoesNotExist()
+        compose.onNodeWithTag("category_expand_expense-home").assertHasClickAction().performClick()
+        compose.onNodeWithTag("category_subcategory_expense-rent").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("category_subcategory_expense-rent-2").assertDoesNotExist()
+        compose.onNodeWithText("Hogar > Alquiler").assertIsDisplayed()
 
         compose.onNodeWithTag("tab_income").performClick()
         compose.onNodeWithText("Categoría (opcional)").assertIsDisplayed()
@@ -65,7 +104,7 @@ class QuickMovementScreenTest {
         compose.onNodeWithTag("selector_source_account").assertIsDisplayed()
         compose.onNodeWithTag("selector_destination_account").assertIsDisplayed()
         compose.onNodeWithText("Categoría *").assertDoesNotExist()
-        compose.onNodeWithTag("chip_cat_expense-food").assertDoesNotExist()
+        compose.onNodeWithTag("category_picker_open").assertDoesNotExist()
 
         val saveBounds = compose.onNodeWithContentDescription("Guardar transacción")
             .assertHasClickAction()
@@ -94,6 +133,16 @@ class QuickMovementScreenTest {
                     onToggleMoreDetails = {},
                     onSave = {},
                     onClose = {},
+                    accountBalances = emptyMap(),
+                    creditCardDebts = emptyMap(),
+                    creditCardAvailableCredits = emptyMap(),
+                    mostUsedAccountId = null,
+                    onNavigateToNewAccount = {},
+                    onCreateSubcategory = { _, _, _, _, _ ->
+                        Result.failure(UnsupportedOperationException("Subcategory creation is not part of this test"))
+                    },
+                    isCreatingSubcategory = false,
+                    categoryCreationError = null,
                 )
             }
         }

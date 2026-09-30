@@ -836,3 +836,17 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
     }
 }
 
+/** Migration 15 -> 16: cache the server merchant category and visual metadata. */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `merchant_catalog_cache` ADD COLUMN `default_category_id` TEXT")
+        db.execSQL("ALTER TABLE `merchant_catalog_cache` ADD COLUMN `priority` TEXT NOT NULL DEFAULT 'B'")
+        db.execSQL("ALTER TABLE `merchant_catalog_cache` ADD COLUMN `logo_key` TEXT")
+        db.execSQL("ALTER TABLE `merchant_catalog_cache` ADD COLUMN `brand_color` TEXT")
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_merchant_catalog_cache_default_category_id` " +
+                "ON `merchant_catalog_cache` (`default_category_id`)"
+        )
+    }
+}
+

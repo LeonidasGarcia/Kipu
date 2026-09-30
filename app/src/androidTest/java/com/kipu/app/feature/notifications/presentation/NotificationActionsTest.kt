@@ -19,7 +19,7 @@ class NotificationActionsTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `mark all read and single notice actions are available with touch targets`() {
+    fun markAllReadAndSingleNoticeActionsAreAvailableWithTouchTargets() {
         val notice = notice()
         var readAllCount = 0
         var readId: String? = null
@@ -54,7 +54,7 @@ class NotificationActionsTest {
     }
 
     @Test
-    fun `unread badge caps display at 99 plus and exposes a useful accessible count`() {
+    fun unreadBadgeCapsAt99PlusAndExposesAccessibleCount() {
         var clicked = false
         compose.setContent {
             KipuTheme {
@@ -68,7 +68,7 @@ class NotificationActionsTest {
     }
 
     @Test
-    fun `reduced motion preserves notification content and explicit archive action`() {
+    fun reducedMotionPreservesNotificationContentAndArchiveAction() {
         val notice = notice()
         compose.setContent {
             KipuTheme {

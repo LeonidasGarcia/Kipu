@@ -1,13 +1,12 @@
 package com.kipu.app.navigation
 
 import android.net.Uri
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
@@ -23,7 +22,7 @@ const val ACCOUNTS_DASHBOARD_ROUTE = "accounts/dashboard"
 const val ACCOUNT_FORM_ROUTE = "accounts/create"
 const val CARD_FORM_ROUTE = "cards/register"
 const val RATE_CATALOG_ROUTE = "cards/{cardId}/rates"
-const val ACCOUNT_DETAIL_ROUTE = "accounts/instrument/{instrumentId}?isCard={isCard}"
+const val ACCOUNT_DETAIL_ROUTE = "accounts/instrument/{instrumentId}?isCard={isCard}&startPurchase={startPurchase}"
 const val ACCOUNT_DASHBOARD_FEEDBACK_KEY = "account_dashboard_feedback"
 
 private fun NavController.returnToAccountsDashboard(message: String) {
@@ -44,15 +43,15 @@ fun NavController.navigateToRateCatalog(cardId: String) {
 }
 
 fun NavController.navigateToAccountDetail(accountId: String) {
-    navigateToInstrumentDetail(accountId, isCard = false)
+    navigateToInstrumentDetail(accountId, isCard = false, startPurchase = false)
 }
 
-fun NavController.navigateToCardDetail(cardId: String) {
-    navigateToInstrumentDetail(cardId, isCard = true)
+fun NavController.navigateToCardDetail(cardId: String, startPurchase: Boolean = false) {
+    navigateToInstrumentDetail(cardId, isCard = true, startPurchase = startPurchase)
 }
 
-private fun NavController.navigateToInstrumentDetail(instrumentId: String, isCard: Boolean) {
-    navigate("accounts/instrument/${Uri.encode(instrumentId)}?isCard=$isCard")
+private fun NavController.navigateToInstrumentDetail(instrumentId: String, isCard: Boolean, startPurchase: Boolean) {
+    navigate("accounts/instrument/${Uri.encode(instrumentId)}?isCard=$isCard&startPurchase=$startPurchase")
 }
 
 fun NavGraphBuilder.accountsDestinations(
@@ -64,7 +63,7 @@ fun NavGraphBuilder.accountsDestinations(
         val unreadNotificationCount by notificationBadgeViewModel.unreadCount.collectAsStateWithLifecycle()
         val feedback = backStackEntry.savedStateHandle
             .getStateFlow<String?>(ACCOUNT_DASHBOARD_FEEDBACK_KEY, null)
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         DashboardScreen(
             viewModel = viewModel,
             onNavigateToNewAccount = { navController.navigateToAccountForm() },
@@ -74,6 +73,8 @@ fun NavGraphBuilder.accountsDestinations(
             onCardClick = { cardId -> navController.navigateToCardDetail(cardId) },
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
             onNavigateToNotifications = navController::navigateToNotifications,
+            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
+            onNavigateBack = { navController.popBackStack() },
             unreadNotificationCount = unreadNotificationCount,
             feedbackMessage = feedback.value,
             onFeedbackConsumed = { backStackEntry.savedStateHandle[ACCOUNT_DASHBOARD_FEEDBACK_KEY] = null },
@@ -85,11 +86,13 @@ fun NavGraphBuilder.accountsDestinations(
         arguments = listOf(
             navArgument("instrumentId") { type = NavType.StringType },
             navArgument("isCard") { type = NavType.BoolType; defaultValue = false },
+            navArgument("startPurchase") { type = NavType.BoolType; defaultValue = false },
         ),
     ) { backStackEntry ->
         val viewModel: AccountsViewModel = hiltViewModel()
         val instrumentId = backStackEntry.arguments?.getString("instrumentId").orEmpty()
         val isCard = backStackEntry.arguments?.getBoolean("isCard") ?: false
+        val startPurchaseOnOpen = backStackEntry.arguments?.getBoolean("startPurchase") ?: false
         AccountDetailScreen(
             instrumentId = instrumentId,
             isCard = isCard,
@@ -99,6 +102,7 @@ fun NavGraphBuilder.accountsDestinations(
                 navController.returnToAccountsDashboard(message)
             },
             onNavigateToRateCatalog = { cardId -> navController.navigateToRateCatalog(cardId) },
+            startPurchaseOnOpen = startPurchaseOnOpen,
         )
     }
 
@@ -108,6 +112,8 @@ fun NavGraphBuilder.accountsDestinations(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onSaveSuccess = { message -> navController.returnToAccountsDashboard(message) },
+            onNavigateToCardDetail = { card -> navController.navigateToCardDetail(card.id.value) },
+            onNavigateToRecordConsumption = { card -> navController.navigateToCardDetail(card.id.value, startPurchase = true) },
         )
     }
 
@@ -117,6 +123,9 @@ fun NavGraphBuilder.accountsDestinations(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
             onSaveSuccess = { message -> navController.returnToAccountsDashboard(message) },
+            onNavigateToCardDetail = { card -> navController.navigateToCardDetail(card.id.value) },
+            onNavigateToRecordConsumption = { card -> navController.navigateToCardDetail(card.id.value, startPurchase = true) },
+            initialCreditCard = true,
         )
     }
 
@@ -135,8 +144,8 @@ fun NavGraphBuilder.accountsDestinations(
             runCatching { CardId(it) }.getOrNull()
         }
         val viewModel: AccountsViewModel = hiltViewModel()
-        val products = viewModel.creditProductCatalog.collectAsState().value
-        val catalogError = viewModel.creditCatalogError.collectAsState().value
+        val products = viewModel.creditProductCatalog.collectAsStateWithLifecycle().value
+        val catalogError = viewModel.creditCatalogError.collectAsStateWithLifecycle().value
         RateCatalogScreen(
             cardId = cardId,
             products = products,

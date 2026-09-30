@@ -14,6 +14,7 @@ import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
+import com.kipu.app.feature.categories.data.local.MerchantCategoryFilterRow
 import com.kipu.app.feature.categories.data.local.MovementClassificationTuple
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.categories.domain.model.Category
@@ -67,6 +68,9 @@ class FakeCategoryDao : CategoryDao {
 
     override suspend fun countActiveCustomRoots(userId: String): Int =
         categories.values.count { it.userId == userId && it.origin == "CUSTOM" && it.parentId == null && it.isActive }
+
+    override suspend fun countActiveCustomRootsByType(userId: String, categoryType: String): Int =
+        categories.values.count { it.userId == userId && it.origin == "CUSTOM" && it.parentId == null && it.isActive && it.categoryType == categoryType }
 
     override suspend fun insertPresentation(presentation: CategoryPresentationEntity) {
         presentations["${presentation.userId}_${presentation.categoryId}"] = presentation
@@ -155,6 +159,17 @@ class FakeMerchantCatalogDao : MerchantCatalogDao {
     override fun getAllActiveMerchants(): Flow<List<MerchantCatalogEntity>> =
         flowOf(merchants.values.filter { it.isActive })
 
+    override fun getActiveMerchantsByCategory(categoryId: String): Flow<List<MerchantCatalogEntity>> =
+        flowOf(merchants.values.filter { it.isActive && it.defaultCategoryId == categoryId })
+
+    override fun searchMerchantsByCategory(query: String, categoryId: String): Flow<List<MerchantCatalogEntity>> =
+        flowOf(merchants.values.filter {
+            it.isActive && it.defaultCategoryId == categoryId && it.normalizedName.contains(query, ignoreCase = true)
+        })
+
+    override fun observeMerchantCategoryFilters(userId: String): Flow<List<MerchantCategoryFilterRow>> =
+        flowOf(emptyList())
+
     override fun observeMerchants(): Flow<List<MerchantCatalogEntity>> = flowOf(merchants.values.toList())
 
     override suspend fun getMerchantById(id: String): MerchantCatalogEntity? = merchants[id]
@@ -209,6 +224,7 @@ class OfflineFirstCategoriesRepositoryTest {
     private lateinit var merchantDao: FakeMerchantCatalogDao
     private lateinit var sessionCoordinator: FakeSessionCoordinator
     private lateinit var syncScheduler: FakeCategorySyncScheduler
+    private lateinit var quotaSelectionDao: FakeQuotaSelectionDao
     private lateinit var repository: OfflineFirstCategoriesRepository
 
     private val testUserId = UserId.generate()
@@ -219,6 +235,7 @@ class OfflineFirstCategoriesRepositoryTest {
         merchantDao = FakeMerchantCatalogDao()
         sessionCoordinator = FakeSessionCoordinator(LocalAccess.NoOwner)
         syncScheduler = FakeCategorySyncScheduler()
+        quotaSelectionDao = FakeQuotaSelectionDao()
 
         val transactionRunner = object : DatabaseTransactionRunner {
             override suspend operator fun <R> invoke(block: suspend () -> R): R = block()
@@ -230,7 +247,7 @@ class OfflineFirstCategoriesRepositoryTest {
             merchantDao = merchantDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
-            quotaSelectionDao = FakeQuotaSelectionDao(),
+            quotaSelectionDao = quotaSelectionDao,
             featureAccessCacheDao = FakeFeatureAccessCacheDao(),
             quotaPolicy = com.kipu.app.feature.plans.domain.PlanQuotaPolicy(),
         )
@@ -425,5 +442,45 @@ class OfflineFirstCategoriesRepositoryTest {
         )
         assertTrue(result.isFailure)
         assertTrue(categoryDao.movements.isEmpty())
+    }
+
+    @Test
+    fun `free category selection allows five per type but rejects a sixth of one type`() = runTest {
+        sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
+        val expenseIds = (1..6).map { CategoryId.generate() }
+        val incomeIds = (1..5).map { CategoryId.generate() }
+
+        expenseIds.forEachIndexed { index, id ->
+            categoryDao.insertCategory(
+                CategoryEntity(
+                    id = id.value,
+                    userId = testUserId.value,
+                    parentId = null,
+                    origin = "CUSTOM",
+                    createdAt = index.toLong(),
+                    updatedAt = index.toLong(),
+                    categoryType = "EXPENSE",
+                ),
+            )
+        }
+        incomeIds.forEachIndexed { index, id ->
+            categoryDao.insertCategory(
+                CategoryEntity(
+                    id = id.value,
+                    userId = testUserId.value,
+                    parentId = null,
+                    origin = "CUSTOM",
+                    createdAt = index.toLong(),
+                    updatedAt = index.toLong(),
+                    categoryType = "INCOME",
+                ),
+            )
+        }
+
+        repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.take(5).toSet() + incomeIds.toSet()).getOrThrow()
+        val overExpenseLimit = repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet())
+
+        assertTrue(overExpenseLimit.isFailure)
+        assertEquals(10, quotaSelectionDao.getSelectedResourceIds(testUserId.value, "CUSTOM_CATEGORIES").size)
     }
 }

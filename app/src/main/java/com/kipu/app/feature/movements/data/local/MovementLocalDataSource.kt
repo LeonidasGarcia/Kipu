@@ -327,9 +327,10 @@ class MovementLocalDataSource @Inject constructor(
         val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
         val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
             (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        val rootsOfType = activeRoots.filter { it.categoryType == root.categoryType }
         val quota = quotaPolicy.evaluate(
             group = QuotaGroup.CUSTOM_CATEGORIES,
-            activeResourceIds = activeRoots.map { it.id },
+            activeResourceIds = rootsOfType.map { it.id },
             selectedResourceIds = selected,
             limits = FreePlanLimits(),
             premiumVerified = premiumVerified,

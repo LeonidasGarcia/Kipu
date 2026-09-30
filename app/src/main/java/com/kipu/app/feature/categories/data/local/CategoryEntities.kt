@@ -70,6 +70,7 @@ data class CategoryPresentationEntity(
     indices = [
         Index(value = ["normalized_name"]),
         Index(value = ["is_active"]),
+        Index(value = ["default_category_id"]),
     ],
 )
 data class MerchantCatalogEntity(
@@ -85,6 +86,14 @@ data class MerchantCatalogEntity(
     val version: Long = 1L,
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long,
+    @ColumnInfo(name = "default_category_id")
+    val defaultCategoryId: String? = null,
+    @ColumnInfo(name = "priority", defaultValue = "'B'")
+    val priority: String = "B",
+    @ColumnInfo(name = "logo_key")
+    val logoKey: String? = null,
+    @ColumnInfo(name = "brand_color")
+    val brandColor: String? = null,
 )
 
 @Entity(

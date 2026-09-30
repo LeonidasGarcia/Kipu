@@ -17,6 +17,7 @@ import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.usecase.ConfirmCreditPurchase
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
+import com.kipu.app.feature.accounts.domain.usecase.ObserveFinancialDashboard
 import com.kipu.app.feature.categories.domain.CategoriesRepository
 import com.kipu.app.feature.categories.domain.model.Category
 import com.kipu.app.feature.categories.domain.model.CategoryConflict
@@ -29,6 +30,7 @@ import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
+import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.core.finance.domain.model.MovementId
 import com.kipu.app.feature.movements.domain.MovementRepository
@@ -82,6 +84,7 @@ class QuickMovementViewModelTest {
         fakeMovementRepo = FakeMovementRepo()
         fakeInstrumentsRepo = FakeInstrumentsRepo(testAccountId, usdAccountId, transferAccountId, testUserId)
         fakeSessionCoordinator = FakeSessionCoordinator(testUserId.value)
+        val categoriesRepo = FakeCategoriesRepo(testUserId, testCategoryId, testIncomeCategoryId)
 
         val validator = RegisterTransactionValidator()
         val registerUseCase = RegisterTransaction(fakeMovementRepo, validator)
@@ -91,7 +94,9 @@ class QuickMovementViewModelTest {
             registerTransactionUseCase = registerUseCase,
             confirmCreditPurchaseUseCase = ConfirmCreditPurchase(fakeInstrumentsRepo),
             observeInstruments = observeInstruments,
-            observeCategories = ObserveCategories(FakeCategoriesRepo(testUserId, testCategoryId, testIncomeCategoryId)),
+            observeFinancialDashboard = ObserveFinancialDashboard(fakeInstrumentsRepo),
+            observeCategories = ObserveCategories(categoriesRepo),
+            createCategoryUseCase = CreateCategory(categoriesRepo),
             categorySyncScheduler = object : CategorySyncScheduler {
                 override fun scheduleSync(userId: String) = Unit
                 override fun cancelSync(userId: String) = Unit
@@ -148,6 +153,19 @@ class QuickMovementViewModelTest {
         advanceUntilIdle()
 
         assertEquals(null, fakeMovementRepo.registeredCommands.single().categoryId)
+    }
+
+    @Test
+    fun `successful transfer event identifies transfer for immediate history visibility`() = runTest {
+        advanceUntilIdle()
+        val event = async { viewModel.events.first() }
+        viewModel.onTypeSelected(MovementType.TRANSFER)
+        viewModel.onAmountChanged("12.00")
+        viewModel.onDestinationAccountSelected(transferAccountId.value)
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertEquals(MovementType.TRANSFER, (event.await() as QuickMovementUiEvent.TransactionSaved).movementType)
     }
 
     @Test
@@ -295,6 +313,47 @@ class QuickMovementViewModelTest {
         assertEquals(null, command.merchantProvisionalText)
     }
 
+    @Test
+    fun `createCategoryOrSubcategory creates root category when parent is null and selects it`() = runTest {
+        advanceUntilIdle()
+        val result = viewModel.createCategoryOrSubcategory(
+            parentCategoryId = null,
+            name = "Suscripciones",
+            icon = "tv",
+            color = "#8B5CF6",
+            rememberFrequentMerchant = false,
+        )
+        advanceUntilIdle()
+
+        assertTrue(result.isSuccess)
+        val created = result.getOrThrow()
+        assertEquals("Suscripciones", created.name)
+        assertNull(created.parentCategoryId)
+        assertEquals(created.id, viewModel.uiState.value.selectedCategoryId)
+        assertEquals("Suscripciones", viewModel.uiState.value.selectedCategoryName)
+    }
+
+    @Test
+    fun `createCategoryOrSubcategory creates subcategory when parent is provided and selects it`() = runTest {
+        advanceUntilIdle()
+        val parent = viewModel.uiState.value.availableCategories.first { it.id == testCategoryId.value }
+        val result = viewModel.createCategoryOrSubcategory(
+            parentCategoryId = parent.id,
+            name = "Supermercado",
+            icon = "shopping_cart",
+            color = "#06B6D4",
+            rememberFrequentMerchant = false,
+        )
+        advanceUntilIdle()
+
+        assertTrue(result.isSuccess)
+        val created = result.getOrThrow()
+        assertEquals("Supermercado", created.name)
+        assertEquals(parent.id, created.parentCategoryId)
+        assertEquals(created.id, viewModel.uiState.value.selectedCategoryId)
+        assertEquals("${parent.name} > Supermercado", viewModel.uiState.value.selectedCategoryName)
+    }
+
     private class FakeCategoriesRepo(
         private val userId: UserId,
         private val categoryId: CategoryId,
@@ -308,8 +367,12 @@ class QuickMovementViewModelTest {
             CategoryPresentation(categoryId, this.userId, "Alimentación", "restaurant", "#ffffff"),
             CategoryPresentation(incomeCategoryId, this.userId, "Salario", "work", "#ffffff"),
         ))
-        override suspend fun getCategory(categoryId: CategoryId): Category? = null
-        override suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category> = Result.failure(UnsupportedOperationException())
+        override suspend fun getCategory(categoryId: CategoryId): Category? = when (categoryId) {
+            this.categoryId -> Category(this.categoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.EXPENSE)
+            this.incomeCategoryId -> Category(this.incomeCategoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.INCOME)
+            else -> null
+        }
+        override suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category> = Result.success(category)
         override suspend fun setCategoryActive(categoryId: CategoryId, isActive: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
         override suspend fun updateCategoryPresentation(presentation: CategoryPresentation, expectedRevision: Long): Result<Unit> = Result.failure(UnsupportedOperationException())
         override fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>> = flowOf(emptyList())
@@ -435,7 +498,10 @@ class QuickMovementViewModelTest {
         override fun observeCards(activeOnly: Boolean): Flow<List<Card>> = flowOf(listOf(creditCard))
         override fun observeActiveComputableCount(): Flow<Int> = flowOf(1)
         override fun observeAccountById(accountId: AccountId): Flow<Account?> = flowOf(accounts.find { it.id == accountId })
-        override fun observeAccountBalance(accountId: AccountId): Flow<Money> = flowOf(Money(100000L, Currency.PEN))
+        override fun observeAccountBalance(accountId: AccountId): Flow<Money> {
+            val account = accounts.firstOrNull { it.id == accountId }
+            return flowOf(Money(100000L, account?.currency ?: Currency.PEN))
+        }
         override fun observeCardById(cardId: CardId): Flow<Card?> = flowOf(null)
         override fun observeCardDebt(cardId: CardId): Flow<Money> = flowOf(Money(0L, Currency.PEN))
         override fun observeMovementsByAccount(accountId: AccountId): Flow<List<com.kipu.app.core.finance.domain.model.FinancialMovement>> = flowOf(emptyList())

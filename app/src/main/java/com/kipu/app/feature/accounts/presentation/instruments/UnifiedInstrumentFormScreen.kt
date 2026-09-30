@@ -4,38 +4,51 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Wallet
@@ -43,21 +56,25 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,35 +84,55 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
+import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
-import com.kipu.app.feature.accounts.domain.model.Card
+import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
-import com.kipu.app.feature.accounts.presentation.components.InstrumentCardPreview
 import com.kipu.app.feature.accounts.presentation.components.CardStylePreset
 import com.kipu.app.feature.accounts.presentation.components.CardStylePresets
 import com.kipu.app.feature.accounts.presentation.components.CardStyleType
-import com.kipu.app.ui.theme.KipuMotionTokens
+import com.kipu.app.feature.accounts.presentation.components.InstrumentCardPreview
 import com.kipu.app.ui.motion.rememberReducedMotionEnabled
+import com.kipu.app.ui.theme.KipuMotionTokens
+import com.kipu.app.ui.theme.rememberKipuColors
 import java.util.Locale
 import kotlinx.coroutines.launch
+
+private val KipuTealPrimary: Color @Composable get() = rememberKipuColors().primaryText
+private val KipuLightGreenContainer: Color @Composable get() = rememberKipuColors().positiveContainer
+private val KipuSurfaceVariantNeutral: Color @Composable get() = rememberKipuColors().surfaceVariant
+private val KipuBorderColor: Color @Composable get() = rememberKipuColors().border
+private val KipuSuccessGreen: Color @Composable get() = rememberKipuColors().positive
+private val KipuInkTitle: Color @Composable get() = rememberKipuColors().inkPrimary
+private val KipuTextMuted: Color @Composable get() = if (rememberKipuColors().isDark) rememberKipuColors().inkSecondary else Color(0xFF475569)
 
 private enum class InstrumentKind(val label: String) {
     SAVINGS_DEBIT("Ahorros / Débito"),
@@ -139,18 +176,33 @@ fun UnifiedInstrumentFormScreen(
     viewModel: AccountsViewModel,
     onNavigateBack: () -> Unit,
     onSaveSuccess: ((String) -> Unit)? = null,
+    onNavigateToCardDetail: ((CreditCard) -> Unit)? = null,
+    onNavigateToRecordConsumption: ((CreditCard) -> Unit)? = null,
+    initialCreditCard: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val reducedMotion = rememberReducedMotionEnabled()
-    val creditProducts by viewModel.creditProductCatalog.collectAsState()
-    var kind by remember { mutableStateOf(InstrumentKind.SAVINGS_DEBIT) }
+    val creditProducts by viewModel.creditProductCatalog.collectAsStateWithLifecycle()
+    val initialDebitPreset = remember {
+        CardStylePresets.forInstitution(bankChoices.first().code, CardStyleType.DEBIT).firstOrNull()
+    }
+
+    var kind by remember(initialCreditCard) {
+        mutableStateOf(if (initialCreditCard) InstrumentKind.CREDIT_CARD else InstrumentKind.SAVINGS_DEBIT)
+    }
     var bank by remember { mutableStateOf(bankChoices.first()) }
     var walletProvider by remember { mutableStateOf(AccountPreset.YAPE) }
-    var selectedProductName by remember { mutableStateOf<String?>(null) }
-    var selectedStylePresetId by remember { mutableStateOf<String?>(null) }
-    var alias by remember { mutableStateOf("") }
+    var selectedProductName by remember(initialCreditCard) {
+        mutableStateOf(if (initialCreditCard) null else initialDebitPreset?.productName)
+    }
+    var selectedStylePresetId by remember(initialCreditCard) {
+        mutableStateOf(if (initialCreditCard) null else initialDebitPreset?.id)
+    }
+    var alias by remember(initialCreditCard) {
+        mutableStateOf(if (initialCreditCard) "" else "Mi Cuenta de Ahorros")
+    }
     var lastFourDigits by remember { mutableStateOf("") }
     var network by remember { mutableStateOf(CardNetwork.VISA) }
     var currency by remember { mutableStateOf(Currency.PEN) }
@@ -162,6 +214,12 @@ fun UnifiedInstrumentFormScreen(
     var selectedColor by remember { mutableStateOf("institution") }
     var isSubmitting by remember { mutableStateOf(false) }
     var accountCreatedBeforeDebitFailure by remember { mutableStateOf(false) }
+    var isBankSelectorExpanded by remember { mutableStateOf(false) }
+
+    // R9 Confirmation Sheet state
+    var showSuccessSheet by remember { mutableStateOf(false) }
+    var registeredCreditCard by remember { mutableStateOf<CreditCard?>(null) }
+
     var aliasError by remember { mutableStateOf<String?>(null) }
     var balanceError by remember { mutableStateOf<String?>(null) }
     var cardError by remember { mutableStateOf<String?>(null) }
@@ -202,6 +260,7 @@ fun UnifiedInstrumentFormScreen(
         cardError = null
         limitError = null
         cycleError = null
+        isBankSelectorExpanded = false
         if (next == InstrumentKind.CASH) {
             selectedIcon = "payments"
             bank = bankChoices.first()
@@ -228,20 +287,20 @@ fun UnifiedInstrumentFormScreen(
         when (kind) {
             InstrumentKind.CREDIT_CARD -> {
                 val remote = creditProducts
-                .filter { it.institutionCode.equals(bank.code, ignoreCase = true) }
-                .filter { status ->
-                    val value = status.verificationStatus.orEmpty()
-                    value.isBlank() || (value.contains("VERIFIC", true) && !value.contains("PENDIENTE", true))
-                }
-                .mapNotNull { product ->
-                    val productNetwork = product.cardNetwork?.let(::networkFromCatalog) ?: CardNetwork.OTHER
-                    CatalogProductChoice(
-                        name = product.productName,
-                        network = productNetwork,
-                        reference = product,
-                        stylePreset = CardStylePresets.forProduct(bank.code, product.productName),
-                    )
-                }
+                    .filter { it.institutionCode.equals(bank.code, ignoreCase = true) }
+                    .filter { status ->
+                        val value = status.verificationStatus.orEmpty()
+                        value.isBlank() || (value.contains("VERIFIC", true) && !value.contains("PENDIENTE", true))
+                    }
+                    .mapNotNull { product ->
+                        val productNetwork = product.cardNetwork?.let(::networkFromCatalog) ?: CardNetwork.OTHER
+                        CatalogProductChoice(
+                            name = product.productName,
+                            network = productNetwork,
+                            reference = product,
+                            stylePreset = CardStylePresets.forProduct(bank.code, product.productName),
+                        )
+                    }
                 if (remote.isNotEmpty()) remote
                 else CardStylePresets.forInstitution(bank.code, CardStyleType.CREDIT).map { preset ->
                     CatalogProductChoice(preset.productName, preset.network.toCardNetwork(), stylePreset = preset)
@@ -253,7 +312,21 @@ fun UnifiedInstrumentFormScreen(
             else -> emptyList()
         }
     }
+
     val selectedProduct = productsForBank.firstOrNull { it.name == selectedProductName }
+    LaunchedEffect(initialCreditCard, kind, productsForBank, selectedProductName) {
+        if (initialCreditCard && kind == InstrumentKind.CREDIT_CARD && selectedProductName == null) {
+            val preferredProduct = productsForBank.firstOrNull {
+                it.network == CardNetwork.VISA && it.name.contains("oro", ignoreCase = true)
+            }
+            if (preferredProduct != null) {
+                selectedProductName = preferredProduct.name
+                selectedStylePresetId = preferredProduct.stylePreset?.id
+                network = preferredProduct.network
+                if (!hasAliasBeenEdited && alias.isBlank()) alias = preferredProduct.name
+            }
+        }
+    }
     val selectedStylePreset = selectedProduct?.stylePreset ?: CardStylePresets.byId(selectedStylePresetId)
     val amountForValidation = if (kind == InstrumentKind.CREDIT_CARD) creditLimitInput else balanceInput
     val parsedAmountForValidation = MoneyInputParser.parseMinorUnits(amountForValidation)
@@ -270,7 +343,7 @@ fun UnifiedInstrumentFormScreen(
     val cardBackground = when {
         kind == InstrumentKind.CASH -> MaterialTheme.colorScheme.surfaceVariant
         kind == InstrumentKind.WALLET -> Color(0xFF005C55)
-        selectedColor == "kipu" -> Color(0xFF0F766E)
+        selectedColor == "kipu" -> rememberKipuColors().primary
         else -> bank.color
     }
     val previewStylePreset = selectedStylePreset ?: when (kind) {
@@ -281,7 +354,7 @@ fun UnifiedInstrumentFormScreen(
     }
     val cardForeground = when {
         kind == InstrumentKind.CASH -> MaterialTheme.colorScheme.onSurface
-        kind == InstrumentKind.WALLET || selectedColor == "kipu" -> Color.White
+        kind == InstrumentKind.WALLET || selectedColor == "kipu" -> rememberKipuColors().onPrimary
         else -> bank.textColor
     }
     val previewTitle = alias.ifBlank {
@@ -320,50 +393,109 @@ fun UnifiedInstrumentFormScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            InstrumentCardPreview(
-                title = previewTitle,
-                instrumentType = kind.label,
-                subtitle = selectedProductName ?: bank.name.takeIf { kind == InstrumentKind.SAVINGS_DEBIT || kind == InstrumentKind.CREDIT_CARD }
-                    ?: if (kind == InstrumentKind.WALLET) walletProvider.defaultName else "Kipu · Andean Modernist",
-                lastFourDigits = lastFourDigits,
-                network = when (kind) {
-                    InstrumentKind.SAVINGS_DEBIT, InstrumentKind.CREDIT_CARD -> cardNetworkLabel.takeIf {
-                        selectedProductName != null || lastFourDigits.length == 4
-                    }
-                    else -> null
-                },
-                balanceLabel = previewLabel,
-                amount = previewAmount,
-                backgroundColor = cardBackground,
-                foregroundColor = cardForeground,
-                stylePreset = previewStylePreset,
-                showCardHardware = kind == InstrumentKind.CREDIT_CARD ||
-                    kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.length == 4,
-            )
+            // Live Preview with responsive motion
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize(
+                        animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+                    ),
+            ) {
+                InstrumentCardPreview(
+                    title = previewTitle,
+                    instrumentType = kind.label,
+                    subtitle = selectedProductName ?: bank.name.takeIf { kind == InstrumentKind.SAVINGS_DEBIT || kind == InstrumentKind.CREDIT_CARD }
+                        ?: if (kind == InstrumentKind.WALLET) walletProvider.defaultName else "Kipu · Andean Modernist",
+                    lastFourDigits = lastFourDigits,
+                    network = when (kind) {
+                        InstrumentKind.SAVINGS_DEBIT, InstrumentKind.CREDIT_CARD -> cardNetworkLabel.takeIf {
+                            selectedProductName != null || lastFourDigits.length == 4
+                        }
+                        else -> null
+                    },
+                    balanceLabel = previewLabel,
+                    amount = previewAmount,
+                    backgroundColor = cardBackground,
+                    foregroundColor = cardForeground,
+                    stylePreset = previewStylePreset,
+                    showCardHardware = kind == InstrumentKind.CREDIT_CARD ||
+                        kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.length == 4,
+                )
+            }
 
-            Text("¿Qué instrumento vas a agregar?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                InstrumentKind.entries.forEach { option ->
+            // R8/R9 segmented selector. Other liquid sources stay available below.
+            Text(
+                text = "Cuenta o tarjeta",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = KipuInkTitle,
+            )
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = KipuSurfaceVariantNeutral,
+                border = BorderStroke(1.dp, KipuBorderColor),
+            ) {
+                Row(
+                    modifier = Modifier.padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    InstrumentKindSegment(
+                        label = "Ahorros / Débito",
+                        icon = Icons.Default.AccountBalance,
+                        selected = kind == InstrumentKind.SAVINGS_DEBIT,
+                        onClick = { setKind(InstrumentKind.SAVINGS_DEBIT) },
+                        modifier = Modifier.weight(1f),
+                    )
+                    InstrumentKindSegment(
+                        label = "Tarjeta de crédito",
+                        icon = Icons.Default.CreditCard,
+                        selected = kind == InstrumentKind.CREDIT_CARD,
+                        onClick = { setKind(InstrumentKind.CREDIT_CARD) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            Text(
+                text = "Otros saldos",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = KipuTextMuted,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(InstrumentKind.WALLET, InstrumentKind.CASH).forEach { option ->
+                    val isSelected = kind == option
                     FilterChip(
-                        selected = kind == option,
+                        selected = isSelected,
                         onClick = { setKind(option) },
-                        label = { Text(option.label) },
+                        label = { Text(option.label, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
                         leadingIcon = {
                             Icon(
-                                imageVector = when (option) {
-                                    InstrumentKind.SAVINGS_DEBIT -> Icons.Default.AccountBalance
-                                    InstrumentKind.CREDIT_CARD -> Icons.Default.CreditCard
-                                    InstrumentKind.WALLET -> Icons.Default.Wallet
-                                    InstrumentKind.CASH -> Icons.Default.Payments
-                                },
+                                imageVector = if (option == InstrumentKind.WALLET) Icons.Default.Wallet else Icons.Default.Payments,
                                 contentDescription = null,
                             )
                         },
-                        modifier = Modifier.heightIn(min = 48.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = rememberKipuColors().primary,
+                            selectedLabelColor = rememberKipuColors().onPrimary,
+                            containerColor = KipuSurfaceVariantNeutral,
+                            labelColor = KipuInkTitle,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                            selectedBorderColor = KipuTealPrimary,
+                        ),
+                        modifier = Modifier.heightIn(min = 44.dp),
                     )
                 }
             }
 
+            // Animated Kind Content
             AnimatedContent(
                 targetState = kind,
                 transitionSpec = {
@@ -382,94 +514,221 @@ fun UnifiedInstrumentFormScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     when (visibleKind) {
-                        InstrumentKind.SAVINGS_DEBIT, InstrumentKind.CREDIT_CARD -> {
-                            Text("Entidad bancaria", style = MaterialTheme.typography.titleSmall)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                bankChoices.forEach { option ->
-                                    FilterChip(
-                                        selected = bank.code == option.code,
+                        InstrumentKind.SAVINGS_DEBIT -> {
+                            // R8 Flow: Bank & Accounts Tree Accordion
+                            val debitPreset = CardStylePresets.forInstitution(bank.code, CardStyleType.DEBIT).firstOrNull()
+                            val branchItems = remember(bank, debitPreset) {
+                                listOf(
+                                    Triple(
+                                        debitPreset?.productName ?: "Tarjeta de Débito ${bank.name}",
+                                        "Débito ${debitPreset?.network?.lowercase()?.replaceFirstChar(Char::uppercase) ?: "Visa"} " +
+                                            "${if (debitPreset?.tier?.equals("CLASSIC", ignoreCase = true) == true) "Clásica" else debitPreset?.tierLabel ?: "Estándar"} · ${bank.name}",
+                                        "Activa",
+                                    ),
+                                    Triple(
+                                        "Cuenta Sueldo ${bank.name}",
+                                        "Cuenta para recibir depósitos de sueldo",
+                                        "Sueldo",
+                                    ),
+                                    Triple(
+                                        "Cuenta Digital Ahorros",
+                                        "Producto de ahorro",
+                                        "Ahorros",
+                                    ),
+                                    Triple(
+                                        "Billetera Digital Yape",
+                                        "Saldo independiente · Disponible en Kipu",
+                                        "Billetera",
+                                    ),
+                                )
+                            }
+
+                            BankTreeSection(
+                                bank = bank,
+                                bankChoices = bankChoices,
+                                isBankSelectorExpanded = isBankSelectorExpanded,
+                                onToggleBankSelector = { isBankSelectorExpanded = !isBankSelectorExpanded },
+                                onSelectBank = { option ->
+                                    bank = option
+                                    selectedProductName = null
+                                    selectedStylePresetId = null
+                                    network = CardNetwork.VISA
+                                    if (!hasAliasBeenEdited) alias = "Cuenta ${option.name}"
+                                    isBankSelectorExpanded = false
+                                },
+                                countLabel = "4 opciones disponibles",
+                                headerTitle = "BANCO Y PRODUCTO ASOCIADO",
+                                reducedMotion = reducedMotion,
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .animateContentSize(
+                                            animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+                                        ),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    branchItems.forEachIndexed { index, (title, subtitle, badge) ->
+                                        val isSelected = selectedProductName == title
+                                        TreeBranchItem(
+                                            isFirst = index == 0,
+                                            isLast = index == branchItems.size - 1,
+                                            isSelected = isSelected,
+                                        ) {
+                                            BranchProductCard(
+                                                title = title,
+                                                subtitle = subtitle,
+                                                badgeText = badge,
+                                                isBadgePrimary = index == 0,
+                                                isSelected = isSelected,
+                                                onClick = {
+                                                    if (index == 3) {
+                                                        setKind(InstrumentKind.WALLET)
+                                                        walletProvider = AccountPreset.YAPE
+                                                        if (!hasAliasBeenEdited) alias = "Billetera Yape"
+                                                    } else if (isSelected) {
+                                                        selectedProductName = null
+                                                        selectedStylePresetId = null
+                                                        network = CardNetwork.VISA
+                                                        if (!hasAliasBeenEdited) alias = "Cuenta ${bank.name}"
+                                                    } else {
+                                                        selectedProductName = title
+                                                        if (index == 0) {
+                                                            selectedStylePresetId = debitPreset?.id
+                                                            network = debitPreset?.network?.toCardNetwork() ?: CardNetwork.VISA
+                                                            if (!hasAliasBeenEdited) alias = "Cuenta ${bank.name}"
+                                                        } else {
+                                                            selectedStylePresetId = debitPreset?.id
+                                                            if (!hasAliasBeenEdited) alias = title
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                        }
+                                    }
+                                    DashedTreeAction(
+                                        label = "+ Agregar mi propia cuenta personalizada",
                                         onClick = {
-                                            bank = option
                                             selectedProductName = null
                                             selectedStylePresetId = null
-                                            network = CardNetwork.VISA
-                                            if (!hasAliasBeenEdited) alias = if (kind == InstrumentKind.CREDIT_CARD) "Tarjeta ${option.name}" else "Cuenta ${option.name}"
+                                            if (!hasAliasBeenEdited) alias = "Mi cuenta personalizada"
                                         },
-                                        label = { Text(option.name) },
-                                        modifier = Modifier.heightIn(min = 48.dp),
                                     )
                                 }
                             }
-                            Text(
-                                if (visibleKind == InstrumentKind.CREDIT_CARD) "Producto de crédito · catálogo verificado"
-                                else "Cuenta de ahorros · plástico opcional",
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            if (productsForBank.isEmpty()) {
-                                Text(
-                                    if (visibleKind == InstrumentKind.CREDIT_CARD) "No hay productos verificados para esta entidad. Puedes registrar la tarjeta con el estilo genérico."
-                                    else "No hay un preset de débito verificado para esta entidad.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            } else {
-                                CardProductFamilyAccordion(
-                                    products = productsForBank,
-                                    selectedProductName = selectedProductName,
-                                    reducedMotion = reducedMotion,
-                                    onSelect = { product ->
-                                        if (selectedProductName == product.name) {
-                                            selectedProductName = null
-                                            selectedStylePresetId = null
-                                            network = CardNetwork.VISA
-                                            if (!hasAliasBeenEdited) alias = "Tarjeta ${bank.name}"
-                                        } else {
-                                            selectedProductName = product.name
-                                            selectedStylePresetId = product.stylePreset?.id
-                                            network = product.network
-                                            if (!hasAliasBeenEdited) alias = product.name
-                                        }
+                        }
+
+                        InstrumentKind.CREDIT_CARD -> {
+                            // R9 Flow: Bank & Verified Credit Products Tree Accordion
+                            BankTreeSection(
+                                bank = bank,
+                                bankChoices = bankChoices,
+                                isBankSelectorExpanded = isBankSelectorExpanded,
+                                onToggleBankSelector = { isBankSelectorExpanded = !isBankSelectorExpanded },
+                                onSelectBank = { option ->
+                                    bank = option
+                                    selectedProductName = null
+                                    selectedStylePresetId = null
+                                    network = CardNetwork.VISA
+                                    if (!hasAliasBeenEdited) alias = "Tarjeta ${option.name}"
+                                    isBankSelectorExpanded = false
+                                },
+                                countLabel = "${productsForBank.size} disponibles",
+                                headerTitle = "BANCO O ENTIDAD FINANCIERA",
+                                reducedMotion = reducedMotion,
+                            ) {
+                                if (productsForBank.isEmpty()) {
+                                    Text(
+                                        text = "No hay productos verificados para esta entidad. Puedes registrar la tarjeta con el estilo genérico.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = KipuTextMuted,
+                                        modifier = Modifier.padding(start = 28.dp),
+                                    )
+                                } else {
+                                    CreditProductFamilyTree(
+                                        products = productsForBank,
+                                        selectedProductName = selectedProductName,
+                                        reducedMotion = reducedMotion,
+                                        onSelect = { product ->
+                                            if (selectedProductName == product.name) {
+                                                selectedProductName = null
+                                                selectedStylePresetId = null
+                                                network = CardNetwork.VISA
+                                                if (!hasAliasBeenEdited) alias = "Tarjeta ${bank.name}"
+                                            } else {
+                                                selectedProductName = product.name
+                                                selectedStylePresetId = product.stylePreset?.id
+                                                network = product.network
+                                                if (!hasAliasBeenEdited) alias = product.name
+                                            }
+                                        },
+                                    )
+                                }
+                                DashedTreeAction(
+                                    label = "+ Agregar mi propia tarjeta / producto personalizado",
+                                    onClick = {
+                                        selectedProductName = null
+                                        selectedStylePresetId = null
+                                        network = CardNetwork.VISA
+                                        if (!hasAliasBeenEdited) alias = "Mi tarjeta personalizada"
                                     },
                                 )
                             }
-                            if (visibleKind == InstrumentKind.CREDIT_CARD && selectedProduct?.reference != null) {
+
+                            if (selectedProduct?.reference != null) {
                                 ReferencialTeaCard(selectedProduct.reference, currency)
                             }
-                            if (visibleKind == InstrumentKind.CREDIT_CARD) {
-                                Text(
-                                    "La TEA mostrada es referencial. Tu tasa real es la de tu contrato; esta selección no guarda una TEA personal.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                            Text(
+                                text = "La TEA mostrada es referencial. Tu tasa real es la de tu contrato; esta selección no guarda una TEA personal.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KipuTextMuted,
+                            )
                         }
+
                         InstrumentKind.WALLET -> {
                             Text("Proveedor de billetera", style = MaterialTheme.typography.titleSmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 listOf(AccountPreset.YAPE, AccountPreset.PLIN).forEach { provider ->
+                                    val isSelected = walletProvider == provider
                                     FilterChip(
-                                        selected = walletProvider == provider,
+                                        selected = isSelected,
                                         onClick = {
                                             walletProvider = provider
                                             if (!hasAliasBeenEdited) alias = if (provider == AccountPreset.PLIN) "Billetera Plin" else "Billetera Yape"
                                         },
                                         label = { Text(if (provider == AccountPreset.PLIN) "Plin" else "Yape") },
-                                        modifier = Modifier.heightIn(min = 48.dp),
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = rememberKipuColors().primary,
+                                            selectedLabelColor = rememberKipuColors().onPrimary,
+                                            containerColor = KipuSurfaceVariantNeutral,
+                                            labelColor = KipuInkTitle,
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled = true,
+                                            selected = isSelected,
+                                            borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                                            selectedBorderColor = KipuTealPrimary,
+                                        ),
+                                        modifier = Modifier.heightIn(min = 44.dp),
                                     )
                                 }
                             }
                             InfoCard("Las billeteras Yape y Plin se registran como saldos independientes en Kipu. El modelo actual no las vincula a una cuenta o tarjeta de débito.")
                         }
-                        InstrumentKind.CASH -> InfoCard("El efectivo es una cuenta líquida local y no consume un cupo de instrumento computable.")
+
+                        InstrumentKind.CASH -> {
+                            InfoCard("El efectivo es una cuenta líquida local y no consume un cupo de instrumento computable.")
+                        }
                     }
                 }
             }
 
+            // Alias Input
             OutlinedTextField(
                 value = alias,
                 onValueChange = { value -> if (value.length <= 80) { alias = value; hasAliasBeenEdited = true; aliasError = null } },
                 label = { Text("Alias") },
-                placeholder = { Text("Ej. Sueldo BCP") },
+                placeholder = { Text(if (kind == InstrumentKind.CREDIT_CARD) "Ej. Tarjeta BCP Oro" else "Ej. Sueldo BCP") },
                 isError = aliasError != null || alias.isNotBlank() && Card.isForbiddenSensitiveCardInput(alias),
                 supportingText = aliasError?.let { message -> { Text(message) } }
                     ?: when {
@@ -478,11 +737,17 @@ fun UnifiedInstrumentFormScreen(
                         else -> null
                     },
                 singleLine = true,
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Text(if (kind == InstrumentKind.CREDIT_CARD) "Línea de crédito" else "Saldo inicial", style = MaterialTheme.typography.titleSmall)
+            // Balance or Credit Limit
+            Text(
+                text = if (kind == InstrumentKind.CREDIT_CARD) "Línea de crédito autorizada" else "Saldo inicial",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = KipuInkTitle,
+            )
             OutlinedTextField(
                 value = if (kind == InstrumentKind.CREDIT_CARD) creditLimitInput else balanceInput,
                 onValueChange = { value ->
@@ -497,29 +762,46 @@ fun UnifiedInstrumentFormScreen(
                 supportingText = (if (kind == InstrumentKind.CREDIT_CARD) limitError else balanceError)?.let { message -> { Text(message) } }
                     ?: if (parsedAmountForValidation == null) ({ Text("Ingresa un importe válido con hasta dos decimales.") }) else null,
                 singleLine = true,
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // Currency Chips
             if (kind != InstrumentKind.CASH) {
-                Text("Moneda", style = MaterialTheme.typography.titleSmall)
+                Text("Moneda", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = KipuInkTitle)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Currency.entries.forEach { option ->
+                        val isSelected = currency == option
                         FilterChip(
-                            selected = currency == option,
+                            selected = isSelected,
                             onClick = { currency = option },
-                            label = { Text(option.name) },
-                            modifier = Modifier.heightIn(min = 48.dp),
+                            label = { Text(option.name, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = rememberKipuColors().primary,
+                                selectedLabelColor = rememberKipuColors().onPrimary,
+                                containerColor = KipuSurfaceVariantNeutral,
+                                labelColor = KipuInkTitle,
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                                selectedBorderColor = KipuTealPrimary,
+                            ),
+                            modifier = Modifier.heightIn(min = 44.dp),
                         )
                     }
                 }
             }
 
+            // Network & Last 4 digits (NO PAN, NO MM/AA, NO CVV)
             if (kind == InstrumentKind.SAVINGS_DEBIT || kind == InstrumentKind.CREDIT_CARD) {
+                Text("Red de la tarjeta", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = KipuInkTitle)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     networkOptions.forEach { option ->
+                        val isSelected = network == option
                         FilterChip(
-                        selected = network == option,
+                            selected = isSelected,
                             onClick = {
                                 if (selectedProduct?.network != null && selectedProduct.network != option) {
                                     selectedProductName = null
@@ -527,19 +809,32 @@ fun UnifiedInstrumentFormScreen(
                                 }
                                 network = option
                             },
-                            label = { Text(networkLabel(option)) },
-                            modifier = Modifier.heightIn(min = 48.dp),
+                            label = { Text(networkLabel(option), fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = rememberKipuColors().primary,
+                                selectedLabelColor = rememberKipuColors().onPrimary,
+                                containerColor = KipuSurfaceVariantNeutral,
+                                labelColor = KipuInkTitle,
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = isSelected,
+                                borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                                selectedBorderColor = KipuTealPrimary,
+                            ),
+                            modifier = Modifier.heightIn(min = 44.dp),
                         )
                     }
                 }
+
                 OutlinedTextField(
                     value = lastFourDigits,
                     onValueChange = { value ->
                         lastFourDigits = value.filter(Char::isDigit).take(4)
                         cardError = null
                     },
-                    label = { Text("Últimos 4 dígitos") },
-                    placeholder = { Text("0000") },
+                    label = { Text("Últimos 4 dígitos del plástico") },
+                    placeholder = { Text("7548") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     isError = cardError != null,
                     supportingText = cardError?.let { message -> { Text(message) } }
@@ -548,69 +843,103 @@ fun UnifiedInstrumentFormScreen(
                                 when {
                                     kind == InstrumentKind.CREDIT_CARD && lastFourDigits.length != 4 -> "Ingresa exactamente cuatro dígitos numéricos."
                                     kind == InstrumentKind.SAVINGS_DEBIT -> "Opcional: registra el plástico vinculado a esta cuenta."
-                                    else -> "Solo se guardan estos cuatro dígitos."
+                                    else -> "Solo los 4 dígitos finales. Nunca solicitamos tu número completo, vencimiento ni CVV."
                                 },
                             )
                         },
                     singleLine = true,
-                    shape = MaterialTheme.shapes.medium,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
 
+            // Billing and Due Days for Credit Card
             if (kind == InstrumentKind.CREDIT_CARD) {
+                Text("Ciclo de facturación", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = KipuInkTitle)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = billingDayInput,
                         onValueChange = { billingDayInput = it.filter(Char::isDigit).take(2); cycleError = null },
                         label = { Text("Día de corte") },
+                        placeholder = { Text("15") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         isError = cycleError != null || billingDayInput.toIntOrNull() !in 1..31,
-                        supportingText = if (billingDayInput.toIntOrNull() !in 1..31) ({ Text("Usa un día entre 1 y 31") }) else null,
+                        supportingText = if (billingDayInput.toIntOrNull() !in 1..31) ({ Text("Día entre 1 y 31") }) else null,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = dueDayInput,
                         onValueChange = { dueDayInput = it.filter(Char::isDigit).take(2); cycleError = null },
                         label = { Text("Día de pago") },
+                        placeholder = { Text("05") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         isError = cycleError != null || dueDayInput.toIntOrNull() !in 1..31,
-                        supportingText = if (dueDayInput.toIntOrNull() !in 1..31) ({ Text("Usa un día entre 1 y 31") }) else null,
+                        supportingText = if (dueDayInput.toIntOrNull() !in 1..31) ({ Text("Día entre 1 y 31") }) else null,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 cycleError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
 
-            Text("Personalización", style = MaterialTheme.typography.titleSmall)
+            // Personalization
+            Text("Personalización", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = KipuInkTitle)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("institution" to "Banco", "kipu" to "Kipu teal").forEach { (key, label) ->
+                    val isSelected = selectedColor == key
                     FilterChip(
-                        selected = selectedColor == key,
+                        selected = isSelected,
                         onClick = { selectedColor = key },
-                        label = { Text(label) },
-                        modifier = Modifier.heightIn(min = 48.dp),
+                        label = { Text(label, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = rememberKipuColors().primary,
+                            selectedLabelColor = rememberKipuColors().onPrimary,
+                            containerColor = KipuSurfaceVariantNeutral,
+                            labelColor = KipuInkTitle,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                            selectedBorderColor = KipuTealPrimary,
+                        ),
+                        modifier = Modifier.heightIn(min = 44.dp),
                     )
                 }
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("account_balance", "credit_card", "wallet", "payments").forEach { icon ->
+                    val isSelected = selectedIcon == icon
                     FilterChip(
-                        selected = selectedIcon == icon,
+                        selected = isSelected,
                         onClick = { selectedIcon = icon },
                         label = { Text(iconLabel(icon)) },
-                        modifier = Modifier.heightIn(min = 48.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = rememberKipuColors().primary,
+                            selectedLabelColor = rememberKipuColors().onPrimary,
+                            containerColor = KipuSurfaceVariantNeutral,
+                            labelColor = KipuInkTitle,
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                            selectedBorderColor = KipuTealPrimary,
+                        ),
+                        modifier = Modifier.heightIn(min = 44.dp),
                     )
                 }
             }
 
+            // Strict Privacy and Security Card
             if (kind == InstrumentKind.CREDIT_CARD) {
                 Card(
-                    shape = MaterialTheme.shapes.large,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = KipuSurfaceVariantNeutral),
+                    border = BorderStroke(1.dp, KipuBorderColor),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
@@ -618,16 +947,17 @@ fun UnifiedInstrumentFormScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Default.Security, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Icon(Icons.Default.Security, contentDescription = null, tint = KipuTealPrimary)
                         Text(
-                            "Kipu nunca solicita ni almacena el número completo, la fecha de vencimiento ni el CVV.",
+                            text = "Kipu nunca solicita ni almacena el número completo, la fecha de vencimiento ni el CVV.",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = KipuInkTitle,
                         )
                     }
                 }
             }
 
+            // Submit Button
             Button(
                 onClick = {
                     val parsedBalance = MoneyInputParser.parseMinorUnits(if (kind == InstrumentKind.CREDIT_CARD) creditLimitInput else balanceInput)
@@ -662,9 +992,14 @@ fun UnifiedInstrumentFormScreen(
                     val trimmedAlias = alias.trim()
                     when (kind) {
                         InstrumentKind.SAVINGS_DEBIT -> {
+                            val accountTypeToCreate = if (selectedProductName?.startsWith("Cuenta Sueldo", ignoreCase = true) == true) {
+                                AccountType.BANK
+                            } else {
+                                AccountType.SAVINGS
+                            }
                             viewModel.createAccount(
                                 alias = trimmedAlias,
-                                type = AccountType.SAVINGS,
+                                type = accountTypeToCreate,
                                 currency = currency,
                                 preset = bank.accountPreset,
                                 initialBalanceMinorUnits = requireNotNull(parsedBalance),
@@ -692,7 +1027,7 @@ fun UnifiedInstrumentFormScreen(
                                     }
                                 } else {
                                     isSubmitting = false
-                                    finishInstrumentSave("Cuenta de ahorro creada.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+                                    finishInstrumentSave("Cuenta creada con éxito.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
                                 }
                             }
                         }
@@ -711,9 +1046,10 @@ fun UnifiedInstrumentFormScreen(
                                 colorToken = colorToken,
                                 iconToken = iconToken,
                                 stylePresetId = selectedStylePreset?.id,
-                            ) {
+                            ) { createdCreditCard ->
                                 isSubmitting = false
-                                finishInstrumentSave("Tarjeta de crédito registrada.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+                                registeredCreditCard = createdCreditCard
+                                showSuccessSheet = true
                             }
                         }
                         InstrumentKind.WALLET, InstrumentKind.CASH -> {
@@ -733,28 +1069,986 @@ fun UnifiedInstrumentFormScreen(
                                 iconToken = iconToken,
                             ) {
                                 isSubmitting = false
-                                finishInstrumentSave(if (type == AccountType.CASH) "Cuenta de efectivo creada." else "Billetera registrada como saldo independiente.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+                                finishInstrumentSave(
+                                    if (type == AccountType.CASH) "Cuenta de efectivo creada." else "Billetera registrada como saldo independiente.",
+                                    onSaveSuccess,
+                                    onNavigateBack,
+                                    snackbarHostState,
+                                    scope,
+                                )
                             }
                         }
                     }
                 },
                 enabled = !isSubmitting && canSaveInstrument,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = rememberKipuColors().primary,
+                    contentColor = rememberKipuColors().onPrimary,
+                    disabledContainerColor = KipuBorderColor,
+                    disabledContentColor = Color(0xFF94A3B8),
                 ),
-                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 50.dp),
             ) {
-                Text(if (isSubmitting) "Guardando…" else "Guardar instrumento")
+                Text(
+                    text = when {
+                        isSubmitting -> "Guardando…"
+                        kind == InstrumentKind.CREDIT_CARD -> "Guardar tarjeta de crédito"
+                        else -> "Guardar instrumento"
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
             if (!isSubmitting && !canSaveInstrument) {
                 Text(
-                    "Completa los campos obligatorios para guardar.",
+                    text = "Completa los campos obligatorios para guardar.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = KipuTextMuted,
                 )
             }
             Spacer(Modifier.height(20.dp))
+        }
+    }
+
+    // R9 Flow: Modal Bottom Sheet on Successful Credit Card Registration
+    if (showSuccessSheet && registeredCreditCard != null) {
+        R9CreditCardSuccessBottomSheet(
+            card = registeredCreditCard!!,
+            bankChoice = bank,
+            reducedMotion = reducedMotion,
+            onDismiss = {
+                showSuccessSheet = false
+                finishInstrumentSave("Tarjeta de crédito registrada.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+            },
+            onViewDetail = { card ->
+                showSuccessSheet = false
+                if (onNavigateToCardDetail != null) {
+                    onNavigateToCardDetail(card)
+                } else {
+                    finishInstrumentSave("Tarjeta de crédito registrada.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+                }
+            },
+            onRecordFirstConsumption = { card ->
+                showSuccessSheet = false
+                if (onNavigateToRecordConsumption != null) {
+                    onNavigateToRecordConsumption(card)
+                } else {
+                    finishInstrumentSave("Tarjeta de crédito registrada.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun BankTreeSection(
+    bank: BankChoice,
+    bankChoices: List<BankChoice>,
+    isBankSelectorExpanded: Boolean,
+    onToggleBankSelector: () -> Unit,
+    onSelectBank: (BankChoice) -> Unit,
+    countLabel: String,
+    headerTitle: String,
+    reducedMotion: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val bankChevronRotation by animateFloatAsState(
+        targetValue = if (isBankSelectorExpanded) 180f else 0f,
+        animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+        label = "bankChevronRotation",
+    )
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = headerTitle,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
+                color = KipuTextMuted,
+            )
+            TextButton(
+                onClick = onToggleBankSelector,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = if (isBankSelectorExpanded) "Cerrar banco ✕" else "Cambiar banco ⇄",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = KipuTealPrimary,
+                )
+            }
+        }
+
+        // Bank header card
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = rememberKipuColors().surface,
+            border = BorderStroke(1.dp, KipuBorderColor),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onToggleBankSelector)
+                .semantics(mergeDescendants = true) {
+                    contentDescription = "Banco ${bank.name}, tocar para cambiar banco"
+                    stateDescription = if (isBankSelectorExpanded) "Selector desplegado" else "Banco seleccionado"
+                },
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(bank.color),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = bank.name.take(3).uppercase(),
+                        color = bank.textColor,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Banco de Crédito ${bank.name}".takeIf { bank.code == "BCP" } ?: bank.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = KipuInkTitle,
+                    )
+                    Text(
+                        text = "Entidad vinculada · ${bank.name}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KipuTextMuted,
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = KipuLightGreenContainer,
+                ) {
+                    Text(
+                        text = countLabel,
+                        color = KipuTealPrimary,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = KipuTextMuted,
+                    modifier = Modifier.rotate(bankChevronRotation),
+                )
+            }
+        }
+
+        // Expanded bank selector dropdown
+        AnimatedVisibility(
+            visible = isBankSelectorExpanded,
+            enter = if (reducedMotion) fadeIn(tween(0)) + expandVertically(tween(0))
+            else fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.MediumMillis)),
+            exit = if (reducedMotion) fadeOut(tween(0)) + shrinkVertically(tween(0))
+            else fadeOut(tween(KipuMotionTokens.QuickMillis)) + shrinkVertically(tween(KipuMotionTokens.QuickMillis)),
+        ) {
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = KipuSurfaceVariantNeutral),
+                border = BorderStroke(1.dp, KipuBorderColor),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "Selecciona una entidad bancaria:",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = KipuTextMuted,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                    bankChoices.forEach { option ->
+                        val isSelected = bank.code == option.code
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) rememberKipuColors().surface else Color.Transparent,
+                            border = if (isSelected) BorderStroke(1.5.dp, KipuTealPrimary) else null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(role = Role.RadioButton) { onSelectBank(option) }
+                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(option.color),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        option.name.take(3).uppercase(),
+                                        color = option.textColor,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                                Text(
+                                    text = option.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = KipuInkTitle,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Seleccionado",
+                                        tint = KipuTealPrimary,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Tree root connector
+        Box(
+            modifier = Modifier
+                .padding(start = 27.dp)
+                .width(2.dp)
+                .height(8.dp)
+                .background(KipuBorderColor),
+        )
+
+        // Tree content branches
+        content()
+    }
+}
+
+@Composable
+private fun InstrumentKindSegment(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(shape)
+            .background(if (selected) rememberKipuColors().primary else Color.Transparent)
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .semantics {
+                contentDescription = label
+                this.selected = selected
+                this.role = Role.RadioButton
+            }
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (selected) Color.White else KipuTextMuted,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            color = if (selected) Color.White else KipuInkTitle,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun DashedTreeAction(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val dashedBorderColor = KipuTealPrimary.copy(alpha = 0.55f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawRoundRect(
+                color = dashedBorderColor,
+                topLeft = Offset.Zero,
+                size = Size(size.width, size.height),
+                cornerRadius = CornerRadius(14.dp.toPx()),
+                style = Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 5.dp.toPx())),
+                ),
+            )
+        }
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp),
+            color = KipuTealPrimary,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun TreeBranchItem(
+    isFirst: Boolean,
+    isLast: Boolean,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val lineColor = KipuBorderColor
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(28.dp)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val lineX = size.width / 2f
+                val centerY = size.height / 2f
+                val strokeWidth = 2.dp.toPx()
+                // Top segment from parent/previous branch
+                drawLine(
+                    color = lineColor,
+                    start = Offset(lineX, 0f),
+                    end = Offset(lineX, centerY),
+                    strokeWidth = strokeWidth,
+                )
+                // Bottom segment to next branch (if not last)
+                if (!isLast) {
+                    drawLine(
+                        color = lineColor,
+                        start = Offset(lineX, centerY),
+                        end = Offset(lineX, size.height),
+                        strokeWidth = strokeWidth,
+                    )
+                }
+                // Horizontal arm to card
+                drawLine(
+                    color = lineColor,
+                    start = Offset(lineX, centerY),
+                    end = Offset(size.width, centerY),
+                    strokeWidth = strokeWidth,
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) rememberKipuColors().primary else rememberKipuColors().surface)
+                    .border(
+                        BorderStroke(if (isSelected) 2.dp else 1.5.dp, if (isSelected) KipuTealPrimary else KipuBorderColor),
+                        CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(10.dp),
+                    )
+                }
+            }
+        }
+
+        Box(modifier = Modifier.weight(1f)) {
+            content()
+        }
+    }
+}
+
+@Composable
+private fun BranchProductCard(
+    title: String,
+    subtitle: String?,
+    badgeText: String?,
+    isBadgePrimary: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) rememberKipuColors().selectedSurface else rememberKipuColors().surface,
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) KipuTealPrimary else KipuBorderColor,
+        ),
+        shadowElevation = if (isSelected) 1.dp else 0.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(role = Role.RadioButton, onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                this.selected = isSelected
+                role = Role.RadioButton
+            },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                        color = KipuInkTitle,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    badgeText?.let { badge ->
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isBadgePrimary) KipuLightGreenContainer else KipuSurfaceVariantNeutral,
+                        ) {
+                            Text(
+                                text = badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = if (isBadgePrimary) KipuTealPrimary else KipuTextMuted,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+                subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KipuTextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Seleccionado",
+                    tint = KipuSuccessGreen,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreditProductFamilyTree(
+    products: List<CatalogProductChoice>,
+    selectedProductName: String?,
+    reducedMotion: Boolean,
+    onSelect: (CatalogProductChoice) -> Unit,
+) {
+    val families = remember(products) {
+        products.groupBy { it.familyLabel }.entries.map { (label, items) ->
+            Triple(label, label, items)
+        }
+    }
+    val selectedFamily = products.firstOrNull { it.name == selectedProductName }?.familyLabel
+    var expandedFamily by remember(products) { mutableStateOf(selectedFamily ?: families.firstOrNull()?.first) }
+    LaunchedEffect(selectedFamily) {
+        if (selectedFamily != null) expandedFamily = selectedFamily
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+            ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        families.forEachIndexed { familyIndex, (familyId, familyLabel, familyProducts) ->
+            val isExpanded = expandedFamily == familyId
+            val hasSelectedProduct = familyProducts.any { it.name == selectedProductName }
+            val chevronRotation by animateFloatAsState(
+                targetValue = if (isExpanded) 180f else 0f,
+                animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+                label = "familyChevron_$familyId",
+            )
+
+            TreeBranchItem(
+                isFirst = familyIndex == 0,
+                isLast = familyIndex == families.size - 1 && !isExpanded,
+                isSelected = hasSelectedProduct,
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (hasSelectedProduct) rememberKipuColors().selectedSurface else rememberKipuColors().surface,
+                    border = BorderStroke(
+                        width = if (hasSelectedProduct) 1.5.dp else 1.dp,
+                        color = if (hasSelectedProduct) KipuTealPrimary else KipuBorderColor,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button) {
+                            expandedFamily = if (isExpanded) null else familyId
+                        }
+                        .semantics(mergeDescendants = true) {
+                            contentDescription = "Familia $familyLabel, ${familyProducts.size} opciones"
+                            stateDescription = if (isExpanded) "Expandida" else "Contraída"
+                            role = Role.Button
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = familyLabel,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = KipuInkTitle,
+                            )
+                            Text(
+                                text = "${familyProducts.size} ${if (familyProducts.size == 1) "diseño verificado" else "diseños verificados"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KipuTextMuted,
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            tint = KipuTextMuted,
+                            modifier = Modifier.rotate(chevronRotation),
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = if (reducedMotion) fadeIn(tween(0)) + expandVertically(tween(0))
+                else fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.MediumMillis)),
+                exit = if (reducedMotion) fadeOut(tween(0)) + shrinkVertically(tween(0))
+                else fadeOut(tween(KipuMotionTokens.QuickMillis)) + shrinkVertically(tween(KipuMotionTokens.QuickMillis)),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, top = 4.dp, bottom = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    familyProducts.forEachIndexed { prodIndex, product ->
+                        val isSelected = product.name == selectedProductName
+                        TreeBranchItem(
+                            isFirst = prodIndex == 0,
+                            isLast = prodIndex == familyProducts.size - 1,
+                            isSelected = isSelected,
+                        ) {
+                            BranchProductCard(
+                                title = product.name,
+                                subtitle = "${networkLabel(product.network)}${product.stylePreset?.let { " · ${it.tierLabel}" }.orEmpty()}",
+                                badgeText = product.stylePreset?.tierLabel,
+                                isBadgePrimary = isSelected,
+                                isSelected = isSelected,
+                                onClick = { onSelect(product) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun R9CreditCardSuccessBottomSheet(
+    card: CreditCard,
+    bankChoice: BankChoice,
+    reducedMotion: Boolean,
+    onDismiss: () -> Unit,
+    onViewDetail: (CreditCard) -> Unit,
+    onRecordFirstConsumption: (CreditCard) -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var isMounted by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isMounted = true
+    }
+    val checkScale by animateFloatAsState(
+        targetValue = if (isMounted) 1f else 0f,
+        animationSpec = if (reducedMotion) tween(0) else spring(
+            dampingRatio = 0.55f,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "successCheckScale",
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = rememberKipuColors().surface,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(rememberKipuColors().dragHandle),
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            // Elastic pop-in green check squircle
+            Box(
+                modifier = Modifier
+                    .scale(checkScale)
+                    .size(68.dp)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(KipuLightGreenContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(rememberKipuColors().primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Éxito",
+                        tint = rememberKipuColors().onPrimary,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+            }
+
+            // Title & subtitle
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = "¡Tarjeta registrada con éxito!",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = KipuInkTitle,
+                    textAlign = TextAlign.Center,
+                )
+                Text(
+                    text = "Tu ${card.alias ?: card.issuer} ha sido vinculada a tu panel de instrumentos financieros.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = KipuTextMuted,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            // Binding summary snippet
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = KipuSurfaceVariantNeutral,
+                border = BorderStroke(1.dp, KipuBorderColor),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(bankChoice.color),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = bankChoice.name.take(3).uppercase(),
+                            color = bankChoice.textColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "${card.issuer} ${card.alias ?: card.network.name} (•••• ${card.lastFourDigits})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = KipuInkTitle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(KipuSuccessGreen),
+                            )
+                            Text(
+                                text = "Activa para registrar consumos",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KipuSuccessGreen,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Authorized credit line
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = rememberKipuColors().surface,
+                border = BorderStroke(1.dp, KipuBorderColor),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Línea de crédito autorizada",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = KipuTextMuted,
+                        )
+                        Text(
+                            text = "${currencySymbol(card.currency)} ${String.format(Locale.getDefault(), "%,.2f", card.creditLimitMinorUnits / 100.0)}",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = KipuInkTitle,
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(KipuLightGreenContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CreditCard,
+                            contentDescription = null,
+                            tint = KipuTealPrimary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+
+            // Billing and due days
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = rememberKipuColors().surface,
+                    border = BorderStroke(1.dp, KipuBorderColor),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                tint = KipuTextMuted,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = "Próximo corte",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KipuTextMuted,
+                            )
+                        }
+                        Text(
+                            text = "${card.billingDay.toString().padStart(2, '0')} de cada mes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = KipuInkTitle,
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = rememberKipuColors().surface,
+                    border = BorderStroke(1.dp, KipuBorderColor),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                tint = KipuTextMuted,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = "Próx. vencimiento",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = KipuTextMuted,
+                            )
+                        }
+                        Text(
+                            text = "${card.dueDay.toString().padStart(2, '0')} de cada mes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = KipuInkTitle,
+                        )
+                    }
+                }
+            }
+
+            // Educational tip card
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = KipuLightGreenContainer,
+                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = KipuTealPrimary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = "Tip financiero: procura mantener tus consumos por debajo del 30% de tu línea para conservar un uso moderado del crédito.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KipuInkTitle,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // Action buttons
+            Button(
+                onClick = { onViewDetail(card) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = rememberKipuColors().primary,
+                    contentColor = rememberKipuColors().onPrimary,
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+            ) {
+                Text(
+                    text = "Ver detalle de la tarjeta →",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+
+            OutlinedButton(
+                onClick = { onRecordFirstConsumption(card) },
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = KipuTealPrimary,
+                ),
+                border = BorderStroke(1.dp, KipuTealPrimary),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp),
+            ) {
+                Text(
+                    text = "+ Registrar primer consumo",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
@@ -771,7 +2065,7 @@ private fun ReferencialTeaCard(product: CreditProductReference, currency: Curren
     }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -785,12 +2079,12 @@ private fun ReferencialTeaCard(product: CreditProductReference, currency: Curren
 @Composable
 private fun InfoCard(text: String) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = KipuSurfaceVariantNeutral),
+        border = BorderStroke(1.dp, KipuBorderColor),
+        shape = RoundedCornerShape(14.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(text, modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodySmall)
+        Text(text, modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodySmall, color = KipuInkTitle)
     }
 }
 
@@ -805,145 +2099,6 @@ private fun finishInstrumentSave(
     else scope.launch {
         snackbarHostState.showSnackbar(message)
         onNavigateBack()
-    }
-}
-
-@Composable
-private fun CardProductFamilyAccordion(
-    products: List<CatalogProductChoice>,
-    selectedProductName: String?,
-    reducedMotion: Boolean,
-    onSelect: (CatalogProductChoice) -> Unit,
-) {
-    val families = remember(products) {
-        products.groupBy { it.familyLabel }.entries.map { (familyLabel, items) ->
-            Triple(familyLabel, familyLabel, items)
-        }
-    }
-    val selectedFamilyId = products.firstOrNull { it.name == selectedProductName }?.familyLabel
-    var expandedFamilyId by remember(products) { mutableStateOf(selectedFamilyId ?: families.firstOrNull()?.first) }
-    LaunchedEffect(selectedFamilyId) {
-        if (selectedFamilyId != null) expandedFamilyId = selectedFamilyId
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth().animateContentSize(
-            animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
-        ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        families.forEach { (familyId, familyLabel, familyProducts) ->
-            val expanded = expandedFamilyId == familyId
-            val rotation by animateFloatAsState(
-                targetValue = if (expanded) 180f else 0f,
-                animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
-                label = "family_chevron_$familyId",
-            )
-            Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = if (expanded) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = if (expanded) MaterialTheme.colorScheme.surfaceTint else MaterialTheme.colorScheme.outlineVariant,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .clickable(role = Role.Button) { expandedFamilyId = if (expanded) null else familyId }
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = "Familia $familyLabel, ${familyProducts.size} opciones"
-                        stateDescription = if (expanded) "Expandida" else "Contraída"
-                        role = Role.Button
-                    },
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(familyLabel, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "${familyProducts.size} ${if (familyProducts.size == 1) "diseño" else "diseños"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.rotate(rotation))
-                }
-            }
-            AnimatedVisibility(
-                visible = expanded,
-                enter = if (reducedMotion) fadeIn(tween(0)) + expandVertically(tween(0))
-                else fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.MediumMillis)),
-                exit = if (reducedMotion) fadeOut(tween(0)) + shrinkVertically(tween(0))
-                else fadeOut(tween(KipuMotionTokens.QuickMillis)) + shrinkVertically(tween(KipuMotionTokens.QuickMillis)),
-            ) {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 112.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(familyProducts, key = { it.name }) { product ->
-                        CardPresetMiniTile(
-                            product = product,
-                            selected = product.name == selectedProductName,
-                            onClick = { onSelect(product) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CardPresetMiniTile(
-    product: CatalogProductChoice,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val preset = product.stylePreset ?: CardStylePresets.genericCreditStyle
-    val shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
-    val accessibleDescription = buildString {
-        append(product.name)
-        append(". Red ${networkLabel(product.network)}.")
-        product.stylePreset?.let { append(" Nivel ${it.tierLabel}.") }
-        append(if (selected) " Seleccionada." else " No seleccionada.")
-    }
-    Column(
-        modifier = Modifier
-            .width(156.dp)
-            .heightIn(min = 104.dp)
-            .clip(shape)
-            .background(preset.gradientBrush)
-            .border(
-                BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.surfaceTint else MaterialTheme.colorScheme.outlineVariant),
-                shape,
-            )
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                contentDescription = accessibleDescription
-                this.selected = selected
-                stateDescription = if (selected) "Seleccionada" else "No seleccionada"
-            }
-            .padding(10.dp),
-        verticalArrangement = Arrangement.Bottom,
-    ) {
-        Text(
-            text = product.name,
-            color = preset.textColor,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = "${networkLabel(product.network)}${product.stylePreset?.let { " · ${it.tierLabel}" }.orEmpty()}",
-            color = preset.textColor,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 

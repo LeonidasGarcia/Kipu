@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kipu.app.core.finance.domain.model.AccountId
 import com.kipu.app.core.finance.domain.model.CardId
+import com.kipu.app.core.finance.domain.model.FinancialMovement
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.core.finance.domain.model.OperationId
 import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.SessionCoordinator
+import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.feature.accounts.domain.FinancialInstrumentsRepository
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
@@ -228,6 +230,9 @@ class AccountsViewModel @Inject constructor(
         _isMasked.value = !_isMasked.value
     }
 
+    fun observeCardMovements(cardId: CardId): Flow<List<FinancialMovement>> =
+        financialInstrumentsRepository.observeMovementsByCard(cardId)
+
     fun observeAccountBalance(accountId: AccountId): Flow<Money> =
         financialInstrumentsRepository.observeAccountBalance(accountId)
 
@@ -438,9 +443,14 @@ class AccountsViewModel @Inject constructor(
         onSuccess: (com.kipu.app.feature.accounts.domain.model.CreditCard) -> Unit = {},
     ) {
         viewModelScope.launch {
+            val ownerId = activeCreditCardOwnerId(sessionCoordinator.localAccess.value)
+            if (ownerId == null) {
+                _eventChannel.send(AccountUiEvent.Error("Inicia sesión para registrar la tarjeta"))
+                return@launch
+            }
             val card = com.kipu.app.feature.accounts.domain.model.CreditCard(
                 id = com.kipu.app.core.finance.domain.model.CardId.generate(),
-                userId = com.kipu.app.core.finance.domain.model.UserId.generate(),
+                userId = ownerId,
                 alias = alias?.takeIf { it.isNotBlank() },
                 issuer = issuer.trim(),
                 network = network,
@@ -475,9 +485,17 @@ class AccountsViewModel @Inject constructor(
         sourceAccountId: AccountId,
         paymentAmount: Money,
         onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {},
     ) {
         viewModelScope.launch {
-            payCreditCardUseCase(cardId, sourceAccountId, paymentAmount).fold(
+            val result = try {
+                payCreditCardUseCase(cardId, sourceAccountId, paymentAmount)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Result.failure(error)
+            }
+            result.fold(
                 onSuccess = {
                     _eventChannel.send(
                         AccountUiEvent.ShowMessage("Pago guardado en este dispositivo · Pendiente de sincronización"),
@@ -485,9 +503,14 @@ class AccountsViewModel @Inject constructor(
                     onSuccess()
                 },
                 onFailure = { error ->
-                    _eventChannel.send(AccountUiEvent.Error(error.message ?: "Error al registrar el pago"))
+                    val message = error.message ?: "Error al registrar el pago"
+                    _eventChannel.send(AccountUiEvent.Error(message))
+                    onFailure(message)
                 }
             )
         }
     }
 }
+
+internal fun activeCreditCardOwnerId(localAccess: LocalAccess): UserId? =
+    (localAccess as? LocalAccess.Available)?.userId?.let(::UserId)

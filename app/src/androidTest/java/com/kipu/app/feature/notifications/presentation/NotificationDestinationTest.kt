@@ -29,7 +29,7 @@ class NotificationDestinationTest {
     @get:Rule val compose = createComposeRule()
 
     @Test
-    fun `unavailable target shows snackbar keeps center visible and remains unread`() {
+    fun unavailableTargetShowsSnackbarKeepsCenterVisibleAndRemainsUnread() {
         val navController = TestNavHostController(ApplicationProvider.getApplicationContext()).apply {
             navigatorProvider.addNavigator(ComposeNavigator())
         }

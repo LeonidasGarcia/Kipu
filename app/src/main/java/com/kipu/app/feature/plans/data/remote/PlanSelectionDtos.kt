@@ -129,12 +129,14 @@ fun PlanSelectionDto.toDomain() = PlanSelection.valueOf(name)
 fun SelectionResultDto.toDomain() = RemoteSelectionResult.valueOf(name)
 
 fun FreeLimitsDto.toDomain() = FreePlanLimits(
-    policyVersion,
-    instruments,
-    customCategories,
-    debts,
-    goals,
-    budgets,
+    policyVersion = policyVersion,
+    instruments = instruments,
+    customCategories = customCategories,
+    debts = debts,
+    goals = goals,
+    budgets = budgets,
+    customExpenseCategories = customCategories,
+    customIncomeCategories = customCategories,
 )
 
 fun TrialEligibilityResponseDto.toDomain(): TrialEligibilitySnapshot = when (status) {

@@ -29,7 +29,6 @@ import com.kipu.app.feature.accounts.presentation.components.InstrumentCardPrevi
 import com.kipu.app.feature.accounts.presentation.instruments.InstallmentSimulatorScreen
 import com.kipu.app.feature.accounts.presentation.instruments.PayCardDialog
 import com.kipu.app.ui.theme.KipuTheme
-import io.mockk.mockk
 import java.time.Instant
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -146,7 +145,7 @@ class CreditAccessibilitySemanticsTest {
                         utilizationPercentage = 5.0,
                     ),
                     eligibleAccounts = listOf(AccountWithBalance(account, Money(100_000, Currency.PEN))),
-                    viewModel = mockk(relaxed = true),
+                    onPayCreditCard = { _, _, _, _, _ -> },
                     onDismiss = { dismissed = true },
                 )
             }
@@ -165,5 +164,47 @@ class CreditAccessibilitySemanticsTest {
         compose.onNodeWithText("Ingresa un monto mayor a cero").assertIsDisplayed()
         compose.onNodeWithText("Cancelar").assertIsEnabled().performClick()
         compose.runOnIdle { assertTrue(dismissed) }
+    }
+
+    @Test
+    fun paymentFailureRestoresConfirmActionAndAllowsRetry() {
+        val account = Account(
+            id = AccountId.generate(),
+            userId = UserId.generate(),
+            alias = "Ahorros",
+            type = AccountType.SAVINGS,
+            currency = Currency.PEN,
+            initialBalance = Money(100_000, Currency.PEN),
+            openedAt = Instant.parse("2026-09-01T12:00:00Z"),
+        )
+        var attempts = 0
+        var dismissed = false
+
+        compose.setContent {
+            KipuTheme {
+                PayCardDialog(
+                    creditCardWithSummary = CreditCardWithSummary(
+                        card = card,
+                        debt = Money(25_000, Currency.PEN),
+                        availableCredit = Money(475_000, Currency.PEN),
+                        utilizationPercentage = 5.0,
+                    ),
+                    eligibleAccounts = listOf(AccountWithBalance(account, Money(100_000, Currency.PEN))),
+                    onPayCreditCard = { _, _, _, onSuccess, onFailure ->
+                        attempts += 1
+                        if (attempts == 1) onFailure("No se pudo procesar el pago") else onSuccess()
+                    },
+                    onDismiss = { dismissed = true },
+                )
+            }
+        }
+
+        compose.onNodeWithText("Confirmar Pago").assertIsEnabled().performClick()
+        compose.onNodeWithText("No se pudo procesar el pago").assertIsDisplayed()
+        compose.onNodeWithText("Confirmar Pago").assertIsEnabled().performClick()
+        compose.runOnIdle {
+            assertEquals(2, attempts)
+            assertTrue(dismissed)
+        }
     }
 }

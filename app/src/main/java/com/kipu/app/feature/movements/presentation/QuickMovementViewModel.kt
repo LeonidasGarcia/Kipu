@@ -11,10 +11,13 @@ import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.domain.model.Account
+import com.kipu.app.feature.accounts.domain.usecase.ObserveFinancialDashboard
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
 import com.kipu.app.feature.accounts.domain.usecase.ConfirmCreditPurchase
+import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.CategoryType
+import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.movements.domain.RegisterTransaction
@@ -35,6 +38,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import java.time.Instant
+import java.util.Locale
 import javax.inject.Inject
 
 data class CategoryOption(
@@ -42,7 +46,12 @@ data class CategoryOption(
     val name: String,
     val icon: String,
     val categoryType: CategoryType = CategoryType.GENERAL,
-)
+    val parentCategoryId: String? = null,
+    val parentName: String? = null,
+    val color: String? = null,
+) {
+    val displayName: String get() = parentName?.let { "$it > $name" } ?: name
+}
 
 data class QuickMovementUiState(
     val type: MovementType = MovementType.EXPENSE,
@@ -63,7 +72,12 @@ data class QuickMovementUiState(
     val isSaving: Boolean = false,
     val availableAccounts: List<Account> = emptyList(),
     val availableCreditCards: List<CreditCard> = emptyList(),
+    val accountBalances: Map<String, Money> = emptyMap(),
+    val creditCardDebts: Map<String, Money> = emptyMap(),
+    val creditCardAvailableCredits: Map<String, Money> = emptyMap(),
     val availableCategories: List<CategoryOption> = emptyList(),
+    val isCreatingSubcategory: Boolean = false,
+    val categoryCreationError: String? = null,
     val amountError: String? = null,
     val accountError: String? = null,
     val categoryError: String? = null,
@@ -74,7 +88,10 @@ data class QuickMovementUiState(
 )
 
 sealed interface QuickMovementUiEvent {
-    data class TransactionSaved(val message: String) : QuickMovementUiEvent
+    data class TransactionSaved(
+        val message: String,
+        val movementType: MovementType = MovementType.EXPENSE,
+    ) : QuickMovementUiEvent
     data class ShowMessage(val message: String) : QuickMovementUiEvent
 }
 
@@ -83,7 +100,9 @@ class QuickMovementViewModel @Inject constructor(
     private val registerTransactionUseCase: RegisterTransaction,
     private val confirmCreditPurchaseUseCase: ConfirmCreditPurchase,
     private val observeInstruments: ObserveInstruments,
+    private val observeFinancialDashboard: ObserveFinancialDashboard,
     private val observeCategories: ObserveCategories,
+    private val createCategoryUseCase: CreateCategory,
     private val categorySyncScheduler: CategorySyncScheduler,
     private val sessionCoordinator: SessionCoordinator,
 ) : ViewModel() {
@@ -92,6 +111,7 @@ class QuickMovementViewModel @Inject constructor(
     val uiState: StateFlow<QuickMovementUiState> = _uiState.asStateFlow()
 
     private var allCategoryOptions: List<CategoryOption> = emptyList()
+    private val rememberedMerchantCategories = mutableMapOf<String, String>()
 
     private val _events = Channel<QuickMovementUiEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
@@ -102,14 +122,17 @@ class QuickMovementViewModel @Inject constructor(
             viewModelScope.launch {
                 observeCategories(UserId(ownerId)).collect { items ->
                     allCategoryOptions = items.filter { it.category.isActive }
-                        .flatMap { root -> listOf(root) + root.subcategories }
-                        .filter { it.category.isActive && !it.category.isPlanLocked }
-                        .map {
+                        .flatMap { root -> listOf(root to null) + root.subcategories.map { it to root } }
+                        .filter { (item, _) -> item.category.isActive && !item.category.isPlanLocked }
+                        .map { (item, parent) ->
                             CategoryOption(
-                                id = it.category.id.value,
-                                name = it.displayName,
-                                icon = it.icon,
-                                categoryType = it.category.categoryType,
+                                id = item.category.id.value,
+                                name = item.displayName,
+                                icon = item.icon,
+                                categoryType = item.category.categoryType,
+                                parentCategoryId = parent?.category?.id?.value,
+                                parentName = parent?.displayName,
+                                color = item.color,
                             )
                         }
                     _uiState.update { current ->
@@ -118,7 +141,7 @@ class QuickMovementViewModel @Inject constructor(
                         current.copy(
                             availableCategories = options,
                             selectedCategoryId = selection?.id,
-                            selectedCategoryName = selection?.name,
+                selectedCategoryName = selection?.displayName,
                             selectedCategoryIcon = selection?.icon,
                         )
                     }
@@ -149,6 +172,23 @@ class QuickMovementViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            observeFinancialDashboard().collect { dashboard ->
+                _uiState.update { current ->
+                    current.copy(
+                        accountBalances = dashboard.liquidAccounts.associate { item ->
+                            item.account.id.value to item.balance
+                        },
+                        creditCardDebts = dashboard.creditCards.associate { item ->
+                            item.card.id.value to item.debt
+                        },
+                        creditCardAvailableCredits = dashboard.creditCards.associate { item ->
+                            item.card.id.value to item.availableCredit
+                        },
+                    )
+                }
+            }
+        }
     }
 
     fun onTypeSelected(type: MovementType) {
@@ -163,7 +203,7 @@ class QuickMovementViewModel @Inject constructor(
                 type = type,
                 availableCategories = options,
                 selectedCategoryId = selection?.id,
-                selectedCategoryName = selection?.name,
+                selectedCategoryName = selection?.displayName,
                 selectedCategoryIcon = selection?.icon,
                 merchantName = if (type == MovementType.EXPENSE) current.merchantName else "",
                 selectedMerchantId = if (type == MovementType.EXPENSE) current.selectedMerchantId else null,
@@ -236,23 +276,131 @@ class QuickMovementViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 selectedCategoryId = category.id,
-                selectedCategoryName = category.name,
+                selectedCategoryName = category.displayName,
                 selectedCategoryIcon = category.icon,
                 categoryError = null,
             )
         }
     }
 
+    suspend fun createCategoryOrSubcategory(
+        parentCategoryId: String?,
+        name: String,
+        icon: String,
+        color: String,
+        rememberFrequentMerchant: Boolean,
+    ): Result<CategoryOption> {
+        val current = _uiState.value
+        val trimmedName = name.trim()
+        if (trimmedName.isBlank()) {
+            return Result.failure(IllegalArgumentException("Escribe un nombre para la categoría."))
+        }
+        val ownerId = getUserId()?.let { UserId(it) }
+            ?: return Result.failure(IllegalStateException("No se pudo identificar el perfil local."))
+
+        val parent = if (!parentCategoryId.isNullOrBlank()) {
+            current.availableCategories.firstOrNull {
+                it.id == parentCategoryId && it.parentCategoryId == null
+            } ?: return Result.failure(IllegalArgumentException("Selecciona una categoría principal válida."))
+        } else null
+
+        val categoryType = parent?.categoryType ?: when (current.type) {
+            MovementType.INCOME -> CategoryType.INCOME
+            else -> CategoryType.EXPENSE
+        }
+
+        _uiState.update { it.copy(isCreatingSubcategory = true, categoryCreationError = null) }
+        val result = createCategoryUseCase(
+            ownerId = ownerId,
+            name = trimmedName,
+            icon = icon,
+            color = color,
+            parentId = parent?.let { CategoryId(it.id) },
+            categoryType = categoryType,
+        )
+        return result.fold(
+            onSuccess = { created ->
+                val option = CategoryOption(
+                    id = created.id.value,
+                    name = trimmedName,
+                    icon = icon,
+                    categoryType = created.categoryType,
+                    parentCategoryId = parent?.id,
+                    parentName = parent?.name,
+                    color = color,
+                )
+                allCategoryOptions = (allCategoryOptions + option).distinctBy { it.id }
+                if (rememberFrequentMerchant) {
+                    current.merchantName.trim().takeIf(String::isNotBlank)?.let { merchant ->
+                        rememberedMerchantCategories[normalizeMerchantName(merchant)] = option.id
+                    }
+                }
+                categorySyncScheduler.scheduleSync(ownerId.value)
+                _uiState.update { state ->
+                    val options = categoriesFor(state.type)
+                    state.copy(
+                        availableCategories = options,
+                        selectedCategoryId = option.id,
+                        selectedCategoryName = option.displayName,
+                        selectedCategoryIcon = option.icon,
+                        isCreatingSubcategory = false,
+                        categoryCreationError = null,
+                    )
+                }
+                Result.success(option)
+            },
+            onFailure = { failure ->
+                _uiState.update {
+                    it.copy(
+                        isCreatingSubcategory = false,
+                        categoryCreationError = failure.message ?: "No se pudo crear la categoría.",
+                    )
+                }
+                Result.failure(failure)
+            },
+        )
+    }
+
+    suspend fun createSubcategory(
+        parentCategoryId: String,
+        name: String,
+        icon: String,
+        color: String,
+        rememberFrequentMerchant: Boolean,
+    ): Result<CategoryOption> = createCategoryOrSubcategory(
+        parentCategoryId = parentCategoryId,
+        name = name,
+        icon = icon,
+        color = color,
+        rememberFrequentMerchant = rememberFrequentMerchant,
+    )
+
     fun onMerchantSelected(merchant: MerchantCatalogEntry) {
         _uiState.update {
-            it.copy(merchantName = merchant.name, selectedMerchantId = merchant.id.value, merchantProvisionalText = null)
+            val remembered = rememberedCategoryFor(merchant.name, it.availableCategories)
+            it.copy(
+                merchantName = merchant.name,
+                selectedMerchantId = merchant.id.value,
+                merchantProvisionalText = null,
+                selectedCategoryId = remembered?.id ?: it.selectedCategoryId,
+                selectedCategoryName = remembered?.displayName ?: it.selectedCategoryName,
+                selectedCategoryIcon = remembered?.icon ?: it.selectedCategoryIcon,
+            )
         }
     }
 
     fun onMerchantProvisionalText(text: String) {
         val name = text.trim()
         _uiState.update {
-            it.copy(merchantName = name, selectedMerchantId = null, merchantProvisionalText = name.takeIf(String::isNotBlank))
+            val remembered = rememberedCategoryFor(name, it.availableCategories)
+            it.copy(
+                merchantName = name,
+                selectedMerchantId = null,
+                merchantProvisionalText = name.takeIf(String::isNotBlank),
+                selectedCategoryId = remembered?.id ?: it.selectedCategoryId,
+                selectedCategoryName = remembered?.displayName ?: it.selectedCategoryName,
+                selectedCategoryIcon = remembered?.icon ?: it.selectedCategoryIcon,
+            )
         }
     }
 
@@ -399,7 +547,7 @@ class QuickMovementViewModel @Inject constructor(
                         MovementSyncStatus.PENDING, MovementSyncStatus.IN_FLIGHT ->
                             "Guardado en este dispositivo · Pendiente de sincronización"
                     }
-                    _events.send(QuickMovementUiEvent.TransactionSaved(message))
+                    _events.send(QuickMovementUiEvent.TransactionSaved(message, command.type))
                     resetForm()
                 }
                 is RegisterTransactionResult.SimilarTransactionWarning -> {
@@ -437,6 +585,9 @@ class QuickMovementViewModel @Inject constructor(
                 type = MovementType.EXPENSE,
                 availableAccounts = current.availableAccounts,
                 availableCreditCards = current.availableCreditCards,
+                accountBalances = current.accountBalances,
+                creditCardDebts = current.creditCardDebts,
+                creditCardAvailableCredits = current.creditCardAvailableCredits,
                 selectedSourceAccountId = current.availableAccounts.firstOrNull()?.id?.value,
                 currency = current.availableAccounts.firstOrNull()?.currency?.name ?: current.currency,
                 availableCategories = categoriesFor(MovementType.EXPENSE),
@@ -458,6 +609,15 @@ class QuickMovementViewModel @Inject constructor(
             it.categoryType == expectedType || it.categoryType == CategoryType.GENERAL
         }
     }
+
+    private fun rememberedCategoryFor(merchantName: String, categories: List<CategoryOption>): CategoryOption? {
+        val normalizedName = normalizeMerchantName(merchantName)
+        if (normalizedName.isBlank()) return null
+        val categoryId = rememberedMerchantCategories[normalizedName] ?: return null
+        return categories.firstOrNull { it.id == categoryId }
+    }
+
+    private fun normalizeMerchantName(name: String): String = name.trim().lowercase(Locale.ROOT)
 
     private fun getUserId(): String? {
         return sessionCoordinator.currentOwner?.verifiedUserId

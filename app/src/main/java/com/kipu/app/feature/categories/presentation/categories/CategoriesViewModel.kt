@@ -46,8 +46,9 @@ data class CategoriesUiState(
     val isLoading: Boolean = true,
     val categories: List<CategoryItem> = emptyList(),
     val selectedTab: CategoryTab = CategoryTab.EXPENSE,
-    val activeCustomRootsCount: Int = 0,
-    val maxCustomRoots: Int = 5,
+    val activeCustomExpenseRootsCount: Int = 0,
+    val activeCustomIncomeRootsCount: Int = 0,
+    val maxCustomRootsPerType: Int = 5,
     val isCreateDialogOpen: Boolean = false,
     val editingCategoryId: CategoryId? = null,
     val editingRevision: Long = 1L,
@@ -64,6 +65,14 @@ data class CategoriesUiState(
     val quotaSelectionDraft: Set<CategoryId> = emptySet(),
     val isQuotaSelectionOpen: Boolean = false,
 ) {
+    val activeCustomRootsCount: Int
+        get() = when (selectedTab) {
+            CategoryTab.INCOME -> activeCustomIncomeRootsCount
+            else -> activeCustomExpenseRootsCount
+        }
+
+    val maxCustomRoots: Int get() = maxCustomRootsPerType
+
     val isFreeLimitReached: Boolean get() = activeCustomRootsCount >= maxCustomRoots
     val isEditing: Boolean get() = editingCategoryId != null
 }
@@ -108,12 +117,20 @@ class CategoriesViewModel @Inject constructor(
                 observeCategories(userId),
                 observeSelectedFreeCategoryRoots(userId),
             ) { items, selected -> items to selected }.collectLatest { (items, selected) ->
-                val activeCustomRoots = items.count { it.category.isRoot && it.category.isCustom && it.category.isActive }
+                val activeExpenseRoots = items.count {
+                    it.category.isRoot && it.category.isCustom && it.category.isActive &&
+                        it.category.categoryType == CategoryType.EXPENSE
+                }
+                val activeIncomeRoots = items.count {
+                    it.category.isRoot && it.category.isCustom && it.category.isActive &&
+                        it.category.categoryType == CategoryType.INCOME
+                }
                 _uiState.update { current ->
                     current.copy(
                         isLoading = false,
                         categories = items,
-                        activeCustomRootsCount = activeCustomRoots,
+                        activeCustomExpenseRootsCount = activeExpenseRoots,
+                        activeCustomIncomeRootsCount = activeIncomeRoots,
                         selectedFreeCategoryRootIds = selected,
                     )
                 }
@@ -142,18 +159,33 @@ class CategoriesViewModel @Inject constructor(
         _uiState.update { state ->
             if (categoryId in state.quotaSelectionDraft) {
                 state.copy(quotaSelectionDraft = state.quotaSelectionDraft - categoryId)
-            } else if (state.quotaSelectionDraft.size < state.maxCustomRoots) {
-                state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
             } else {
-                state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRoots} categorías raíz")
+                val targetItem = state.categories.firstOrNull { it.category.id == categoryId }
+                val targetType = targetItem?.category?.categoryType ?: CategoryType.EXPENSE
+                val selectedCountForType = state.quotaSelectionDraft.count { id ->
+                    state.categories.firstOrNull { it.category.id == id }?.category?.categoryType == targetType
+                }
+                if (selectedCountForType < state.maxCustomRootsPerType) {
+                    state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
+                } else {
+                    val label = if (targetType == CategoryType.INCOME) "ingresos" else "gastos"
+                    state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRootsPerType} categorías de $label")
+                }
             }
         }
     }
 
     fun saveQuotaSelection() {
         val userId = currentUserId ?: return
-        val selected = _uiState.value.quotaSelectionDraft
-        if (selected.size > _uiState.value.maxCustomRoots) return
+        val state = _uiState.value
+        val selected = state.quotaSelectionDraft
+        val selectedExpenses = selected.count { id ->
+            state.categories.firstOrNull { it.category.id == id }?.category?.categoryType != CategoryType.INCOME
+        }
+        val selectedIncomes = selected.count { id ->
+            state.categories.firstOrNull { it.category.id == id }?.category?.categoryType == CategoryType.INCOME
+        }
+        if (selectedExpenses > state.maxCustomRootsPerType || selectedIncomes > state.maxCustomRootsPerType) return
         viewModelScope.launch {
             saveSelectedFreeCategoryRoots(userId, selected).fold(
                 onSuccess = {

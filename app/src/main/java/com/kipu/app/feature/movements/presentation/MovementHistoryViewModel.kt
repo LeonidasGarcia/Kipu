@@ -97,6 +97,11 @@ class MovementHistoryViewModel @Inject constructor(
         _selectedFilterType.value = type
     }
 
+    fun showAllTransactionsAfterTransfer() {
+        _selectedFilterType.value = null
+        _searchQuery.value = ""
+    }
+
     fun onOpenRegisterSheet() {
         _showRegisterSheet.value = true
     }

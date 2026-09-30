@@ -1,5 +1,7 @@
 package com.kipu.app.feature.categories.presentation.components
 
+import android.net.Uri
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -52,49 +55,55 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import com.kipu.app.BuildConfig
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.CategoryId
 
 data class MerchantVisualProfile(
     val initials: String,
     val backgroundColor: Color,
+    val foregroundColor: Color,
     val subtitle: String,
 )
 
-fun getMerchantVisualProfile(name: String): MerchantVisualProfile {
-    val lower = name.lowercase().trim()
-    return when {
-        lower.contains("plaza vea") -> MerchantVisualProfile("PV", Color(0xFFD32F2F), "Supermercados y abastos")
-        lower.contains("metro") -> MerchantVisualProfile("M", Color(0xFFFBC02D), "Supermercados y tiendas")
-        lower.contains("tottus") -> MerchantVisualProfile("T", Color(0xFF388E3C), "Hipermercados")
-        lower.contains("netflix") -> MerchantVisualProfile("N", Color(0xFF111111), "Streaming y entretenimiento")
-        lower.contains("spotify") -> MerchantVisualProfile("S", Color(0xFF1DB954), "Música y podcasts digitales")
-        lower.contains("luz del sur") -> MerchantVisualProfile("L", Color(0xFF0288D1), "Servicio eléctrico regulado")
-        lower.contains("sedapal") -> MerchantVisualProfile("S", Color(0xFF0D47A1), "Agua potable y alcantarillado")
-        lower.contains("uber") -> MerchantVisualProfile("U", Color(0xFF000000), "Transporte de pasajeros")
-        lower.contains("tambo") -> MerchantVisualProfile("T+", Color(0xFF7B1FA2), "Tiendas de conveniencia")
-        else -> {
-            val words = name.trim().split(" ").filter { it.isNotBlank() }
-            val initials = if (words.size >= 2) {
-                "${words[0].first().uppercaseChar()}${words[1].first().uppercaseChar()}"
-            } else if (words.isNotEmpty() && words[0].isNotBlank()) {
-                words[0].take(2).uppercase()
-            } else {
-                "C"
-            }
-            MerchantVisualProfile(initials, Color(0xFF0F766E), "Comercio o servicio")
-        }
+fun getMerchantVisualProfile(name: String, brandColor: String? = null): MerchantVisualProfile {
+    val normalizedName = name.lowercase().trim()
+    val words = name.trim().split(" ").filter { it.isNotBlank() }
+    val initials = if (words.size >= 2) {
+        "${words[0].first().uppercaseChar()}${words[1].first().uppercaseChar()}"
+    } else if (words.isNotEmpty()) {
+        words[0].take(2).uppercase()
+    } else {
+        "C"
     }
+    val parsedColor = runCatching {
+        brandColor?.let { Color(android.graphics.Color.parseColor(it)) }
+    }.getOrNull()
+    val fallbackColor = when (normalizedName) {
+        "tambo" -> Color(0xFF652D90)
+        "starbucks" -> Color(0xFF006241)
+        "plaza vea" -> Color(0xFFC8102E)
+        "metro" -> Color(0xFFE5AB00)
+        "tottus" -> Color(0xFFE2231A)
+        "netflix" -> Color(0xFFE50914)
+        "spotify" -> Color(0xFF1DB954)
+        "uber" -> Color(0xFF000000)
+        else -> Color.hsl(((normalizedName.hashCode() and Int.MAX_VALUE) % 360).toFloat(), 0.62f, 0.42f)
+    }
+    val backgroundColor = parsedColor ?: fallbackColor
+    val foregroundColor = if (backgroundColor.red * 0.2126f + backgroundColor.green * 0.7152f + backgroundColor.blue * 0.0722f > 0.5f) {
+        Color.Black
+    } else {
+        Color.White
+    }
+    return MerchantVisualProfile(initials, backgroundColor, foregroundColor, "Comercio o servicio")
 }
-
-val MERCHANT_FILTER_CHIPS = listOf(
-    "Todos",
-    "Supermercados",
-    "Servicios básicos",
-    "Digital y streaming",
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -174,7 +183,13 @@ fun MerchantPicker(
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedChip by remember { mutableStateOf("Todos") }
+    var selectedCategoryId by remember { mutableStateOf<CategoryId?>(null) }
+    val availableCategoryIds = state.categoryFilters.mapTo(hashSetOf()) { it.categoryId }
+    val activeCategoryId = selectedCategoryId?.takeIf { it in availableCategoryIds }
+    val catalogToDisplay = if (state.query.isBlank()) state.catalogEntries else state.searchResults
+    val visibleMerchants = remember(catalogToDisplay, activeCategoryId) {
+        catalogToDisplay.filter { activeCategoryId == null || it.defaultCategoryId == activeCategoryId }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -225,11 +240,25 @@ fun MerchantPicker(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            items(MERCHANT_FILTER_CHIPS) { chipText ->
+            item {
                 FilterChip(
-                    selected = selectedChip == chipText,
-                    onClick = { selectedChip = chipText },
-                    label = { Text(chipText, fontSize = 12.sp) },
+                    selected = activeCategoryId == null,
+                    onClick = { selectedCategoryId = null },
+                    label = { Text("Todos", fontSize = 12.sp) },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = Color.White,
+                    ),
+                )
+            }
+            items(state.categoryFilters, key = { it.categoryId.value }) { category ->
+                FilterChip(
+                    selected = activeCategoryId == category.categoryId,
+                    onClick = {
+                        selectedCategoryId = if (activeCategoryId == category.categoryId) null else category.categoryId
+                    },
+                    label = { Text(category.name, fontSize = 12.sp) },
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -244,16 +273,16 @@ fun MerchantPicker(
             CatalogStatusBanner(status = state.catalogStatus)
         }
 
-        // Resultados de búsqueda
-        if (state.query.isNotBlank()) {
+        // Category chips filter the local merchant cache immediately.
+        if (state.query.isNotBlank() || state.catalogEntries.isNotEmpty()) {
             Text(
-                text = "Resultados del catálogo:",
+                text = if (state.query.isBlank()) "Comercios frecuentes:" else "Resultados del catálogo:",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (state.searchResults.isNotEmpty()) {
+            if (visibleMerchants.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -261,22 +290,22 @@ fun MerchantPicker(
                         .testTag("merchant_results_list"),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(state.searchResults, key = { it.id.value }) { entry ->
+                    items(visibleMerchants, key = { it.id.value }) { entry ->
                         MerchantResultItem(
                             entry = entry,
                             onClick = { onSelectMerchant(entry) },
                         )
                     }
-
-                    // Opción de fallback si el usuario desea guardarlo exactamente como texto provisional
-                    item {
-                        FallbackProvisionalRow(
-                            query = state.query,
-                            onUseProvisional = { onSetProvisionalText(state.query) },
-                        )
+                    if (state.query.isNotBlank()) {
+                        item {
+                            FallbackProvisionalRow(
+                                query = state.query,
+                                onUseProvisional = { onSetProvisionalText(state.query) },
+                            )
+                        }
                     }
                 }
-            } else if (!state.isSearching) {
+            } else if (state.query.isNotBlank() && !state.isSearching) {
                 EmptyResultWithProvisionalOption(
                     query = state.query,
                     onUseProvisional = { onSetProvisionalText(state.query) },
@@ -294,7 +323,7 @@ fun SelectedMerchantCard(
     modifier: Modifier = Modifier,
 ) {
     val displayName = selectedMerchant?.name ?: provisionalText ?: ""
-    val profile = getMerchantVisualProfile(displayName)
+    val profile = getMerchantVisualProfile(displayName, selectedMerchant?.brandColor)
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -318,7 +347,7 @@ fun SelectedMerchantCard(
             ) {
                 Text(
                     text = profile.initials,
-                    color = Color.White,
+                    color = profile.foregroundColor,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                 )
@@ -362,7 +391,17 @@ fun MerchantResultItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val profile = getMerchantVisualProfile(entry.name)
+    val profile = getMerchantVisualProfile(entry.name, entry.brandColor)
+    val context = LocalContext.current
+    val drawableId = remember(entry.logoKey) {
+        entry.logoKey?.let { context.resources.getIdentifier(it, "drawable", context.packageName) } ?: 0
+    }
+    val remoteLogoUrl = remember(entry.priority, entry.logoKey) {
+        val supabaseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
+        entry.logoKey
+            ?.takeIf { entry.priority != "A" && it.isNotBlank() && supabaseUrl.isNotBlank() }
+            ?.let { "$supabaseUrl/storage/v1/object/public/merchant-logos/${Uri.encode(it, "/")}" }
+    }
 
     Surface(
         shape = RoundedCornerShape(12.dp),
@@ -377,7 +416,6 @@ fun MerchantResultItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Avatar de marca con siglas
             Box(
                 modifier = Modifier
                     .size(42.dp)
@@ -387,10 +425,24 @@ fun MerchantResultItem(
             ) {
                 Text(
                     text = profile.initials,
-                    color = Color.White,
+                    color = profile.foregroundColor,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                 )
+                when {
+                    drawableId != 0 -> Image(
+                        painter = painterResource(drawableId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(34.dp),
+                    )
+                    remoteLogoUrl != null -> AsyncImage(
+                        model = remoteLogoUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(34.dp),
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))

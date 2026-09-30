@@ -55,7 +55,10 @@ class CategoriesApi @Inject constructor(
             val response = httpClient.get("rest/v1/merchant_services") {
                 header(HttpHeaders.Authorization, auth)
                 url {
-                    parameters.append("select", "id,name,normalized_name,is_active,version")
+                    parameters.append(
+                        "select",
+                        "id,name,normalized_name,is_active,version,default_category_id,priority,logo_key,brand_color"
+                    )
                     parameters.append("is_active", "eq.true")
                     if (sinceVersion > 0) {
                         parameters.append("version", "gt.$sinceVersion")
