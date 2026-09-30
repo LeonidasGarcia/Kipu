@@ -70,6 +70,7 @@ interface FinancialInstrumentsRepository {
     fun observeCardById(cardId: CardId): Flow<Card?>
     fun observeCardDebt(cardId: CardId): Flow<Money>
     fun observeMovementsByAccount(accountId: AccountId): Flow<List<FinancialMovement>>
+    fun observeMovementsByCard(cardId: CardId): Flow<List<FinancialMovement>> = flowOf(emptyList())
     fun observeActiveComputableCount(): Flow<Int>
     suspend fun getActiveComputableCount(): Int
     suspend fun hasCardWithIdentity(issuer: String, network: CardNetwork, lastFourDigits: String): Boolean

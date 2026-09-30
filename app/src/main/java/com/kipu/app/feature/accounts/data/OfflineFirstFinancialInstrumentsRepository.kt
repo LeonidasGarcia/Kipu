@@ -1544,9 +1544,10 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
         val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
             (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        val rootsOfType = activeRoots.filter { it.categoryType == root.categoryType }
         val quota = quotaPolicy.evaluate(
             group = QuotaGroup.CUSTOM_CATEGORIES,
-            activeResourceIds = activeRoots.map { it.id },
+            activeResourceIds = rootsOfType.map { it.id },
             selectedResourceIds = selected,
             limits = FreePlanLimits(),
             premiumVerified = premiumVerified,
@@ -1608,6 +1609,36 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
             when (access) {
                 is LocalAccess.Available -> {
                     movementDao.observeByAccount(access.userId, accountId.value).map { list ->
+                        list.map { entity ->
+                            FinancialMovement(
+                                id = MovementId(entity.id),
+                                operationId = OperationId(entity.operationId),
+                                sequence = entity.operationSequence,
+                                userId = UserId(entity.userId),
+                                kind = MovementKind.valueOf(entity.kind),
+                                amountMinorUnits = entity.amountMinorUnits,
+                                currency = Currency.fromCode(entity.currency),
+                                accountId = entity.accountId?.let { AccountId(it) },
+                                cardId = entity.cardId?.let { CardId(it) },
+                                effectiveAt = Instant.ofEpochMilli(entity.effectiveAt / 1000L),
+                                status = MovementStatus.valueOf(entity.status),
+                                reversesMovementId = entity.reversesMovementId?.let { MovementId(it) },
+                                adjustsMovementId = entity.adjustsMovementId?.let { MovementId(it) },
+                                createdAt = Instant.ofEpochMilli(entity.createdAt / 1000L),
+                            )
+                        }
+                    }
+                }
+                else -> flowOf(emptyList())
+            }
+        }.distinctUntilChanged()
+    }
+
+    override fun observeMovementsByCard(cardId: CardId): Flow<List<FinancialMovement>> {
+        return sessionCoordinator.localAccess.flatMapLatest { access ->
+            when (access) {
+                is LocalAccess.Available -> {
+                    movementDao.observeByCard(access.userId, cardId.value).map { list ->
                         list.map { entity ->
                             FinancialMovement(
                                 id = MovementId(entity.id),

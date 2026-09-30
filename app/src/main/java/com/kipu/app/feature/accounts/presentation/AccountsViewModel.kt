@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kipu.app.core.finance.domain.model.AccountId
 import com.kipu.app.core.finance.domain.model.CardId
+import com.kipu.app.core.finance.domain.model.FinancialMovement
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.core.finance.domain.model.OperationId
@@ -228,6 +229,9 @@ class AccountsViewModel @Inject constructor(
     fun toggleMasked() {
         _isMasked.value = !_isMasked.value
     }
+
+    fun observeCardMovements(cardId: CardId): Flow<List<FinancialMovement>> =
+        financialInstrumentsRepository.observeMovementsByCard(cardId)
 
     fun observeAccountBalance(accountId: AccountId): Flow<Money> =
         financialInstrumentsRepository.observeAccountBalance(accountId)

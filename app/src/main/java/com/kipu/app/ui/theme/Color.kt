@@ -1,6 +1,7 @@
 package com.kipu.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.Composable
 
 val KipuPrimary = Color(0xFF005C55)
 val KipuOnPrimary = Color(0xFFFFFFFF)
@@ -34,12 +35,18 @@ val KipuOutlineVariant = Color(0xFFBDC9C6)
 val KipuInverseSurface = Color(0xFF2D3133)
 val KipuInverseOnSurface = Color(0xFFEFF1F3)
 val KipuDarkBackground = Color(0xFF0B1220)
+val KipuDarkSurface = Color(0xFF131B2E)
+val KipuDarkSurfaceVariant = Color(0xFF1A263B)
+val KipuDarkOnSurfaceVariant = Color(0xFF94A3B8)
+val KipuDarkOutline = Color(0xFF64748B)
+val KipuDarkOutlineVariant = Color(0xFF334155)
 
-val KipuError = Color(0xFFBA1A1A)
+val KipuErrorLight = Color(0xFFBA1A1A)
+val KipuError: Color @Composable get() = if (rememberKipuColors().isDark) Color(0xFFFCA5A5) else KipuErrorLight
 val KipuOnError = Color(0xFFFFFFFF)
 val KipuErrorContainer = Color(0xFFFFDAD6)
 val KipuOnErrorContainer = Color(0xFF93000A)
 
-val KipuIncome = Color(0xFF16A34A)
-val KipuExpense = Color(0xFFE85D5D)
+val KipuIncome: Color @Composable get() = rememberKipuColors().positive
+val KipuExpense: Color @Composable get() = rememberKipuColors().debt
 val KipuWarning = Color(0xFFF59E0B)
