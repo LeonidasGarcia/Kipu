@@ -1,0 +1,11 @@
+-- Validate previously NOT VALID business constraints after confirming existing rows comply.
+ALTER TABLE public.cards VALIDATE CONSTRAINT cards_closing_day_1_31_check;
+ALTER TABLE public.cards VALIDATE CONSTRAINT cards_due_day_1_31_check;
+ALTER TABLE public.credit_installments VALIDATE CONSTRAINT credit_installments_owner_transaction_fkey;
+ALTER TABLE public.credit_payment_allocations VALIDATE CONSTRAINT credit_allocations_owner_installment_fkey;
+ALTER TABLE public.credit_payment_allocations VALIDATE CONSTRAINT credit_allocations_owner_payment_fkey;
+ALTER TABLE public.credit_products VALIDATE CONSTRAINT credit_products_pen_tea_order_check;
+ALTER TABLE public.credit_products VALIDATE CONSTRAINT credit_products_pen_tea_range_check;
+ALTER TABLE public.credit_products VALIDATE CONSTRAINT credit_products_usd_tea_order_check;
+ALTER TABLE public.credit_products VALIDATE CONSTRAINT credit_products_usd_tea_range_check;
+ALTER TABLE public.transactions VALIDATE CONSTRAINT transactions_expense_requires_category_v1;
