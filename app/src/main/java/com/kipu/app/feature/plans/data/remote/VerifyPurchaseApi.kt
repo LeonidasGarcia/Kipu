@@ -6,6 +6,7 @@ import com.kipu.app.feature.plans.domain.model.BillingPurchaseRequest
 import com.kipu.app.feature.plans.domain.model.BillingVerificationResult
 import com.kipu.app.feature.plans.domain.model.GooglePlayPurchaseState
 import com.kipu.app.feature.plans.domain.model.PurchaseLifecycle
+import com.kipu.app.feature.plans.domain.model.SignedOfflineEntitlementGrant
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.accept
@@ -36,9 +37,17 @@ private data class BillingProductDto(
 private data class VerifyPurchaseRequestDto(
     val productId: String,
     val purchaseToken: String,
+    val installationPublicKey: String? = null,
 ) {
-    override fun toString(): String = "VerifyPurchaseRequestDto(productId=$productId, purchaseToken=[REDACTED])"
+    override fun toString(): String = "VerifyPurchaseRequestDto(productId=$productId, purchaseToken=[REDACTED], installationPublicKey=${installationPublicKey != null})"
 }
+
+@Serializable
+private data class OfflineEntitlementGrantDto(
+    val payload: String,
+    val signature: String,
+    val keyId: String,
+)
 
 @Serializable
 private data class VerifyPurchaseResponseDto(
@@ -57,6 +66,7 @@ private data class VerifyPurchaseResponseDto(
     val willRenew: Boolean? = null,
     val orderId: String? = null,
     val acknowledgementState: String? = null,
+    val offlineEntitlementGrant: OfflineEntitlementGrantDto? = null,
     val retryable: Boolean? = null,
 )
 
@@ -82,6 +92,7 @@ class VerifyPurchaseApi(
     suspend fun verify(
         session: AuthenticatedSession,
         request: BillingPurchaseRequest,
+        installationPublicKey: String? = null,
     ): BillingVerificationResult {
         return try {
             val response = client.post(
@@ -90,7 +101,7 @@ class VerifyPurchaseApi(
                 bearerAuth(session.accessToken)
                 header("Content-Type", ContentType.Application.Json.toString())
                 accept(ContentType.Application.Json)
-                setBody(VerifyPurchaseRequestDto(request.productId, request.purchaseToken.forVerification()))
+                setBody(VerifyPurchaseRequestDto(request.productId, request.purchaseToken.forVerification(), installationPublicKey))
             }
             val body = response.body<VerifyPurchaseResponseDto>()
             if (response.status == HttpStatusCode.Conflict || body.code == "TOKEN_ACCOUNT_CONFLICT") {
@@ -124,6 +135,9 @@ class VerifyPurchaseApi(
                         effectivePremium = body.effectivePremium,
                         acknowledgementPending = body.acknowledgementState == "PENDING",
                         effectiveExpiresAtEpochMillis = body.effectiveExpiresAt?.let(Instant::parse)?.toEpochMilli(),
+                        offlineEntitlementGrant = body.offlineEntitlementGrant?.let {
+                            SignedOfflineEntitlementGrant(it.payload, it.signature, it.keyId)
+                        },
                     )
                 }
                 else -> BillingVerificationResult.Retryable("INVALID_VERIFICATION_RESPONSE")

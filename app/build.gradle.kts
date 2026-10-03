@@ -49,6 +49,16 @@ android {
             "SUPABASE_PUBLISHABLE_KEY",
             configurationValue("SUPABASE_PUBLISHABLE_KEY").asBuildConfigString(),
         )
+        buildConfigField(
+            "String",
+            "OFFLINE_GRANT_KEY_ID",
+            configurationValue("OFFLINE_GRANT_KEY_ID").asBuildConfigString(),
+        )
+        buildConfigField(
+            "String",
+            "OFFLINE_GRANT_PUBLIC_KEY_X509_BASE64",
+            configurationValue("OFFLINE_GRANT_PUBLIC_KEY_X509_BASE64").asBuildConfigString(),
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -15,6 +15,7 @@ sealed interface BillingVerificationResult {
         override val effectivePremium: Boolean,
         val acknowledgementPending: Boolean,
         val effectiveExpiresAtEpochMillis: Long? = expiresAtEpochMillis,
+        val offlineEntitlementGrant: SignedOfflineEntitlementGrant? = null,
     ) : BillingVerificationResult
 
     data class PaymentPending(val productId: String) : BillingVerificationResult {
