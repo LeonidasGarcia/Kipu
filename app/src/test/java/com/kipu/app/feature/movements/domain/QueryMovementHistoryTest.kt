@@ -108,6 +108,7 @@ class QueryMovementHistoryTest {
             entitlementExpiresAtMillis = verifiedTime + 1_000_000_000L,
             isLifetime = false,
             monotonicContinuityValid = true,
+            trustedNowMillis = verifiedTime + (72L * 3600L * 1000L) - 1L,
         )
         val provider = FakeEntitlementProvider(evidence)
         val useCase = QueryMovementHistory(repository = repository, entitlementProvider = provider)
@@ -119,8 +120,7 @@ class QueryMovementHistoryTest {
         )
 
         // Trusted now is before 72 hours: verifiedTime + 72h - 1ms
-        val trustedNow = verifiedTime + (72L * 3600L * 1000L) - 1L
-        val result = useCase("user-1", query, trustedNowMillis = trustedNow)
+        val result = useCase("user-1", query)
 
         assertEquals(MovementHistoryAccessDecision.Allowed, result.accessDecision)
         assertFalse(result.fallbackUsed)
@@ -137,6 +137,7 @@ class QueryMovementHistoryTest {
             verifiedServerTimeMillis = verifiedTime,
             entitlementExpiresAtMillis = verifiedTime + 1_000_000_000L,
             monotonicContinuityValid = true,
+            trustedNowMillis = notAfter,
         )
         val useCase = QueryMovementHistory(repository = repository, entitlementProvider = FakeEntitlementProvider(evidence))
 
@@ -145,7 +146,7 @@ class QueryMovementHistoryTest {
         )
 
         // Exact match trustedNow == notAfter must require revalidation
-        val result = useCase("user-1", query, trustedNowMillis = notAfter)
+        val result = useCase("user-1", query)
 
         assertTrue(result.accessDecision is MovementHistoryAccessDecision.RevalidationRequired)
         assertTrue(result.fallbackUsed)
@@ -162,6 +163,7 @@ class QueryMovementHistoryTest {
             verifiedServerTimeMillis = verifiedTime,
             entitlementExpiresAtMillis = commercialEnd,
             monotonicContinuityValid = true,
+            trustedNowMillis = commercialEnd,
         )
         val useCase = QueryMovementHistory(repository = repository, entitlementProvider = FakeEntitlementProvider(evidence))
 
@@ -170,7 +172,7 @@ class QueryMovementHistoryTest {
         )
 
         // At commercial end, revalidation is required even if 72 hours have not passed!
-        val result = useCase("user-1", query, trustedNowMillis = commercialEnd)
+        val result = useCase("user-1", query)
 
         assertTrue(result.accessDecision is MovementHistoryAccessDecision.RevalidationRequired)
         assertTrue(result.fallbackUsed)
@@ -180,12 +182,14 @@ class QueryMovementHistoryTest {
     fun lifetimeUses72HourConcessionCap() = runTest {
         val repository = FakeQueryRepository()
         val verifiedTime = 1_000_000L
+        val past72h = verifiedTime + (72L * 3600L * 1000L) + 1L
         val evidence = MovementEntitlementEvidence(
             verified = true,
             verifiedServerTimeMillis = verifiedTime,
             entitlementExpiresAtMillis = null,
             isLifetime = true,
             monotonicContinuityValid = true,
+            trustedNowMillis = past72h,
         )
         val useCase = QueryMovementHistory(repository = repository, entitlementProvider = FakeEntitlementProvider(evidence))
 
@@ -194,8 +198,7 @@ class QueryMovementHistoryTest {
         )
 
         // At 72h + 1ms, lifetime requires revalidation
-        val past72h = verifiedTime + (72L * 3600L * 1000L) + 1L
-        val result = useCase("user-1", query, trustedNowMillis = past72h)
+        val result = useCase("user-1", query)
 
         assertTrue(result.accessDecision is MovementHistoryAccessDecision.RevalidationRequired)
     }
@@ -205,10 +208,11 @@ class QueryMovementHistoryTest {
         val repository = FakeQueryRepository()
         val verifiedTime = 1_000_000L
         val evidence = MovementEntitlementEvidence(
-            verified = true,
+            verified = false,
             verifiedServerTimeMillis = verifiedTime,
             entitlementExpiresAtMillis = verifiedTime + 100_000_000L,
             monotonicContinuityValid = false, // Broken continuity after reboot
+            revalidationRequired = true,
         )
         val useCase = QueryMovementHistory(repository = repository, entitlementProvider = FakeEntitlementProvider(evidence))
 
@@ -216,7 +220,7 @@ class QueryMovementHistoryTest {
             advancedCriteria = AdvancedHistoryCriteria(financialStates = setOf(MovementFinancialState.CONFIRMED)),
         )
 
-        val result = useCase("user-1", query, trustedNowMillis = verifiedTime + 1000L)
+        val result = useCase("user-1", query)
 
         assertTrue(result.accessDecision is MovementHistoryAccessDecision.RevalidationRequired)
         assertTrue(result.fallbackUsed)
