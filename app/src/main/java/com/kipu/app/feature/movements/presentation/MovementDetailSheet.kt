@@ -20,6 +20,11 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.Alignment
+import com.kipu.app.ui.component.KipuBottomSheet
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MovementDetailSheet(
@@ -34,22 +39,91 @@ fun MovementDetailSheet(
     val tx = item.transaction
     val voided = tx.status == TransactionStatus.VOIDED
     val specialized = isSpecializedMovement(item)
-    val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.forLanguageTag("es-PE")).withZone(ZoneId.systemDefault())
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("movement_detail_sheet")) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).verticalScroll(rememberScrollState())) {
-            Text(stringResource(R.string.history_detail), style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.semantics { heading() })
-            Spacer(Modifier.height(16.dp))
+    val esPeLocale = Locale.forLanguageTag("es-PE")
+    val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", esPeLocale).withZone(ZoneId.systemDefault())
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val amountPrefix = when (tx.type) {
+        MovementType.EXPENSE -> "-"
+        MovementType.INCOME -> "+"
+        MovementType.TRANSFER -> ""
+    }
+    val currencySymbol = if (tx.currency == "PEN") "S/" else if (tx.currency == "USD") "$" else tx.currency
+    val amountColor = if (voided) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else when (tx.type) {
+        MovementType.INCOME -> MaterialTheme.colorScheme.primary
+        MovementType.EXPENSE -> MaterialTheme.colorScheme.onSurface
+        MovementType.TRANSFER -> MaterialTheme.colorScheme.primary
+    }
+
+    KipuBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = Modifier.testTag("movement_detail_sheet"),
+        header = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.history_detail),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f).semantics { heading() }
+                )
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(48.dp).testTag("btn_close_movement_detail")
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.history_detail_close))
+                }
+            }
+        }
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).verticalScroll(rememberScrollState())) {
+            Spacer(Modifier.height(8.dp))
             Text(item.merchantName ?: item.categoryName ?: when (tx.type) { MovementType.EXPENSE -> "Gasto"; MovementType.INCOME -> "Ingreso"; MovementType.TRANSFER -> "Transferencia" }, style = MaterialTheme.typography.titleMedium)
-            MoneyText(formatMinorUnits(tx.amountMinor), currencySymbol = if (tx.currency == "PEN") "S/" else if (tx.currency == "USD") "$" else tx.currency,
-                style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(vertical = 12.dp).testTag("detail_amount"))
-            if (voided) Text(stringResource(R.string.history_detail_readonly), style = MaterialTheme.typography.bodyMedium)
-            else Text(when(tx.status) { TransactionStatus.REVISED -> "Corregido"; TransactionStatus.FAILED -> "Fallo histórico"; else -> "Confirmado" }, style = MaterialTheme.typography.bodyMedium)
+            MoneyText(
+                amount = "$amountPrefix${formatMinorUnits(tx.amountMinor)}",
+                currencySymbol = currencySymbol,
+                color = amountColor,
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.padding(vertical = 12.dp).testTag("detail_amount"),
+            )
+            if (voided) {
+                Text(
+                    text = "Movimiento anulado · Sin efecto en saldos",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Text(
+                    text = when(tx.status) {
+                        TransactionStatus.REVISED -> "Corregido"
+                        TransactionStatus.FAILED -> "Fallo histórico"
+                        else -> "Confirmado"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Text(tx.syncStatus.uiLabel(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(16.dp))
-            DetailField(stringResource(R.string.history_accounts), listOfNotNull(item.sourceAccountAlias, item.destinationAccountAlias).joinToString(" → ").ifBlank { item.cardAlias ?: "Cuenta histórica" })
+            if (tx.type == MovementType.TRANSFER) {
+                DetailField("Cuenta de origen", item.sourceAccountAlias ?: "Origen")
+                DetailField("Cuenta de destino", item.destinationAccountAlias ?: "Destino")
+            } else if (item.cardAlias != null) {
+                DetailField("Tarjeta", item.cardAlias)
+            } else {
+                DetailField(
+                    if (tx.type == MovementType.INCOME) "Cuenta de destino" else "Cuenta de origen",
+                    item.sourceAccountAlias ?: item.destinationAccountAlias ?: "Cuenta"
+                )
+            }
             item.categoryName?.let { DetailField(stringResource(R.string.history_categories), it) }
-            DetailField(stringResource(R.string.history_date), dateFormat.format(Instant.ofEpochMilli(tx.occurredAt)))
+            DetailField(stringResource(R.string.history_date), dateFormat.format(Instant.ofEpochMilli(tx.occurredAt)).lowercase(esPeLocale))
             tx.note?.takeIf(String::isNotBlank)?.let { DetailField(stringResource(R.string.history_note), it) }
             Spacer(Modifier.height(16.dp))
             Text(stringResource(R.string.history_revisions), style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
@@ -58,9 +132,9 @@ fun MovementDetailSheet(
                 error -> Text(stringResource(R.string.history_revisions_error), style = MaterialTheme.typography.bodyMedium)
                 revisions.isEmpty() -> Text(stringResource(R.string.history_revisions_empty), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 8.dp))
                 else -> revisions.forEach { revision ->
-                    val action = when (revision.operation) { "VOID" -> "Anulación"; "REVISE" -> "Corrección"; else -> "Registro conservado" }
-                    DetailField("Revisión ${revision.revision} · $action", dateFormat.format(Instant.ofEpochMilli(revision.createdAt)))
-                    revision.reason?.takeIf(String::isNotBlank)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    val action = mapRevisionOperation(revision.operation)
+                    DetailField("Revisión ${revision.revision} · $action", dateFormat.format(Instant.ofEpochMilli(revision.createdAt)).lowercase(esPeLocale))
+                    humanizeRevisionReason(revision.reason)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -71,6 +145,36 @@ fun MovementDetailSheet(
             }
             TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.history_detail_close)) }
             Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+private fun mapRevisionOperation(operation: String): String = when (operation.uppercase(Locale.ROOT)) {
+    "VOID", "VOID_TRANSACTION", "LOCAL_REJECTION_VOID" -> "Anulación"
+    "REVISE", "REVISE_TRANSACTION" -> "Corrección"
+    "REGISTER", "REGISTER_TRANSACTION", "CREATE", "MIGRATION_BASELINE" -> "Registro inicial"
+    else -> "Registro conservado"
+}
+
+private fun humanizeRevisionReason(reason: String?): String? {
+    if (reason.isNullOrBlank()) return null
+    val trimmed = reason.trim()
+    return when (trimmed.uppercase(Locale.ROOT)) {
+        "CATEGORY_UNAVAILABLE" -> "La categoría original ya no está disponible"
+        "CATEGORY_DELETED" -> "La categoría fue eliminada"
+        "ACCOUNT_UNAVAILABLE" -> "La cuenta original ya no está disponible"
+        "MERCHANT_UNAVAILABLE" -> "El comercio original ya no está disponible"
+        "VOID_TRANSACTION" -> "Anulación solicitada por el usuario"
+        "REVISE_TRANSACTION" -> "Corrección solicitada por el usuario"
+        "DUPLICATE_TRANSACTION" -> "Transacción duplicada"
+        "USER_REQUEST" -> "Solicitud del usuario"
+        "IMPORT_ADJUSTMENT" -> "Ajuste de importación"
+        else -> {
+            if (trimmed.matches(Regex("^[A-Z0-9_]{3,}$"))) {
+                "Actualización de registro"
+            } else {
+                trimmed
+            }
         }
     }
 }

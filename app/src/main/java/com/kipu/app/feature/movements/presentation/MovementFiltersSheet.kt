@@ -23,6 +23,12 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.Alignment
+import com.kipu.app.ui.component.KipuBottomSheet
+import com.kipu.app.ui.component.KipuFilterChip
+
 /** A sheet owns its draft. Closing it never writes applied filters. */
 @Composable
 fun MovementFiltersSheet(state: MovementHistoryUiState, onDismiss: () -> Unit,
@@ -43,82 +49,190 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
     }
     var errors by remember { mutableStateOf(emptyMap<String, FilterDraftError>()) }
     var dates by remember { mutableStateOf(false) }
+    var showPremiumOptions by rememberSaveable { mutableStateOf(false) }
     val allowed = state.accessStatus == MovementHistoryAccessDecision.Allowed
-    ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("panel_advanced_filters")) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp)
-            .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(R.string.history_filter_apply), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.history_filter_draft_notice), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(R.string.history_filter_basic), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = draft.fromDate.isBlank() && draft.toDate.isBlank(), onClick = {
-                    draft = draft.copy(fromDate = "", toDate = "")
-                }, label = { Text(stringResource(R.string.history_all_dates)) })
-                FilterChip(selected = draft.fromDate == LocalDate.now().toString() && draft.toDate == draft.fromDate, onClick = {
-                    draft = draft.copy(fromDate = LocalDate.now().toString(), toDate = LocalDate.now().toString())
-                }, label = { Text(stringResource(R.string.history_today)) })
-                FilterChip(selected = draft.fromDate == LocalDate.now().withDayOfMonth(1).toString() && draft.toDate == LocalDate.now().toString(), onClick = {
-                    draft = draft.copy(fromDate = LocalDate.now().withDayOfMonth(1).toString(), toDate = LocalDate.now().toString())
-                }, label = { Text(stringResource(R.string.history_month)) })
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val rows = state.allTransactions
+    val accounts = rows.flatMap { listOfNotNull(
+        it.transaction.sourceAccountId?.let { id -> MovementReferenceOption(id, it.sourceAccountAlias ?: "Cuenta histórica") },
+        it.transaction.destinationAccountId?.let { id -> MovementReferenceOption(id, it.destinationAccountAlias ?: "Cuenta histórica") }) }.distinctBy { it.id }
+    val categories = rows.mapNotNull { row -> row.transaction.categoryId?.let { MovementReferenceOption(it, row.categoryName ?: "Categoría histórica") } }.distinctBy { it.id }
+    val cards = rows.mapNotNull { row -> row.transaction.cardId?.let { MovementReferenceOption(it, row.cardAlias ?: "Tarjeta histórica") } }.distinctBy { it.id }
+    val merchants = rows.mapNotNull { row -> row.transaction.merchantId?.let { MovementReferenceOption(it, row.merchantName ?: "Comercio histórico") } }.distinctBy { it.id }
+
+    KipuBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = Modifier.testTag("panel_advanced_filters"),
+        header = {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Filtros", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(48.dp).testTag("btn_close_filters")
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.history_filter_cancel))
+                    }
+                }
+                Text(
+                    stringResource(R.string.history_filter_draft_notice),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
+                )
             }
-            OutlinedButton(onClick = { dates = true }, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(if (draft.fromDate.isBlank() && draft.toDate.isBlank()) stringResource(R.string.history_custom_dates)
-                    else "${draft.fromDate.ifBlank { "…" }} — ${draft.toDate.ifBlank { "…" }}")
-            }
-            Text(stringResource(R.string.history_filter_advanced), style = MaterialTheme.typography.titleSmall)
-            if (!allowed) Text(stringResource(R.string.history_filter_parked), style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-            MovementAccessCard(state, onViewPlans, onVerify, onDismissRecovery)
-            val rows = state.allTransactions
-            val accounts = rows.flatMap { listOfNotNull(
-                it.transaction.sourceAccountId?.let { id -> MovementReferenceOption(id, it.sourceAccountAlias ?: "Cuenta histórica") },
-                it.transaction.destinationAccountId?.let { id -> MovementReferenceOption(id, it.destinationAccountAlias ?: "Cuenta histórica") }) }.distinctBy { it.id }
-            val categories = rows.mapNotNull { row -> row.transaction.categoryId?.let { MovementReferenceOption(it, row.categoryName ?: "Categoría histórica") } }.distinctBy { it.id }
-            val cards = rows.mapNotNull { row -> row.transaction.cardId?.let { MovementReferenceOption(it, row.cardAlias ?: "Tarjeta histórica") } }.distinctBy { it.id }
-            val merchants = rows.mapNotNull { row -> row.transaction.merchantId?.let { MovementReferenceOption(it, row.merchantName ?: "Comercio histórico") } }.distinctBy { it.id }
-            ReferenceSelector(stringResource(R.string.history_accounts), accounts, draft.accountIds, allowed) { draft = draft.copy(accountIds = it) }
-            ReferenceSelector(stringResource(R.string.history_categories), categories, draft.categoryIds, allowed) { draft = draft.copy(categoryIds = it) }
-            ReferenceSelector(stringResource(R.string.history_cards), cards, draft.cardIds, allowed) { draft = draft.copy(cardIds = it) }
-            ReferenceSelector(stringResource(R.string.history_merchants), merchants, draft.merchantIds, allowed) { draft = draft.copy(merchantIds = it) }
-            Text(stringResource(R.string.history_amount), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("PEN", "USD").forEach { currency -> FilterChip(selected = draft.currency == currency, enabled = allowed,
-                    onClick = { draft = draft.copy(currency = currency) }, label = { Text(currency) }) }
-            }
-            OutlinedTextField(draft.minAmount, { draft = draft.copy(minAmount = it) }, enabled = allowed,
-                label = { Text(stringResource(R.string.movements_filter_min_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
-                isError = errors.containsKey("min"), modifier = Modifier.fillMaxWidth().testTag("input_filter_min_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe mínimo oculto") { draft = draft.copy(minAmount = it) })
-            OutlinedTextField(draft.maxAmount, { draft = draft.copy(maxAmount = it) }, enabled = allowed,
-                label = { Text(stringResource(R.string.movements_filter_max_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
-                isError = errors.containsKey("max"), modifier = Modifier.fillMaxWidth().testTag("input_filter_max_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe máximo oculto") { draft = draft.copy(maxAmount = it) })
-            Text("Estado del movimiento", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MovementFinancialState.entries.forEach { value -> FilterChip(selected = value in draft.financialStates,
-                    enabled = allowed, onClick = { draft = draft.copy(financialStates = draft.financialStates.toggle(value)) },
-                    label = { Text(value.uiLabel()) }, modifier = Modifier.testTag("chip_filter_${value.name.lowercase()}")) }
-            }
-            Text(stringResource(R.string.history_sync_state), style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MovementSyncStatus.entries.forEach { value -> FilterChip(selected = value in draft.syncStatuses, enabled = allowed,
-                    onClick = { draft = draft.copy(syncStatuses = draft.syncStatuses.toggle(value)) }, label = { Text(value.uiLabel()) }) }
-            }
-            errors.values.distinct().forEach { error -> Text(stringResource(when (error) {
-                FilterDraftError.AMOUNT -> R.string.history_filter_invalid_amount
-                FilterDraftError.CURRENCY -> R.string.history_filter_missing_currency
-                FilterDraftError.DATE -> R.string.history_filter_invalid_date
-                FilterDraftError.RANGE -> R.string.history_filter_invalid_range
-            }), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-            TextButton(onClick = { draft = MovementFilterDraft(); errors = emptyMap() }, modifier = Modifier.heightIn(min = 48.dp).testTag("btn_reset_advanced_filters")) {
-                Text(stringResource(R.string.movements_filter_reset))
-            }
-            Button(onClick = { errors = onApply(draft).errors }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_apply_filters")) {
-                Text(stringResource(R.string.history_filter_apply))
-            }
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.history_filter_cancel)) }
-            Spacer(Modifier.height(16.dp))
         }
+    ) {
+
+            // Scrollable body with weight
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Free basics first: Dates
+                Text(stringResource(R.string.history_filter_basic), style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KipuFilterChip(selected = draft.fromDate.isBlank() && draft.toDate.isBlank(), onClick = {
+                        draft = draft.copy(fromDate = "", toDate = "")
+                    }, label = { Text(stringResource(R.string.history_all_dates)) })
+                    KipuFilterChip(selected = draft.fromDate == LocalDate.now().toString() && draft.toDate == draft.fromDate, onClick = {
+                        draft = draft.copy(fromDate = LocalDate.now().toString(), toDate = LocalDate.now().toString())
+                    }, label = { Text(stringResource(R.string.history_today)) })
+                    KipuFilterChip(selected = draft.fromDate == LocalDate.now().withDayOfMonth(1).toString() && draft.toDate == LocalDate.now().toString(), onClick = {
+                        draft = draft.copy(fromDate = LocalDate.now().withDayOfMonth(1).toString(), toDate = LocalDate.now().toString())
+                    }, label = { Text(stringResource(R.string.history_month)) })
+                }
+                OutlinedButton(onClick = { dates = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(if (draft.fromDate.isBlank() && draft.toDate.isBlank()) stringResource(R.string.history_custom_dates)
+                        else "${draft.fromDate.ifBlank { "…" }} — ${draft.toDate.ifBlank { "…" }}")
+                }
+
+                // Advanced / Premium sections
+                if (!allowed) {
+                    MovementAccessCard(state, onViewPlans, onVerify, onDismissRecovery)
+                    OutlinedButton(
+                        onClick = { showPremiumOptions = !showPremiumOptions },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    ) {
+                        Text(if (showPremiumOptions) "Ocultar opciones Premium" else "Ver opciones Premium")
+                    }
+                    if (showPremiumOptions) {
+                        AdvancedFiltersControls(
+                            draft = draft,
+                            onDraftChange = { draft = it },
+                            errors = errors,
+                            allowed = false,
+                            accounts = accounts,
+                            categories = categories,
+                            cards = cards,
+                            merchants = merchants
+                        )
+                    }
+                } else {
+                    Text(stringResource(R.string.history_filter_advanced), style = MaterialTheme.typography.titleSmall)
+                    AdvancedFiltersControls(
+                        draft = draft,
+                        onDraftChange = { draft = it },
+                        errors = errors,
+                        allowed = true,
+                        accounts = accounts,
+                        categories = categories,
+                        cards = cards,
+                        merchants = merchants
+                    )
+                }
+
+                // Errors
+                errors.values.distinct().forEach { error ->
+                    Text(stringResource(when (error) {
+                        FilterDraftError.AMOUNT -> R.string.history_filter_invalid_amount
+                        FilterDraftError.CURRENCY -> R.string.history_filter_missing_currency
+                        FilterDraftError.DATE -> R.string.history_filter_invalid_date
+                        FilterDraftError.RANGE -> R.string.history_filter_invalid_range
+                    }), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
+
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // Sticky footer outside scroll
+            Surface(
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TextButton(
+                        onClick = { draft = MovementFilterDraft(); errors = emptyMap() },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_reset_advanced_filters")
+                    ) {
+                        Text(stringResource(R.string.movements_filter_reset))
+                    }
+                    Button(
+                        onClick = {
+                            val draftToApply = if (!allowed) {
+                                val prev = MovementFilterDraft.fromApplied(state.appliedFilters)
+                                MovementFilterDraft(
+                                    fromDate = draft.fromDate,
+                                    toDate = draft.toDate,
+                                    accountIds = prev.accountIds,
+                                    categoryIds = prev.categoryIds,
+                                    cardIds = prev.cardIds,
+                                    merchantIds = prev.merchantIds,
+                                    financialStates = prev.financialStates,
+                                    syncStatuses = prev.syncStatuses,
+                                    minAmount = prev.minAmount,
+                                    maxAmount = prev.maxAmount,
+                                    currency = prev.currency
+                                )
+                            } else {
+                                draft
+                            }
+                            val validation = onApply(draftToApply)
+                            errors = validation.errors
+                        },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_apply_filters")
+                    ) {
+                        val appliedText = stringResource(R.string.history_filter_apply)
+                        val pausedCount = if (!allowed) {
+                            state.appliedFilters.accountIds.size + state.appliedFilters.categoryIds.size +
+                                state.appliedFilters.cardIds.size + state.appliedFilters.merchantIds.size +
+                                (if (state.appliedFilters.minAmountMinor != null || state.appliedFilters.maxAmountMinor != null) 1 else 0) +
+                                state.appliedFilters.financialStates.size + state.appliedFilters.syncStatuses.size
+                        } else 0
+                        if (pausedCount > 0) {
+                            Text("$appliedText ($pausedCount en pausa)")
+                        } else {
+                            Text(appliedText)
+                        }
+                    }
+                    TextButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                    ) {
+                        Text(stringResource(R.string.history_filter_cancel))
+                    }
+                }
+            }
     }
     if (dates) {
         fun String.utc(): Long? = runCatching { LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
@@ -131,6 +245,48 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
         }, dismissButton = { TextButton(onClick = { dates = false }) { Text(stringResource(R.string.history_filter_cancel)) } }) {
             DateRangePicker(state = picker, modifier = Modifier.heightIn(max = 500.dp))
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AdvancedFiltersControls(
+    draft: MovementFilterDraft,
+    onDraftChange: (MovementFilterDraft) -> Unit,
+    errors: Map<String, FilterDraftError>,
+    allowed: Boolean,
+    accounts: List<MovementReferenceOption>,
+    categories: List<MovementReferenceOption>,
+    cards: List<MovementReferenceOption>,
+    merchants: List<MovementReferenceOption>,
+) {
+    ReferenceSelector(stringResource(R.string.history_accounts), accounts, draft.accountIds, allowed) { onDraftChange(draft.copy(accountIds = it)) }
+    ReferenceSelector(stringResource(R.string.history_categories), categories, draft.categoryIds, allowed) { onDraftChange(draft.copy(categoryIds = it)) }
+    ReferenceSelector(stringResource(R.string.history_cards), cards, draft.cardIds, allowed) { onDraftChange(draft.copy(cardIds = it)) }
+    ReferenceSelector(stringResource(R.string.history_merchants), merchants, draft.merchantIds, allowed) { onDraftChange(draft.copy(merchantIds = it)) }
+    Text(stringResource(R.string.history_amount), style = MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf("PEN", "USD").forEach { currency -> KipuFilterChip(selected = draft.currency == currency, enabled = allowed,
+            onClick = { onDraftChange(draft.copy(currency = currency)) }, label = { Text(currency) }) }
+    }
+    OutlinedTextField(draft.minAmount, { onDraftChange(draft.copy(minAmount = it)) }, enabled = allowed,
+        label = { Text(stringResource(R.string.movements_filter_min_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
+        isError = errors.containsKey("min"), modifier = Modifier.fillMaxWidth().testTag("input_filter_min_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe mínimo oculto") { onDraftChange(draft.copy(minAmount = it)) })
+    OutlinedTextField(draft.maxAmount, { onDraftChange(draft.copy(maxAmount = it)) }, enabled = allowed,
+        label = { Text(stringResource(R.string.movements_filter_max_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
+        isError = errors.containsKey("max"), modifier = Modifier.fillMaxWidth().testTag("input_filter_max_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe máximo oculto") { onDraftChange(draft.copy(maxAmount = it)) })
+    Text("Estado del movimiento", style = MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MovementFinancialState.entries.forEach { value -> KipuFilterChip(selected = value in draft.financialStates,
+            enabled = allowed, onClick = { onDraftChange(draft.copy(financialStates = draft.financialStates.toggle(value))) },
+            label = { Text(value.uiLabel()) }, modifier = Modifier.testTag("chip_filter_${value.name.lowercase()}")) }
+    }
+    Text(stringResource(R.string.history_sync_state), style = MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MovementSyncStatus.entries.forEach { value -> KipuFilterChip(selected = value in draft.syncStatuses, enabled = allowed,
+            onClick = { onDraftChange(draft.copy(syncStatuses = draft.syncStatuses.toggle(value))) }, label = { Text(value.uiLabel()) }) }
     }
 }
 

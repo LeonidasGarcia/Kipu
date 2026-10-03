@@ -487,6 +487,7 @@ fun PastelCategoryPickerBottomSheet(
     initialParentCategoryId: String? = null,
     isCreating: Boolean = false,
     errorMessage: String? = null,
+    directSelectionMode: Boolean = false,
 ) {
     val coroutineScope = rememberCoroutineScope()
     val reducedMotion = rememberReducedMotionEnabled()
@@ -563,8 +564,8 @@ fun PastelCategoryPickerBottomSheet(
                         onSelectCategory = { option ->
                             currentSelectedId = option.id
                         },
-                        onConfirmSelection = {
-                            val option = categories.find { it.id == currentSelectedId }
+                        onConfirmSelection = { chosenOption ->
+                            val option = chosenOption ?: categories.find { it.id == currentSelectedId }
                             if (option != null) {
                                 onSelect(option)
                                 onDismiss()
@@ -577,6 +578,7 @@ fun PastelCategoryPickerBottomSheet(
                         },
                         onDismiss = onDismiss,
                         reducedMotion = reducedMotion,
+                        directSelectionMode = directSelectionMode,
                     )
                 }
 
@@ -654,6 +656,7 @@ fun PastelCategoryPickerFlow(
     initialParentCategoryId: String? = null,
     isCreating: Boolean = false,
     errorMessage: String? = null,
+    directSelectionMode: Boolean = false,
 ) = PastelCategoryPickerBottomSheet(
     categories = categories,
     selectedCategoryId = selectedCategoryId,
@@ -666,6 +669,7 @@ fun PastelCategoryPickerFlow(
     initialParentCategoryId = initialParentCategoryId,
     isCreating = isCreating,
     errorMessage = errorMessage,
+    directSelectionMode = directSelectionMode,
 )
 
 
@@ -682,10 +686,11 @@ private fun BrowseCategoriesView(
     expandedRootIds: Set<String>,
     onToggleRootExpand: (String) -> Unit,
     onSelectCategory: (CategoryOption) -> Unit,
-    onConfirmSelection: () -> Unit,
+    onConfirmSelection: (CategoryOption?) -> Unit,
     onNavigateToCreate: (prefillQuery: String) -> Unit,
     onDismiss: () -> Unit,
     reducedMotion: Boolean,
+    directSelectionMode: Boolean = false,
 ) {
     val roots = remember(categories) { categories.filter { it.parentCategoryId == null } }
     val isSearching = searchQuery.isNotBlank()
@@ -828,7 +833,10 @@ private fun BrowseCategoriesView(
                         allCategories = categories,
                         searchQuery = searchQuery,
                         selectedCategoryId = selectedCategoryId,
-                        onSelectCategory = onSelectCategory,
+                        onSelectCategory = { option ->
+                            onSelectCategory(option)
+                            if (directSelectionMode) onConfirmSelection(option)
+                        },
                     )
                 }
             } else {
@@ -915,10 +923,12 @@ private fun BrowseCategoriesView(
                                     .fillMaxWidth()
                                     .heightIn(min = 64.dp)
                                     .clickable {
-                                        if (children.isNotEmpty()) {
+                                        onSelectCategory(root)
+                                        if (directSelectionMode) {
+                                            onConfirmSelection(root)
+                                        } else if (children.isNotEmpty()) {
                                             onToggleRootExpand(root.id)
                                         }
-                                        onSelectCategory(root)
                                     }
                                     .padding(horizontal = 14.dp, vertical = 10.dp)
                                     .semantics { selected = isRootSelected }
@@ -1052,10 +1062,13 @@ private fun BrowseCategoriesView(
                                                     shape = RoundedCornerShape(12.dp),
                                                 )
                                                 .background(if (isChildSelected) PastelDesignTokens.TealLightBg else PastelDesignTokens.SurfaceWhite)
-                                                .clickable { onSelectCategory(child) }
+                                                .clickable {
+                                                    onSelectCategory(child)
+                                                    if (directSelectionMode) onConfirmSelection(child)
+                                                }
                                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                                                 .semantics { selected = isChildSelected }
-                                                .testTag("category_child_${child.id}"),
+                                                .testTag("category_subcategory_${child.id}"),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             PastelIconBadge(
@@ -1097,39 +1110,41 @@ private fun BrowseCategoriesView(
         }
 
         // Sticky Bottom CTA Button
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = PastelDesignTokens.SurfaceWhite,
-            tonalElevation = 8.dp,
-        ) {
-            val hasSelection = selectedOption != null
-            val buttonLabel = if (selectedOption != null) {
-                "Confirmar \"${selectedOption.name}\" ✓"
-            } else {
-                "Confirmar categoría"
-            }
-
-            Button(
-                onClick = onConfirmSelection,
-                enabled = hasSelection,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 52.dp)
-                    .padding(vertical = 8.dp)
-                    .testTag("confirm_category_button"),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = rememberKipuColors().primary,
-                    contentColor = rememberKipuColors().onPrimary,
-                    disabledContainerColor = rememberKipuColors().border,
-                    disabledContentColor = PastelDesignTokens.TextPlaceholder,
-                ),
+        if (!directSelectionMode) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = PastelDesignTokens.SurfaceWhite,
+                tonalElevation = 8.dp,
             ) {
-                Text(
-                    text = buttonLabel,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                )
+                val hasSelection = selectedOption != null
+                val buttonLabel = if (selectedOption != null) {
+                    "Confirmar \"${selectedOption.name}\" ✓"
+                } else {
+                    "Confirmar categoría"
+                }
+
+                Button(
+                    onClick = { onConfirmSelection(null) },
+                    enabled = hasSelection,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .padding(vertical = 8.dp)
+                        .testTag("confirm_category_button"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = rememberKipuColors().primary,
+                        contentColor = rememberKipuColors().onPrimary,
+                        disabledContainerColor = rememberKipuColors().border,
+                        disabledContentColor = PastelDesignTokens.TextPlaceholder,
+                    ),
+                ) {
+                    Text(
+                        text = buttonLabel,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                    )
+                }
             }
         }
     }

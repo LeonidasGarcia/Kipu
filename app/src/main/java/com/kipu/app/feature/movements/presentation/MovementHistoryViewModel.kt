@@ -552,7 +552,11 @@ class MovementHistoryViewModel @Inject constructor(
         val format = java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM yyyy", Locale.forLanguageTag("es-PE"))
         return items.sortedByDescending { it.transaction.occurredAt }.groupBy { item ->
             val date = java.time.Instant.ofEpochMilli(item.transaction.occurredAt).atZone(zone).toLocalDate()
-            when (date) { today -> "Hoy"; today.minusDays(1) -> "Ayer"; else -> format.format(date) }
+            when (date) {
+                today -> "Hoy"
+                today.minusDays(1) -> "Ayer"
+                else -> format.format(date).lowercase(Locale.forLanguageTag("es-PE"))
+            }
         }
     }
 }

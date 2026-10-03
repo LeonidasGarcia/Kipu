@@ -248,7 +248,8 @@ fun MerchantPicker(
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = Color.White,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 )
             }
@@ -262,7 +263,8 @@ fun MerchantPicker(
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = Color.White,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 )
             }
@@ -276,7 +278,7 @@ fun MerchantPicker(
         // Category chips filter the local merchant cache immediately.
         if (state.query.isNotBlank() || state.catalogEntries.isNotEmpty()) {
             Text(
-                text = if (state.query.isBlank()) "Comercios frecuentes:" else "Resultados del catálogo:",
+                text = if (state.query.isBlank()) "Comercios del catálogo:" else "Resultados del catálogo:",
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
