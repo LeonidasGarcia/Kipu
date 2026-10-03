@@ -28,3 +28,17 @@ interface MovementRepository {
 
     fun observeBalance(userId: String, accountId: String): Flow<Long?>
 }
+
+
+// Separate ports preserve the existing registration API and its S2 clients.
+interface MovementMaintenanceRepository {
+    suspend fun getRevisionHead(userId: String, transactionId: String): com.kipu.app.feature.movements.domain.model.MovementRevisionHead?
+    suspend fun revise(userId: String, command: com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Revise): com.kipu.app.feature.movements.domain.model.MovementMutationResult
+    suspend fun void(userId: String, command: com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Void): com.kipu.app.feature.movements.domain.model.MovementMutationResult
+    suspend fun getConflictProposals(userId: String, transactionId: String): List<com.kipu.app.feature.movements.data.local.MovementConflictProposalEntity>
+    suspend fun discardProposal(userId: String, proposalId: String): Boolean
+    suspend fun redoProposal(userId: String, proposalId: String, newIdempotencyKey: String = java.util.UUID.randomUUID().toString()): com.kipu.app.feature.movements.domain.model.MovementMutationResult
+}
+interface ExpenseConsumptionRepository {
+    suspend fun queryConsumption(userId: String, query: com.kipu.app.feature.movements.domain.model.ExpenseConsumptionQuery): com.kipu.app.feature.movements.domain.model.ExpenseConsumptionResult
+}

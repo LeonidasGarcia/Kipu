@@ -30,10 +30,18 @@ import com.kipu.app.feature.accounts.data.remote.RegisterCardRequestDto
 import com.kipu.app.feature.accounts.data.remote.SetArchivedRequestDto
 import com.kipu.app.feature.accounts.data.remote.UpdateAppearanceRequestDto
 import com.kipu.app.feature.movements.data.local.MovementDao
+import com.kipu.app.feature.movements.data.local.MovementLedgerAliasEntity
+import com.kipu.app.feature.movements.data.local.MovementLedgerEffectEntity
+import com.kipu.app.feature.movements.data.local.TransactionRevisionEntity
+import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
+import com.kipu.app.feature.movements.data.local.MovementRevisionSnapshotCodec
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.serialization.json.Json
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -433,40 +441,196 @@ class SyncInstrumentCommandsWorker @AssistedInject constructor(
         database.withTransaction {
             val transaction = movementDao.getTransactionById(cmd.userId, transactionId)
             val creditDao = database.creditDao()
-            if (cmd.commandType == "CONFIRM_CREDIT_PURCHASE") {
-                creditDao.deleteInstallmentsForTransaction(cmd.userId, transactionId)
-            }
-            if (cmd.commandType == "PAY_CREDIT_CARD") {
-                val allocations = creditDao.getAllocationsForPayment(cmd.userId, transactionId)
-                creditDao.deleteAllocationsForPayment(cmd.userId, transactionId)
-                allocations.map { it.installmentId }.distinct().forEach { installmentId ->
-                    val installment = creditDao.getInstallmentById(cmd.userId, installmentId) ?: return@forEach
-                    val allocated = creditDao.getAllocatedMinorForInstallment(cmd.userId, installmentId)
-                    val status = when {
-                        allocated == 0L -> "PENDING"
-                        allocated >= installment.principalMinor -> "PAID"
-                        else -> "PARTIAL"
+            val paymentAllocations = if (cmd.commandType == "PAY_CREDIT_CARD") {
+                creditDao.getAllocationsForPayment(cmd.userId, transactionId)
+            } else emptyList()
+
+            if (transaction != null && transaction.status !in setOf("VOIDED", "FAILED")) {
+                val beforeRevisionId = transaction.currentRevisionId
+                    ?.takeIf { movementDao.getRevision(cmd.userId, it) != null }
+                    ?: UUID.randomUUID().toString().also { baselineId ->
+                        movementDao.insertRevision(
+                            TransactionRevisionEntity(
+                                userId = cmd.userId,
+                                revisionId = baselineId,
+                                transactionId = transaction.id,
+                                commandId = null,
+                                commandType = "MIGRATION_BASELINE",
+                                baseRevision = (transaction.revision - 1L).coerceAtLeast(0L),
+                                localRevision = transaction.revision,
+                                previousPayload = null,
+                                newPayload = MovementRevisionSnapshotCodec.encode(transaction),
+                                changeReason = null,
+                                provenance = "LOCAL_BASELINE",
+                                createdAt = nowMillis,
+                            ),
+                        )
+                        movementDao.getRevision(cmd.userId, baselineId)
                     }
-                    creditDao.updateInstallmentStatus(
+                    ?: error("Rejected movement baseline was not stored")
+
+                val nextRevision = Math.addExact(transaction.revision, 1L)
+                val voidRevisionId = UUID.randomUUID().toString()
+                val voided = transaction.copy(
+                    status = "VOIDED",
+                    syncStatus = MovementSyncStatus.FAILED_PERMANENT.name,
+                    revision = nextRevision,
+                    currentRevisionId = voidRevisionId,
+                    source = "LOCAL_REJECTION",
+                    updatedAt = nowMillis,
+                )
+                movementDao.insertRevision(
+                    TransactionRevisionEntity(
                         userId = cmd.userId,
-                        installmentId = installmentId,
-                        status = status,
-                        revision = installment.revision + 1L,
-                        updatedAt = nowMillis,
+                        revisionId = voidRevisionId,
+                        transactionId = transaction.id,
+                        commandId = cmd.operationId,
+                        commandType = "LOCAL_REJECTION_VOID",
+                        baseRevision = transaction.revision,
+                        localRevision = nextRevision,
+                        previousPayload = MovementRevisionSnapshotCodec.encode(transaction),
+                        newPayload = MovementRevisionSnapshotCodec.encode(voided),
+                        changeReason = errorCode,
+                        provenance = "LOCAL_PERMANENT_REJECTION",
+                        createdAt = nowMillis,
+                    ),
+                )
+
+                val priorEffects = movementDao.getLedgerEntriesForTransaction(cmd.userId, transactionId)
+                    .filter { it.role != "REVERSAL" }
+                val reversals = mutableListOf<com.kipu.app.feature.movements.data.local.LedgerEntryEntity>()
+                val reversalMappings = mutableListOf<Pair<MovementLedgerEffectEntity, com.kipu.app.feature.movements.data.local.LedgerEntryEntity>>()
+                priorEffects.forEachIndexed { ordinal, original ->
+                    val knownAlias = movementDao.getLedgerAlias(cmd.userId, original.id)
+                    val originalIdentity = if (knownAlias != null) {
+                        movementDao.getLedgerEffect(cmd.userId, knownAlias.commandId, knownAlias.effectOrdinal)
+                            ?: error("Ledger alias has no immutable effect identity")
+                    } else {
+                        val baselineCommandId = UUID.nameUUIDFromBytes(
+                            "kipu-ledger-baseline:${cmd.userId}:${original.id}".toByteArray(StandardCharsets.UTF_8),
+                        ).toString()
+                        val baselineEffect = MovementLedgerEffectEntity(
+                            userId = cmd.userId,
+                            commandId = baselineCommandId,
+                            effectOrdinal = 0,
+                            transactionId = transaction.id,
+                            revisionId = beforeRevisionId,
+                            ledgerEntryId = original.id,
+                            reversesCommandId = null,
+                            reversesEffectOrdinal = null,
+                        )
+                        movementDao.insertLedgerEffect(baselineEffect)
+                        movementDao.insertLedgerAlias(
+                            MovementLedgerAliasEntity(cmd.userId, original.id, baselineCommandId, 0),
+                        )
+                        baselineEffect
+                    }
+                    val reversal = com.kipu.app.feature.movements.data.local.LedgerEntryEntity(
+                        id = UUID.randomUUID().toString(),
+                        userId = cmd.userId,
+                        transactionId = transaction.id,
+                        accountId = original.accountId,
+                        role = "REVERSAL",
+                        signedAmountMinor = Math.negateExact(original.signedAmountMinor),
+                        currencyCode = original.currencyCode,
+                        createdAt = nowMillis,
+                    )
+                    reversals += reversal
+                    reversalMappings += originalIdentity to reversal
+                }
+                if (reversals.isNotEmpty()) movementDao.insertLedgerEntries(reversals)
+                reversalMappings.forEachIndexed { ordinal, (originalIdentity, reversal) ->
+                    movementDao.insertLedgerEffect(
+                        MovementLedgerEffectEntity(
+                            userId = cmd.userId,
+                            commandId = cmd.operationId,
+                            effectOrdinal = ordinal,
+                            transactionId = transaction.id,
+                            revisionId = voidRevisionId,
+                            ledgerEntryId = reversal.id,
+                            reversesCommandId = originalIdentity.commandId,
+                            reversesEffectOrdinal = originalIdentity.effectOrdinal,
+                        ),
+                    )
+                    movementDao.insertLedgerAlias(MovementLedgerAliasEntity(cmd.userId, reversal.id, cmd.operationId, ordinal))
+                }
+                check(movementDao.markTransactionVoidedAfterRejection(
+                    cmd.userId, transactionId, nextRevision, voidRevisionId, nowMillis,
+                ) == 1) { "Movement rejection must void exactly one transaction" }
+
+                if (cmd.commandType == "CONFIRM_CREDIT_PURCHASE") {
+                    creditDao.getInstallmentsForTransaction(cmd.userId, transactionId).forEach { installment ->
+                        if (installment.status != "VOIDED") {
+                            creditDao.updateInstallmentStatus(
+                                userId = cmd.userId,
+                                installmentId = installment.id,
+                                status = "VOIDED",
+                                revision = installment.revision + 1L,
+                                updatedAt = nowMillis,
+                            )
+                        }
+                    }
+                }
+                if (cmd.commandType == "PAY_CREDIT_CARD") {
+                    paymentAllocations.map { it.installmentId }.distinct().forEach { installmentId ->
+                        val installment = creditDao.getInstallmentById(cmd.userId, installmentId) ?: return@forEach
+                        if (installment.status == "VOIDED") return@forEach
+                        val allocated = creditDao.getAllocatedMinorForInstallment(cmd.userId, installmentId)
+                        val status = when {
+                            allocated == 0L -> "PENDING"
+                            allocated >= installment.principalMinor -> "PAID"
+                            else -> "PARTIAL"
+                        }
+                        if (status != installment.status) {
+                            creditDao.updateInstallmentStatus(
+                                userId = cmd.userId,
+                                installmentId = installmentId,
+                                status = status,
+                                revision = installment.revision + 1L,
+                                updatedAt = nowMillis,
+                            )
+                        }
+                    }
+                }
+
+                (priorEffects + reversals).groupBy { it.accountId }.forEach { (accountId, entries) ->
+                    database.financialMovementDao().rebuildAccountProjection(cmd.userId, accountId, nowMillis)
+                    movementDao.upsertBalanceProjection(
+                        com.kipu.app.feature.movements.data.local.BalanceProjectionEntity(
+                            userId = cmd.userId,
+                            accountId = accountId,
+                            balanceMinor = movementDao.calculateLedgerSumForAccount(cmd.userId, accountId) ?: 0L,
+                            currencyCode = entries.first().currencyCode,
+                            lastTransactionAt = nowMillis,
+                            updatedAt = nowMillis,
+                        ),
                     )
                 }
+
+                movementDao.markReceiptsRejectedForTransaction(cmd.userId, transactionId, nowMillis)
+                val receiptHash = MessageDigest.getInstance("SHA-256")
+                    .digest("LOCAL_REJECTION_VOID\n${cmd.operationId}\n$transactionId\n$errorCode".toByteArray(StandardCharsets.UTF_8))
+                    .joinToString("") { "%02x".format(it) }
+                val rejectionReceiptId = UUID.nameUUIDFromBytes(
+                    "kipu-local-rejection-receipt:${cmd.userId}:${cmd.operationId}".toByteArray(StandardCharsets.UTF_8),
+                ).toString()
+                movementDao.insertOrUpdateReceipt(
+                    LocalCommandReceiptEntity(
+                        userId = cmd.userId,
+                        idempotencyKey = rejectionReceiptId,
+                        requestHash = receiptHash,
+                        transactionId = transactionId,
+                        status = "VOIDED",
+                        responsePayload = "{\"status\":\"APPLIED\",\"result\":\"VOIDED\",\"result_code\":\"SERVER_REJECTED\",\"revision\":$nextRevision}",
+                        contractVersion = 1,
+                        commandType = "LOCAL_REJECTION_VOID",
+                        expectedRevision = transaction.revision,
+                        resultingRevision = nextRevision,
+                        createdAt = nowMillis,
+                        updatedAt = nowMillis,
+                    ),
+                )
             }
-            movementDao.deleteLedgerEntriesForTransaction(cmd.userId, transactionId)
-            transaction?.sourceAccountId?.let { accountId ->
-                database.financialMovementDao().rebuildAccountProjection(cmd.userId, accountId, nowMillis)
-            }
-            transaction?.cardId?.let { cardId ->
-                cardDao.getById(cmd.userId, cardId)?.accountId?.let { liabilityAccountId ->
-                    database.financialMovementDao().rebuildAccountProjection(cmd.userId, liabilityAccountId, nowMillis)
-                }
-            }
-            movementDao.markTransactionRejected(cmd.userId, transactionId, nowMillis)
-            movementDao.markReceiptsRejectedForTransaction(cmd.userId, transactionId, nowMillis)
             syncDao.updateState(
                 userId = cmd.userId,
                 operationId = cmd.operationId,

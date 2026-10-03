@@ -43,11 +43,17 @@ enum class MovementSyncStatus {
 
 enum class TransactionStatus {
     ACTIVE,
+    CONFIRMED,
+    REVISED,
+    VOIDED,
     FAILED;
 
     companion object {
         fun fromString(value: String): TransactionStatus = when (value.uppercase()) {
             "ACTIVE" -> ACTIVE
+            "CONFIRMED" -> CONFIRMED
+            "REVISED" -> REVISED
+            "VOIDED" -> VOIDED
             "FAILED" -> FAILED
             else -> ACTIVE
         }

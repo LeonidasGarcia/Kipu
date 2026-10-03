@@ -1,19 +1,15 @@
 package com.kipu.app.feature.movements.data.local
 
 import androidx.room.withTransaction
+import androidx.sqlite.db.SupportSQLiteQuery
 import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.movements.data.MovementOutboxPayloadFactory
-import com.kipu.app.feature.movements.domain.model.LedgerRole
-import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
-import com.kipu.app.feature.movements.domain.model.MovementType
-import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
-import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
-import com.kipu.app.feature.movements.domain.model.Transaction
-import com.kipu.app.feature.movements.domain.model.TransactionStatus
+import com.kipu.app.feature.movements.domain.MovementRevisionPlanner
+import com.kipu.app.feature.movements.domain.model.*
 import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
 import com.kipu.app.feature.plans.domain.model.FreePlanLimits
 import com.kipu.app.feature.plans.domain.model.QuotaGroup
-import com.kipu.app.feature.categories.domain.model.CategoryType
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
@@ -25,6 +21,7 @@ class MovementLocalDataSource @Inject constructor(
     private val movementDao: MovementDao,
     private val balanceProjectionStore: BalanceProjectionStore,
     private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
+    private val revisionPlanner: MovementRevisionPlanner = MovementRevisionPlanner(),
 ) {
     fun observeTransactions(userId: String): Flow<List<TransactionEntity>> {
         return movementDao.observeTransactions(userId)
@@ -56,6 +53,10 @@ class MovementLocalDataSource @Inject constructor(
             occurredAt = occurredAt,
             windowMillis = windowMillis,
         )
+    }
+
+    suspend fun queryTransactions(query: SupportSQLiteQuery): List<TransactionEntity> {
+        return movementDao.queryTransactions(query)
     }
 
     suspend fun commitTransactionAtomic(
@@ -102,6 +103,7 @@ class MovementLocalDataSource @Inject constructor(
                     "source_account", "La cuenta está bloqueada por la selección del plan Free"
                 )
             }
+
             if (command.type == MovementType.TRANSFER) {
                 if (command.categoryId != null) {
                     return@withTransaction RegisterTransactionResult.ValidationError(
@@ -127,6 +129,7 @@ class MovementLocalDataSource @Inject constructor(
                     )
                 }
             }
+
             if (command.categoryId != null) {
                 val category = database.categoryDao().getCategoryById(command.categoryId)
                 if (category == null || !category.isActive ||
@@ -159,6 +162,7 @@ class MovementLocalDataSource @Inject constructor(
                     )
                 }
             }
+
             if (command.merchantId != null) {
                 val merchant = database.merchantCatalogDao().getMerchantById(command.merchantId)
                 if (merchant == null || !merchant.isActive) {
@@ -167,6 +171,7 @@ class MovementLocalDataSource @Inject constructor(
                     )
                 }
             }
+
             if (command.merchantId != null && command.merchantProvisionalText != null) {
                 return@withTransaction RegisterTransactionResult.ValidationError(
                     "merchant", "Selecciona un comercio o escribe un nombre provisional"
@@ -174,8 +179,8 @@ class MovementLocalDataSource @Inject constructor(
             }
 
             // 2. Insert transaction
-            val transactionId = UUID.randomUUID().toString()
             val now = System.currentTimeMillis()
+            val transactionId = UUID.randomUUID().toString()
             val transactionEntity = TransactionEntity(
                 id = transactionId,
                 userId = command.userId,
@@ -191,6 +196,9 @@ class MovementLocalDataSource @Inject constructor(
                 note = command.note,
                 status = TransactionStatus.ACTIVE.name,
                 syncStatus = MovementSyncStatus.PENDING.name,
+                revision = 1L,
+                acknowledgedRevision = null,
+                currentRevisionId = null,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -273,6 +281,7 @@ class MovementLocalDataSource @Inject constructor(
             // 5. Insert local command receipt
             movementDao.insertOrUpdateReceipt(
                 LocalCommandReceiptEntity(
+                    contractVersion = 2,
                     userId = command.userId,
                     idempotencyKey = command.idempotencyKey,
                     requestHash = requestHash,
@@ -292,6 +301,7 @@ class MovementLocalDataSource @Inject constructor(
             )
             movementDao.insertOutbox(
                 MovementOutboxEntity(
+                    contractVersion = 2,
                     id = UUID.randomUUID().toString(),
                     userId = command.userId,
                     idempotencyKey = command.idempotencyKey,
@@ -312,6 +322,627 @@ class MovementLocalDataSource @Inject constructor(
                 isDuplicate = false,
             )
         }
+    }
+
+    internal fun buildRevisionHead(entity: TransactionEntity, hasPendingOutbox: Boolean = false): MovementRevisionHead {
+        val financialState = when (entity.status) {
+            "CONFIRMED" -> MovementFinancialState.CONFIRMED
+            "REVISED" -> MovementFinancialState.REVISED
+            "VOIDED" -> MovementFinancialState.VOIDED
+            "ACTIVE" -> MovementFinancialState.CONFIRMED
+            else -> MovementFinancialState.LEGACY_FAILED
+        }
+        val payload = MovementRevisionPayload(
+            type = MovementType.valueOf(entity.type),
+            operationKind = entity.operationKind,
+            amountMinor = entity.amountMinor,
+            currency = entity.currencyCode,
+            sourceAccountId = entity.sourceAccountId,
+            destinationAccountId = entity.destinationAccountId,
+            categoryId = entity.categoryId,
+            merchantId = entity.merchantId,
+            merchantProvisionalText = entity.merchantProvisionalText,
+            occurredAt = entity.occurredAt,
+            note = entity.note,
+        )
+        val officialRevision: Long?
+        val localProposedRevision: Long?
+        val baselineRevision: Long?
+        if (entity.acknowledgedRevision != null) {
+            officialRevision = entity.acknowledgedRevision
+            localProposedRevision = if (entity.revision > entity.acknowledgedRevision) entity.revision else null
+            baselineRevision = null
+        } else if (hasPendingOutbox) {
+            officialRevision = null
+            localProposedRevision = entity.revision
+            baselineRevision = null
+        } else {
+            officialRevision = null
+            localProposedRevision = null
+            baselineRevision = entity.revision
+        }
+        return MovementRevisionHead(
+            transactionId = entity.id,
+            userId = entity.userId,
+            payload = payload,
+            financialState = financialState,
+            officialRevision = officialRevision,
+            localProposedRevision = localProposedRevision,
+            baselineRevision = baselineRevision,
+        )
+    }
+
+    suspend fun getRevisionHead(userId: String, transactionId: String): MovementRevisionHead? {
+        val txEntity = movementDao.getTransactionById(userId, transactionId) ?: return null
+        val pendingOutbox = movementDao.getPendingOutboxForTransaction(userId, txEntity.id)
+        return buildRevisionHead(txEntity, hasPendingOutbox = pendingOutbox.isNotEmpty())
+    }
+
+    private suspend fun collectReferences(
+        userId: String,
+        oldSourceAccountId: String?,
+        oldDestinationAccountId: String?,
+        oldCategoryId: String?,
+        oldMerchantId: String?,
+        newPayload: MovementRevisionPayload,
+    ): MovementRevisionReferences {
+        val accountMap = mutableMapOf<String, MovementAccountReference>()
+        val categoryMap = mutableMapOf<String, MovementCategoryReference>()
+        val merchantMap = mutableMapOf<String, MovementMerchantReference>()
+
+        val accountIds = listOfNotNull(
+            oldSourceAccountId,
+            oldDestinationAccountId,
+            newPayload.sourceAccountId,
+            newPayload.destinationAccountId,
+        ).distinct()
+
+        for (accId in accountIds) {
+            val acc = database.accountDao().getById(userId, accId)
+            if (acc != null) {
+                val isOld = (accId == oldSourceAccountId || accId == oldDestinationAccountId)
+                val eligible = if (isOld) true else (!acc.isArchived && !isPlanLockedInstrument(userId, accId))
+                accountMap[accId] = MovementAccountReference(
+                    userId = acc.userId,
+                    currency = acc.currency,
+                    eligible = eligible,
+                )
+            }
+        }
+
+        val categoryIds = listOfNotNull(oldCategoryId, newPayload.categoryId).distinct()
+        for (catId in categoryIds) {
+            val cat = database.categoryDao().getCategoryById(catId)
+            if (cat != null) {
+                val isOld = (catId == oldCategoryId)
+                val eligible = if (isOld) true else (cat.isActive && !isPlanLockedCategory(userId, cat))
+                categoryMap[catId] = MovementCategoryReference(
+                    userId = cat.userId ?: userId,
+                    type = MovementType.valueOf(cat.categoryType),
+                    eligible = eligible,
+                )
+            }
+        }
+
+        val merchantIds = listOfNotNull(oldMerchantId, newPayload.merchantId).distinct()
+        for (mId in merchantIds) {
+            val m = database.merchantCatalogDao().getMerchantById(mId)
+            if (m != null) {
+                merchantMap[mId] = MovementMerchantReference(
+                    userId = null,
+                    visible = m.isActive,
+                    eligible = m.isActive,
+                )
+            }
+        }
+
+        return MovementRevisionReferences(
+            accounts = accountMap,
+            categories = categoryMap,
+            merchants = merchantMap,
+        )
+    }
+
+    suspend fun commitRevisionAtomic(
+        userId: String,
+        command: MovementRevisionCommand.Revise,
+        requestHash: String,
+    ): MovementMutationResult {
+        return database.withTransaction {
+            val existingReceipt = movementDao.getReceipt(userId, command.idempotencyKey)
+            if (existingReceipt != null) {
+                if (existingReceipt.requestHash == requestHash && existingReceipt.transactionId != null) {
+                    val head = getRevisionHead(userId, existingReceipt.transactionId)
+                    if (head != null) {
+                        return@withTransaction MovementMutationResult.Success(head, isDuplicate = true)
+                    }
+                }
+                return@withTransaction MovementMutationResult.Conflict(
+                    current = getRevisionHead(userId, command.transactionId),
+                    code = "IDEMPOTENCY_CONFLICT",
+                )
+            }
+
+            val txEntity = movementDao.getTransactionById(userId, command.transactionId)
+                ?: return@withTransaction MovementMutationResult.Rejected("NOT_AUTHORIZED")
+
+            val pendingOutbox = movementDao.getPendingOutboxForTransaction(userId, txEntity.id)
+            val currentHead = buildRevisionHead(txEntity, hasPendingOutbox = pendingOutbox.isNotEmpty())
+
+            if (currentHead.financialState == MovementFinancialState.VOIDED) {
+                return@withTransaction MovementMutationResult.Rejected("ALREADY_VOIDED_FOR_EDIT")
+            }
+            if (currentHead.financialState == MovementFinancialState.LEGACY_FAILED) {
+                return@withTransaction MovementMutationResult.Rejected("FINANCIAL_EVIDENCE_REQUIRED")
+            }
+            if (command.expectedRevision != currentHead.commandBaseRevision) {
+                return@withTransaction MovementMutationResult.Conflict(
+                    current = currentHead,
+                    code = "REVISION_CONFLICT",
+                )
+            }
+
+            val hasSpecializedRelations = txEntity.cardId != null ||
+                txEntity.installmentCount != null ||
+                !txEntity.legacyKind.isNullOrBlank()
+            val isStandardKind = txEntity.operationKind.equals("STANDARD", ignoreCase = true)
+            val isLegacyStandard = txEntity.operationKind == null && !hasSpecializedRelations
+            val context = MovementMaintenanceContext(
+                hasSpecializedRelations = hasSpecializedRelations,
+                legacyStandardVerified = isLegacyStandard,
+            )
+
+            val references = collectReferences(
+                userId = userId,
+                oldSourceAccountId = txEntity.sourceAccountId,
+                oldDestinationAccountId = txEntity.destinationAccountId,
+                oldCategoryId = txEntity.categoryId,
+                oldMerchantId = txEntity.merchantId,
+                newPayload = command.payload,
+            )
+
+            val existingEntries = movementDao.getLedgerEntriesForTransaction(userId, txEntity.id)
+            val appliedEffects = existingEntries.map { entry ->
+                MovementFinancialEffect(
+                    accountId = entry.accountId,
+                    role = LedgerRole.valueOf(entry.role),
+                    signedAmountMinor = entry.signedAmountMinor,
+                    currency = entry.currencyCode,
+                )
+            }
+
+            val planResult = revisionPlanner.plan(
+                owner = userId,
+                head = currentHead,
+                command = command,
+                context = context,
+                references = references,
+                appliedEffects = appliedEffects,
+            )
+            val plan = when (planResult) {
+                is MovementRevisionPlanningResult.Ready -> planResult.plan
+                is MovementRevisionPlanningResult.Rejected -> return@withTransaction MovementMutationResult.Rejected(planResult.code)
+                is MovementRevisionPlanningResult.AlreadyVoided -> return@withTransaction MovementMutationResult.Rejected("ALREADY_VOIDED_FOR_EDIT")
+            }
+
+            val now = System.currentTimeMillis()
+            val revisionId = UUID.randomUUID().toString()
+            val previousSnapshot = MovementRevisionSnapshotCodec.encode(txEntity)
+
+            val updatedEntity = txEntity.copy(
+                amountMinor = plan.payload.amountMinor,
+                currencyCode = plan.payload.currency,
+                sourceAccountId = plan.payload.sourceAccountId,
+                destinationAccountId = plan.payload.destinationAccountId,
+                categoryId = plan.payload.categoryId,
+                merchantId = plan.payload.merchantId,
+                merchantProvisionalText = plan.payload.merchantProvisionalText,
+                occurredAt = plan.payload.occurredAt,
+                note = plan.payload.note,
+                status = plan.financialState.name,
+                revision = plan.proposedRevision,
+                currentRevisionId = revisionId,
+                syncStatus = "PENDING",
+                updatedAt = now,
+            )
+
+            movementDao.insertRevision(
+                TransactionRevisionEntity(
+                    userId = userId,
+                    revisionId = revisionId,
+                    transactionId = txEntity.id,
+                    commandId = command.idempotencyKey,
+                    commandType = "REVISE",
+                    baseRevision = command.expectedRevision,
+                    localRevision = plan.proposedRevision,
+                    previousPayload = previousSnapshot,
+                    newPayload = MovementRevisionSnapshotCodec.encode(updatedEntity),
+                    changeReason = command.reason,
+                    provenance = "LOCAL",
+                    createdAt = now,
+                )
+            )
+
+            for (effect in plan.effects) {
+                val entryId = UUID.randomUUID().toString()
+                movementDao.insertLedgerEntries(listOf(
+                    LedgerEntryEntity(
+                        id = entryId,
+                        userId = userId,
+                        transactionId = txEntity.id,
+                        accountId = effect.accountId,
+                        role = effect.role.name,
+                        signedAmountMinor = effect.signedAmountMinor,
+                        currencyCode = effect.currency,
+                        createdAt = now,
+                    )
+                ))
+                movementDao.insertLedgerEffect(
+                    MovementLedgerEffectEntity(
+                        userId = userId,
+                        commandId = command.idempotencyKey,
+                        effectOrdinal = effect.ordinal,
+                        transactionId = txEntity.id,
+                        revisionId = revisionId,
+                        ledgerEntryId = entryId,
+                        reversesCommandId = null,
+                        reversesEffectOrdinal = null,
+                    )
+                )
+                movementDao.insertLedgerAlias(
+                    MovementLedgerAliasEntity(
+                        userId = userId,
+                        physicalEntryId = entryId,
+                        commandId = command.idempotencyKey,
+                        effectOrdinal = effect.ordinal,
+                    )
+                )
+            }
+
+            movementDao.updateTransaction(updatedEntity)
+
+            val touchedAccounts = mutableSetOf<Pair<String, String>>()
+            txEntity.sourceAccountId?.let { touchedAccounts.add(it to txEntity.currencyCode) }
+            txEntity.destinationAccountId?.let { touchedAccounts.add(it to txEntity.currencyCode) }
+            plan.payload.sourceAccountId?.let { touchedAccounts.add(it to plan.payload.currency) }
+            plan.payload.destinationAccountId?.let { touchedAccounts.add(it to plan.payload.currency) }
+            for ((accId, curr) in touchedAccounts) {
+                balanceProjectionStore.rebuildBalanceFromLedger(userId, accId, curr)
+            }
+
+            movementDao.insertOrUpdateReceipt(
+                LocalCommandReceiptEntity(
+                    contractVersion = 1,
+                    userId = userId,
+                    idempotencyKey = command.idempotencyKey,
+                    requestHash = requestHash,
+                    transactionId = txEntity.id,
+                    status = "APPLIED",
+                    responsePayload = null,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            )
+
+            val outboxPayload = MovementOutboxPayloadFactory.buildRevise(
+                idempotencyKey = command.idempotencyKey,
+                transactionId = txEntity.id,
+                expectedRevision = command.expectedRevision,
+                dependsOnCommandId = command.dependsOnCommandId,
+                reason = command.reason,
+                requestHash = requestHash,
+                payload = plan.payload,
+            )
+            movementDao.insertOutbox(
+                MovementOutboxEntity(
+                    contractVersion = 1,
+                    id = UUID.randomUUID().toString(),
+                    userId = userId,
+                    idempotencyKey = command.idempotencyKey,
+                    aggregateId = txEntity.id,
+                    payload = outboxPayload,
+                    state = "PENDING",
+                    attemptCount = 0,
+                    nextAttemptAt = null,
+                    leaseUntil = null,
+                    lastErrorCode = null,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            )
+
+            val newHead = buildRevisionHead(updatedEntity, hasPendingOutbox = true)
+            MovementMutationResult.Success(head = newHead, isDuplicate = false)
+        }
+    }
+
+    suspend fun commitVoidAtomic(
+        userId: String,
+        command: MovementRevisionCommand.Void,
+        requestHash: String,
+    ): MovementMutationResult {
+        return database.withTransaction {
+            val existingReceipt = movementDao.getReceipt(userId, command.idempotencyKey)
+            if (existingReceipt != null) {
+                if (existingReceipt.requestHash == requestHash && existingReceipt.transactionId != null) {
+                    val head = getRevisionHead(userId, existingReceipt.transactionId)
+                    if (head != null) {
+                        return@withTransaction MovementMutationResult.Success(head, isDuplicate = true)
+                    }
+                }
+                return@withTransaction MovementMutationResult.Conflict(
+                    current = getRevisionHead(userId, command.transactionId),
+                    code = "IDEMPOTENCY_CONFLICT",
+                )
+            }
+
+            val txEntity = movementDao.getTransactionById(userId, command.transactionId)
+                ?: return@withTransaction MovementMutationResult.Rejected("NOT_AUTHORIZED")
+
+            val pendingOutbox = movementDao.getPendingOutboxForTransaction(userId, txEntity.id)
+            val currentHead = buildRevisionHead(txEntity, hasPendingOutbox = pendingOutbox.isNotEmpty())
+
+            if (command.expectedRevision != currentHead.commandBaseRevision) {
+                return@withTransaction MovementMutationResult.Conflict(
+                    current = currentHead,
+                    code = "REVISION_CONFLICT",
+                )
+            }
+
+            val hasSpecializedRelations = txEntity.cardId != null ||
+                txEntity.installmentCount != null ||
+                !txEntity.legacyKind.isNullOrBlank()
+            val isStandardKind = txEntity.operationKind.equals("STANDARD", ignoreCase = true)
+            val isLegacyStandard = txEntity.operationKind == null && !hasSpecializedRelations
+            val context = MovementMaintenanceContext(
+                hasSpecializedRelations = hasSpecializedRelations,
+                legacyStandardVerified = isLegacyStandard,
+            )
+
+            val references = collectReferences(
+                userId = userId,
+                oldSourceAccountId = txEntity.sourceAccountId,
+                oldDestinationAccountId = txEntity.destinationAccountId,
+                oldCategoryId = txEntity.categoryId,
+                oldMerchantId = txEntity.merchantId,
+                newPayload = currentHead.payload,
+            )
+
+            val existingEntries = movementDao.getLedgerEntriesForTransaction(userId, txEntity.id)
+            val appliedEffects = existingEntries.map { entry ->
+                MovementFinancialEffect(
+                    accountId = entry.accountId,
+                    role = LedgerRole.valueOf(entry.role),
+                    signedAmountMinor = entry.signedAmountMinor,
+                    currency = entry.currencyCode,
+                )
+            }
+
+            val planResult = revisionPlanner.plan(
+                owner = userId,
+                head = currentHead,
+                command = command,
+                context = context,
+                references = references,
+                appliedEffects = appliedEffects,
+            )
+            val plan = when (planResult) {
+                is MovementRevisionPlanningResult.Ready -> planResult.plan
+                is MovementRevisionPlanningResult.AlreadyVoided -> {
+                    return@withTransaction MovementMutationResult.Success(currentHead, isDuplicate = true)
+                }
+                is MovementRevisionPlanningResult.Rejected -> return@withTransaction MovementMutationResult.Rejected(planResult.code)
+            }
+
+            val now = System.currentTimeMillis()
+            val revisionId = UUID.randomUUID().toString()
+            val previousSnapshot = MovementRevisionSnapshotCodec.encode(txEntity)
+
+            val updatedEntity = txEntity.copy(
+                status = MovementFinancialState.VOIDED.name,
+                revision = plan.proposedRevision,
+                currentRevisionId = revisionId,
+                syncStatus = "PENDING",
+                updatedAt = now,
+            )
+
+            movementDao.insertRevision(
+                TransactionRevisionEntity(
+                    userId = userId,
+                    revisionId = revisionId,
+                    transactionId = txEntity.id,
+                    commandId = command.idempotencyKey,
+                    commandType = "VOID",
+                    baseRevision = command.expectedRevision,
+                    localRevision = plan.proposedRevision,
+                    previousPayload = previousSnapshot,
+                    newPayload = MovementRevisionSnapshotCodec.encode(updatedEntity),
+                    changeReason = command.reason,
+                    provenance = "LOCAL",
+                    createdAt = now,
+                )
+            )
+
+            for (effect in plan.effects) {
+                val entryId = UUID.randomUUID().toString()
+                movementDao.insertLedgerEntries(listOf(
+                    LedgerEntryEntity(
+                        id = entryId,
+                        userId = userId,
+                        transactionId = txEntity.id,
+                        accountId = effect.accountId,
+                        role = effect.role.name,
+                        signedAmountMinor = effect.signedAmountMinor,
+                        currencyCode = effect.currency,
+                        createdAt = now,
+                    )
+                ))
+                movementDao.insertLedgerEffect(
+                    MovementLedgerEffectEntity(
+                        userId = userId,
+                        commandId = command.idempotencyKey,
+                        effectOrdinal = effect.ordinal,
+                        transactionId = txEntity.id,
+                        revisionId = revisionId,
+                        ledgerEntryId = entryId,
+                        reversesCommandId = null,
+                        reversesEffectOrdinal = null,
+                    )
+                )
+                movementDao.insertLedgerAlias(
+                    MovementLedgerAliasEntity(
+                        userId = userId,
+                        physicalEntryId = entryId,
+                        commandId = command.idempotencyKey,
+                        effectOrdinal = effect.ordinal,
+                    )
+                )
+            }
+
+            movementDao.updateTransaction(updatedEntity)
+
+            val touchedAccounts = mutableSetOf<Pair<String, String>>()
+            txEntity.sourceAccountId?.let { touchedAccounts.add(it to txEntity.currencyCode) }
+            txEntity.destinationAccountId?.let { touchedAccounts.add(it to txEntity.currencyCode) }
+            for ((accId, curr) in touchedAccounts) {
+                balanceProjectionStore.rebuildBalanceFromLedger(userId, accId, curr)
+            }
+
+            movementDao.insertOrUpdateReceipt(
+                LocalCommandReceiptEntity(
+                    contractVersion = 1,
+                    userId = userId,
+                    idempotencyKey = command.idempotencyKey,
+                    requestHash = requestHash,
+                    transactionId = txEntity.id,
+                    status = "APPLIED",
+                    responsePayload = null,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            )
+
+            val outboxPayload = MovementOutboxPayloadFactory.buildVoid(
+                idempotencyKey = command.idempotencyKey,
+                transactionId = txEntity.id,
+                expectedRevision = command.expectedRevision,
+                dependsOnCommandId = command.dependsOnCommandId,
+                reason = command.reason,
+                requestHash = requestHash,
+            )
+            movementDao.insertOutbox(
+                MovementOutboxEntity(
+                    contractVersion = 1,
+                    id = UUID.randomUUID().toString(),
+                    userId = userId,
+                    idempotencyKey = command.idempotencyKey,
+                    aggregateId = txEntity.id,
+                    payload = outboxPayload,
+                    state = "PENDING",
+                    attemptCount = 0,
+                    nextAttemptAt = null,
+                    leaseUntil = null,
+                    lastErrorCode = null,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            )
+
+            val newHead = buildRevisionHead(updatedEntity, hasPendingOutbox = true)
+            MovementMutationResult.Success(head = newHead, isDuplicate = false)
+        }
+    }
+
+    suspend fun queryExpenseConsumption(
+        userId: String,
+        query: ExpenseConsumptionQuery,
+    ): ExpenseConsumptionResult {
+        val expenses = movementDao.getExpensesInPeriod(
+            userId = userId,
+            currencyCode = query.currency,
+            fromInclusive = query.fromInclusive,
+            toExclusive = query.toExclusive,
+        )
+        val filtered = if (query.categoryIds.isEmpty()) expenses else expenses.filter { it.categoryId in query.categoryIds }
+        val totalMinor = filtered.sumOf { it.amountMinor }
+        return ExpenseConsumptionResult(totalMinor, datasetVersion = 1L)
+    }
+
+    suspend fun getConflictProposals(userId: String, transactionId: String): List<MovementConflictProposalEntity> {
+        return movementDao.getConflictProposals(userId, transactionId)
+    }
+
+    suspend fun discardProposal(userId: String, proposalId: String): Boolean {
+        return database.withTransaction {
+            val proposal = movementDao.getConflictProposalById(userId, proposalId) ?: return@withTransaction false
+            if (proposal.resolution != "UNRESOLVED") return@withTransaction false
+            val now = System.currentTimeMillis()
+            movementDao.updateConflictProposalResolution(userId, proposalId, "DISCARDED", now)
+            val pendingOutbox = movementDao.getPendingOutboxForTransaction(userId, proposal.transactionId)
+                .firstOrNull { it.idempotencyKey == proposal.commandId }
+            if (pendingOutbox != null) {
+                movementDao.updateOutboxResult(userId, pendingOutbox.id, "FAILED_PERMANENT", null, "PROPOSAL_DISCARDED", now)
+            }
+            true
+        }
+    }
+
+    suspend fun redoProposal(userId: String, proposalId: String, newIdempotencyKey: String): MovementMutationResult {
+        val proposal = database.withTransaction {
+            val p = movementDao.getConflictProposalById(userId, proposalId) ?: return@withTransaction null
+            if (p.resolution != "UNRESOLVED") return@withTransaction null
+            p
+        } ?: return MovementMutationResult.Rejected("PROPOSAL_NOT_FOUND")
+
+        val txEntity = movementDao.getTransactionById(userId, proposal.transactionId)
+            ?: return MovementMutationResult.Rejected("NOT_AUTHORIZED")
+        if (txEntity.status == "VOIDED") {
+            return MovementMutationResult.Rejected("ALREADY_VOIDED_FOR_EDIT")
+        }
+
+        val proposedPayload = try {
+            val dto = kotlinx.serialization.json.Json.decodeFromString<com.kipu.app.feature.movements.data.remote.ReviseOrVoidTransactionRequestDto>(proposal.proposedSnapshot)
+            dto.revisedPayload?.let {
+                MovementRevisionPayload(
+                    type = MovementType.valueOf(it.type),
+                    operationKind = it.operationKind,
+                    amountMinor = it.amountMinor,
+                    currency = it.currencyCode,
+                    sourceAccountId = it.sourceAccountId,
+                    destinationAccountId = it.destinationAccountId,
+                    categoryId = it.categoryId,
+                    merchantId = it.merchantId,
+                    merchantProvisionalText = it.merchantProvisionalText,
+                    occurredAt = java.time.Instant.parse(it.occurredAt).toEpochMilli(),
+                    note = it.note,
+                )
+            }
+        } catch (_: Exception) { null } ?: return MovementMutationResult.Rejected("INVALID_PROPOSAL_SNAPSHOT")
+
+        val currentHead = getRevisionHead(userId, proposal.transactionId)
+            ?: return MovementMutationResult.Rejected("NOT_AUTHORIZED")
+
+        val redoCommand = MovementRevisionCommand.Revise(
+            idempotencyKey = newIdempotencyKey,
+            transactionId = proposal.transactionId,
+            expectedRevision = currentHead.commandBaseRevision,
+            payload = proposedPayload,
+            reason = "Redo proposal $proposalId",
+        )
+
+        val result = commitRevisionAtomic(
+            userId = userId,
+            command = redoCommand,
+            requestHash = com.kipu.app.feature.movements.domain.MovementRevisionRequestHasher().computeHash(redoCommand),
+        )
+
+        if (result is MovementMutationResult.Success) {
+            database.withTransaction {
+                movementDao.updateConflictProposalResolution(userId, proposalId, "RESOLVED_REDO")
+            }
+        }
+
+        return result
     }
 
     private suspend fun isPlanLockedCategory(

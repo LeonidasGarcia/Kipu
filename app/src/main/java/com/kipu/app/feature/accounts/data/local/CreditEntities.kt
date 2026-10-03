@@ -92,8 +92,11 @@ interface CreditDao {
            FROM credit_installments i
            JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
            LEFT JOIN (
-             SELECT user_id, installment_id, SUM(allocated_minor) AS allocated_minor
-             FROM credit_payment_allocations GROUP BY user_id, installment_id
+             SELECT a.user_id, a.installment_id, SUM(a.allocated_minor) AS allocated_minor
+             FROM credit_payment_allocations a
+             JOIN transactions payment ON payment.user_id=a.user_id AND payment.id=a.payment_transaction_id
+             WHERE payment.status NOT IN ('VOIDED','FAILED')
+             GROUP BY a.user_id, a.installment_id
            ) a ON a.user_id = i.user_id AND a.installment_id = i.id
            WHERE i.user_id = :userId AND t.card_id = :cardId
              AND i.deleted_at IS NULL AND i.status != 'VOIDED'
@@ -106,8 +109,11 @@ interface CreditDao {
            FROM credit_installments i
            JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
            LEFT JOIN (
-             SELECT user_id, installment_id, SUM(allocated_minor) AS allocated_minor
-             FROM credit_payment_allocations GROUP BY user_id, installment_id
+             SELECT a.user_id, a.installment_id, SUM(a.allocated_minor) AS allocated_minor
+             FROM credit_payment_allocations a
+             JOIN transactions payment ON payment.user_id=a.user_id AND payment.id=a.payment_transaction_id
+             WHERE payment.status NOT IN ('VOIDED','FAILED')
+             GROUP BY a.user_id, a.installment_id
            ) a ON a.user_id = i.user_id AND a.installment_id = i.id
            WHERE i.user_id = :userId AND t.card_id = :cardId
              AND i.deleted_at IS NULL AND i.status != 'VOIDED'
@@ -153,8 +159,11 @@ interface CreditDao {
            FROM credit_installments i
            JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
            LEFT JOIN (
-             SELECT user_id, installment_id, SUM(allocated_minor) AS allocated_minor
-             FROM credit_payment_allocations GROUP BY user_id, installment_id
+             SELECT a.user_id, a.installment_id, SUM(a.allocated_minor) AS allocated_minor
+             FROM credit_payment_allocations a
+             JOIN transactions payment ON payment.user_id=a.user_id AND payment.id=a.payment_transaction_id
+             WHERE payment.status NOT IN ('VOIDED','FAILED')
+             GROUP BY a.user_id, a.installment_id
            ) a ON a.user_id = i.user_id AND a.installment_id = i.id
            WHERE i.user_id = :userId AND t.card_id = :cardId
              AND i.deleted_at IS NULL AND i.status != 'VOIDED'
@@ -231,14 +240,11 @@ interface CreditDao {
     ): Int
 
     @androidx.room.Query(
-        """SELECT COALESCE(SUM(allocated_minor), 0) FROM credit_payment_allocations
-           WHERE user_id = :userId AND installment_id = :installmentId""",
+        """SELECT COALESCE(SUM(a.allocated_minor), 0) FROM credit_payment_allocations a
+           JOIN transactions payment ON payment.user_id=a.user_id AND payment.id=a.payment_transaction_id
+           WHERE a.user_id = :userId AND a.installment_id = :installmentId
+             AND payment.status NOT IN ('VOIDED','FAILED')""",
     )
     suspend fun getAllocatedMinorForInstallment(userId: String, installmentId: String): Long
 
-    @androidx.room.Query("DELETE FROM credit_installments WHERE user_id = :userId AND transaction_id = :transactionId")
-    suspend fun deleteInstallmentsForTransaction(userId: String, transactionId: String): Int
-
-    @androidx.room.Query("DELETE FROM credit_payment_allocations WHERE user_id = :userId AND payment_transaction_id = :transactionId")
-    suspend fun deleteAllocationsForPayment(userId: String, transactionId: String): Int
 }

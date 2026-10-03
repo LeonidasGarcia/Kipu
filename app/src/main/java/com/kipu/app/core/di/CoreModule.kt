@@ -18,6 +18,7 @@ import androidx.room.withTransaction
 object CoreModule {
     @Provides @Singleton fun database(@ApplicationContext context: Context): KipuDatabase =
         Room.databaseBuilder(context, KipuDatabase::class.java, "kipu.db")
+            .addCallback(com.kipu.app.core.database.MovementSchemaCallback())
             .addMigrations(
                 com.kipu.app.core.database.MIGRATION_1_2,
                 com.kipu.app.core.database.MIGRATION_2_3,
@@ -34,6 +35,7 @@ object CoreModule {
                 com.kipu.app.core.database.MIGRATION_13_14,
                 com.kipu.app.core.database.MIGRATION_14_15,
                 com.kipu.app.core.database.MIGRATION_15_16,
+                com.kipu.app.core.database.MIGRATION_16_17,
             )
             .build()
 
