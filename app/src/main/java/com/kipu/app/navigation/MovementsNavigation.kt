@@ -1,5 +1,6 @@
 package com.kipu.app.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -17,9 +18,9 @@ const val MOVEMENT_EDITOR_ROUTE = "movements/editor/{transactionId}"
 
 fun NavController.navigateToMovementHistory(accountId: String? = null, categoryId: String? = null, query: String? = null) {
     val params = mutableListOf<String>()
-    if (!accountId.isNullOrBlank()) params.add("accountId=$accountId")
-    if (!categoryId.isNullOrBlank()) params.add("categoryId=$categoryId")
-    if (!query.isNullOrBlank()) params.add("query=$query")
+    if (!accountId.isNullOrBlank()) params.add("accountId=${Uri.encode(accountId)}")
+    if (!categoryId.isNullOrBlank()) params.add("categoryId=${Uri.encode(categoryId)}")
+    if (!query.isNullOrBlank()) params.add("query=${Uri.encode(query)}")
     val route = if (params.isEmpty()) MOVEMENTS_HISTORY_ROUTE else "$MOVEMENTS_HISTORY_ROUTE?${params.joinToString("&")}"
     navigate(route)
 }

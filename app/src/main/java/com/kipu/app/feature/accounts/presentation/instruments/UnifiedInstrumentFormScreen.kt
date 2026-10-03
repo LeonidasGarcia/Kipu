@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +49,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Payments
@@ -79,6 +82,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,6 +96,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -183,40 +190,53 @@ fun UnifiedInstrumentFormScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val scrollState = rememberScrollState()
     val reducedMotion = rememberReducedMotionEnabled()
     val creditProducts by viewModel.creditProductCatalog.collectAsStateWithLifecycle()
     val initialDebitPreset = remember {
         CardStylePresets.forInstitution(bankChoices.first().code, CardStyleType.DEBIT).firstOrNull()
     }
 
-    var kind by remember(initialCreditCard) {
+    var kind by rememberSaveable {
         mutableStateOf(if (initialCreditCard) InstrumentKind.CREDIT_CARD else InstrumentKind.SAVINGS_DEBIT)
     }
-    var bank by remember { mutableStateOf(bankChoices.first()) }
-    var walletProvider by remember { mutableStateOf(AccountPreset.YAPE) }
-    var selectedProductName by remember(initialCreditCard) {
+    var bankCode by rememberSaveable { mutableStateOf(bankChoices.first().code) }
+    val bank = bankChoices.firstOrNull { it.code == bankCode } ?: bankChoices.first()
+    var walletProvider by rememberSaveable { mutableStateOf(AccountPreset.YAPE) }
+    var selectedProductName by rememberSaveable {
         mutableStateOf(if (initialCreditCard) null else initialDebitPreset?.productName)
     }
-    var selectedStylePresetId by remember(initialCreditCard) {
+    var selectedStylePresetId by rememberSaveable {
         mutableStateOf(if (initialCreditCard) null else initialDebitPreset?.id)
     }
-    var alias by remember(initialCreditCard) {
+    var alias by rememberSaveable {
         mutableStateOf(if (initialCreditCard) "" else "Mi Cuenta de Ahorros")
     }
-    var lastFourDigits by remember { mutableStateOf("") }
-    var network by remember { mutableStateOf(CardNetwork.VISA) }
-    var currency by remember { mutableStateOf(Currency.PEN) }
-    var balanceInput by remember { mutableStateOf("0.00") }
-    var creditLimitInput by remember { mutableStateOf("") }
-    var billingDayInput by remember { mutableStateOf("15") }
-    var dueDayInput by remember { mutableStateOf("5") }
-    var selectedIcon by remember { mutableStateOf("account_balance") }
-    var selectedColor by remember { mutableStateOf("institution") }
+    var lastFourDigits by rememberSaveable { mutableStateOf("") }
+    var network by rememberSaveable { mutableStateOf(CardNetwork.VISA) }
+    var currency by rememberSaveable { mutableStateOf(Currency.PEN) }
+    var balanceInput by rememberSaveable { mutableStateOf("0.00") }
+    var creditLimitInput by rememberSaveable { mutableStateOf("") }
+    var billingDayInput by rememberSaveable { mutableStateOf("15") }
+    var dueDayInput by rememberSaveable { mutableStateOf("5") }
+    var selectedIcon by rememberSaveable { mutableStateOf("account_balance") }
+    var selectedColor by rememberSaveable { mutableStateOf("institution") }
+    var isBankSelectorExpanded by rememberSaveable { mutableStateOf(false) }
+    var isProductTreeExpanded by rememberSaveable { mutableStateOf(false) }
+    var isPreviewExpanded by rememberSaveable { mutableStateOf(false) }
+    var isPersonalizationExpanded by rememberSaveable { mutableStateOf(false) }
+    var hasAliasBeenEdited by rememberSaveable { mutableStateOf(false) }
+
+    // Pristine & submission tracking
+    var isSubmitted by rememberSaveable { mutableStateOf(false) }
+    var amountTouched by rememberSaveable { mutableStateOf(false) }
+    var aliasTouched by rememberSaveable { mutableStateOf(false) }
+    var lastFourTouched by rememberSaveable { mutableStateOf(false) }
+    var cycleTouched by rememberSaveable { mutableStateOf(false) }
+
+    // Transient UI/async state (never restored to true across recreation)
     var isSubmitting by remember { mutableStateOf(false) }
     var accountCreatedBeforeDebitFailure by remember { mutableStateOf(false) }
-    var isBankSelectorExpanded by remember { mutableStateOf(false) }
-
-    // R9 Confirmation Sheet state
     var showSuccessSheet by remember { mutableStateOf(false) }
     var registeredCreditCard by remember { mutableStateOf<CreditCard?>(null) }
 
@@ -225,7 +245,11 @@ fun UnifiedInstrumentFormScreen(
     var cardError by remember { mutableStateOf<String?>(null) }
     var limitError by remember { mutableStateOf<String?>(null) }
     var cycleError by remember { mutableStateOf<String?>(null) }
-    var hasAliasBeenEdited by remember { mutableStateOf(false) }
+
+    val aliasBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val amountBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val lastFourBringIntoViewRequester = remember { BringIntoViewRequester() }
+    val cycleBringIntoViewRequester = remember { BringIntoViewRequester() }
 
     LaunchedEffect(Unit) { viewModel.loadCreditProductCatalog() }
     LaunchedEffect(viewModel) {
@@ -261,9 +285,15 @@ fun UnifiedInstrumentFormScreen(
         limitError = null
         cycleError = null
         isBankSelectorExpanded = false
+        isProductTreeExpanded = false
+        isSubmitted = false
+        amountTouched = false
+        aliasTouched = false
+        lastFourTouched = false
+        cycleTouched = false
         if (next == InstrumentKind.CASH) {
             selectedIcon = "payments"
-            bank = bankChoices.first()
+            bankCode = bankChoices.first().code
             lastFourDigits = ""
         } else if (next == InstrumentKind.WALLET) {
             selectedIcon = "wallet"
@@ -371,16 +401,216 @@ fun UnifiedInstrumentFormScreen(
     }
     val previewLabel = if (kind == InstrumentKind.CREDIT_CARD) "Línea de crédito" else "Saldo inicial"
 
+    fun handleSubmit() {
+        if (isSubmitting) return
+        isSubmitted = true
+        var valid = true
+        var firstInvalidRequester: BringIntoViewRequester? = null
+
+        if (alias.isBlank()) {
+            aliasError = "Escribe un alias para identificarlo."
+            valid = false
+            if (firstInvalidRequester == null) firstInvalidRequester = aliasBringIntoViewRequester
+        } else if (Card.isForbiddenSensitiveCardInput(alias)) {
+            aliasError = "No ingreses el número completo de la tarjeta ni el CVV."
+            valid = false
+            if (firstInvalidRequester == null) firstInvalidRequester = aliasBringIntoViewRequester
+        }
+
+        val parsedBalance = MoneyInputParser.parseMinorUnits(
+            if (kind == InstrumentKind.CREDIT_CARD) creditLimitInput else balanceInput
+        )
+        if (parsedBalance == null || parsedBalance < 0L) {
+            if (kind == InstrumentKind.CREDIT_CARD) limitError = "Ingresa una línea de crédito válida."
+            else balanceError = "Ingresa un saldo válido."
+            valid = false
+            if (firstInvalidRequester == null) firstInvalidRequester = amountBringIntoViewRequester
+        }
+
+        if (kind == InstrumentKind.CREDIT_CARD && lastFourDigits.length != 4) {
+            cardError = "Ingresa exactamente cuatro dígitos numéricos."
+            valid = false
+            if (firstInvalidRequester == null) firstInvalidRequester = lastFourBringIntoViewRequester
+        } else if (kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.isNotEmpty() && lastFourDigits.length != 4) {
+            cardError = "Completa los cuatro dígitos o deja el campo vacío."
+            valid = false
+            if (firstInvalidRequester == null) firstInvalidRequester = lastFourBringIntoViewRequester
+        }
+
+        val billingDay = billingDayInput.toIntOrNull()
+        val dueDay = dueDayInput.toIntOrNull()
+        if (kind == InstrumentKind.CREDIT_CARD && (billingDay !in 1..31 || dueDay !in 1..31)) {
+            cycleError = "El corte y el pago deben estar entre los días 1 y 31."
+            valid = false
+            if (firstInvalidRequester == null) firstInvalidRequester = cycleBringIntoViewRequester
+        }
+
+        if (!valid) {
+            firstInvalidRequester?.let { requester ->
+                scope.launch {
+                    kotlinx.coroutines.yield()
+                    requester.bringIntoView()
+                }
+            }
+            return
+        }
+
+        isSubmitting = true
+        val colorToken = if (selectedColor == "kipu") "custom_kipu_teal" else bank.accountPreset.defaultColorToken
+        val iconToken = selectedIcon
+        val trimmedAlias = alias.trim()
+        when (kind) {
+            InstrumentKind.SAVINGS_DEBIT -> {
+                val accountTypeToCreate = if (selectedProductName?.startsWith("Cuenta Sueldo", ignoreCase = true) == true) {
+                    AccountType.BANK
+                } else {
+                    AccountType.SAVINGS
+                }
+                viewModel.createAccount(
+                    alias = trimmedAlias,
+                    type = accountTypeToCreate,
+                    currency = currency,
+                    preset = bank.accountPreset,
+                    initialBalanceMinorUnits = requireNotNull(parsedBalance),
+                    colorToken = colorToken,
+                    iconToken = iconToken,
+                ) { account ->
+                    if (lastFourDigits.length == 4) {
+                        accountCreatedBeforeDebitFailure = true
+                        viewModel.registerDebitCard(
+                            alias = trimmedAlias,
+                            issuer = bank.name,
+                            network = network,
+                            lastFourDigits = lastFourDigits,
+                            linkedAccount = account,
+                            preset = bank.cardPreset,
+                            colorToken = colorToken,
+                            iconToken = iconToken,
+                            stylePresetId = selectedStylePreset?.id
+                                ?: CardStylePresets.forInstitution(bank.code, CardStyleType.DEBIT).firstOrNull()?.id,
+                        ) {
+                            isSubmitting = false
+                            finishInstrumentSave(
+                                "Cuenta y tarjeta de débito registradas.", onSaveSuccess, onNavigateBack, snackbarHostState, scope,
+                            )
+                        }
+                    } else {
+                        isSubmitting = false
+                        finishInstrumentSave("Cuenta creada con éxito.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
+                    }
+                }
+            }
+            InstrumentKind.CREDIT_CARD -> {
+                viewModel.registerCreditCard(
+                    alias = trimmedAlias,
+                    issuer = bank.name,
+                    network = network,
+                    lastFourDigits = lastFourDigits,
+                    currency = currency,
+                    creditLimitMinorUnits = requireNotNull(parsedBalance),
+                    billingDay = requireNotNull(billingDay),
+                    dueDay = requireNotNull(dueDay),
+                    personalTeaBps = null,
+                    preset = bank.cardPreset,
+                    colorToken = colorToken,
+                    iconToken = iconToken,
+                    stylePresetId = selectedStylePreset?.id,
+                ) { createdCreditCard ->
+                    isSubmitting = false
+                    registeredCreditCard = createdCreditCard
+                    showSuccessSheet = true
+                }
+            }
+            InstrumentKind.WALLET, InstrumentKind.CASH -> {
+                val preset = when (kind) {
+                    InstrumentKind.WALLET -> walletProvider
+                    InstrumentKind.CASH -> AccountPreset.CASH
+                    else -> error("Unreachable instrument kind")
+                }
+                val type = if (kind == InstrumentKind.WALLET) AccountType.DIGITAL_WALLET else AccountType.CASH
+                viewModel.createAccount(
+                    alias = trimmedAlias,
+                    type = type,
+                    currency = currency,
+                    preset = preset,
+                    initialBalanceMinorUnits = requireNotNull(parsedBalance),
+                    colorToken = if (selectedColor == "kipu") "custom_kipu_teal" else preset.defaultColorToken,
+                    iconToken = iconToken,
+                ) {
+                    isSubmitting = false
+                    finishInstrumentSave(
+                        if (type == AccountType.CASH) "Cuenta de efectivo creada." else "Billetera registrada como saldo independiente.",
+                        onSaveSuccess,
+                        onNavigateBack,
+                        snackbarHostState,
+                        scope,
+                    )
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nuevo instrumento") },
+                title = { Text("Nuevo instrumento", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
             )
+        },
+        bottomBar = {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .imePadding(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                border = BorderStroke(1.dp, KipuBorderColor),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Button(
+                        onClick = ::handleSubmit,
+                        enabled = !isSubmitting,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = rememberKipuColors().primary,
+                            contentColor = rememberKipuColors().onPrimary,
+                            disabledContainerColor = KipuBorderColor,
+                            disabledContentColor = Color(0xFF94A3B8),
+                        ),
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 50.dp)
+                            .testTag("btn_save_instrument"),
+                    ) {
+                        Text(
+                            text = when {
+                                isSubmitting -> "Guardando…"
+                                kind == InstrumentKind.CREDIT_CARD -> "Guardar tarjeta de crédito"
+                                else -> "Guardar instrumento"
+                            },
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    if (!canSaveInstrument && isSubmitted) {
+                        Text(
+                            text = "Revisa los campos destacados antes de guardar.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         modifier = modifier,
@@ -389,40 +619,10 @@ fun UnifiedInstrumentFormScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(insets)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Live Preview with responsive motion
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize(
-                        animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
-                    ),
-            ) {
-                InstrumentCardPreview(
-                    title = previewTitle,
-                    instrumentType = kind.label,
-                    subtitle = selectedProductName ?: bank.name.takeIf { kind == InstrumentKind.SAVINGS_DEBIT || kind == InstrumentKind.CREDIT_CARD }
-                        ?: if (kind == InstrumentKind.WALLET) walletProvider.defaultName else "Kipu · Andean Modernist",
-                    lastFourDigits = lastFourDigits,
-                    network = when (kind) {
-                        InstrumentKind.SAVINGS_DEBIT, InstrumentKind.CREDIT_CARD -> cardNetworkLabel.takeIf {
-                            selectedProductName != null || lastFourDigits.length == 4
-                        }
-                        else -> null
-                    },
-                    balanceLabel = previewLabel,
-                    amount = previewAmount,
-                    backgroundColor = cardBackground,
-                    foregroundColor = cardForeground,
-                    stylePreset = previewStylePreset,
-                    showCardHardware = kind == InstrumentKind.CREDIT_CARD ||
-                        kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.length == 4,
-                )
-            }
-
             // R8/R9 segmented selector. Other liquid sources stay available below.
             Text(
                 text = "Cuenta o tarjeta",
@@ -490,7 +690,7 @@ fun UnifiedInstrumentFormScreen(
                             borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
                             selectedBorderColor = KipuTealPrimary,
                         ),
-                        modifier = Modifier.heightIn(min = 44.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
                     )
                 }
             }
@@ -549,71 +749,120 @@ fun UnifiedInstrumentFormScreen(
                                 isBankSelectorExpanded = isBankSelectorExpanded,
                                 onToggleBankSelector = { isBankSelectorExpanded = !isBankSelectorExpanded },
                                 onSelectBank = { option ->
-                                    bank = option
+                                    bankCode = option.code
                                     selectedProductName = null
                                     selectedStylePresetId = null
                                     network = CardNetwork.VISA
                                     if (!hasAliasBeenEdited) alias = "Cuenta ${option.name}"
                                     isBankSelectorExpanded = false
+                                    isProductTreeExpanded = false
                                 },
                                 countLabel = "4 opciones disponibles",
                                 headerTitle = "BANCO Y PRODUCTO ASOCIADO",
                                 reducedMotion = reducedMotion,
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .animateContentSize(
-                                            animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
-                                        ),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    branchItems.forEachIndexed { index, (title, subtitle, badge) ->
-                                        val isSelected = selectedProductName == title
-                                        TreeBranchItem(
-                                            isFirst = index == 0,
-                                            isLast = index == branchItems.size - 1,
-                                            isSelected = isSelected,
+                                if (selectedProductName != null && !isProductTreeExpanded) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = rememberKipuColors().selectedSurface,
+                                        border = BorderStroke(1.5.dp, KipuTealPrimary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { isProductTreeExpanded = true }
+                                            .padding(start = 28.dp),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
                                         ) {
-                                            BranchProductCard(
-                                                title = title,
-                                                subtitle = subtitle,
-                                                badgeText = badge,
-                                                isBadgePrimary = index == 0,
-                                                isSelected = isSelected,
-                                                onClick = {
-                                                    if (index == 3) {
-                                                        setKind(InstrumentKind.WALLET)
-                                                        walletProvider = AccountPreset.YAPE
-                                                        if (!hasAliasBeenEdited) alias = "Billetera Yape"
-                                                    } else if (isSelected) {
-                                                        selectedProductName = null
-                                                        selectedStylePresetId = null
-                                                        network = CardNetwork.VISA
-                                                        if (!hasAliasBeenEdited) alias = "Cuenta ${bank.name}"
-                                                    } else {
-                                                        selectedProductName = title
-                                                        if (index == 0) {
-                                                            selectedStylePresetId = debitPreset?.id
-                                                            network = debitPreset?.network?.toCardNetwork() ?: CardNetwork.VISA
-                                                            if (!hasAliasBeenEdited) alias = "Cuenta ${bank.name}"
-                                                        } else {
-                                                            selectedStylePresetId = debitPreset?.id
-                                                            if (!hasAliasBeenEdited) alias = title
-                                                        }
-                                                    }
-                                                },
-                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Producto seleccionado",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = KipuTealPrimary,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                )
+                                                Text(
+                                                    text = selectedProductName.orEmpty(),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = KipuInkTitle,
+                                                )
+                                            }
+                                            TextButton(onClick = { isProductTreeExpanded = true }) {
+                                                Text("Cambiar", color = KipuTealPrimary, fontWeight = FontWeight.SemiBold)
+                                            }
                                         }
                                     }
-                                    DashedTreeAction(
-                                        label = "+ Agregar mi propia cuenta personalizada",
-                                        onClick = {
-                                            selectedProductName = null
-                                            selectedStylePresetId = null
-                                            if (!hasAliasBeenEdited) alias = "Mi cuenta personalizada"
-                                        },
-                                    )
+                                } else {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .animateContentSize(
+                                                animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+                                            ),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        branchItems.forEachIndexed { index, (title, subtitle, badge) ->
+                                            val isSelected = selectedProductName == title
+                                            TreeBranchItem(
+                                                isFirst = index == 0,
+                                                isLast = index == branchItems.size - 1,
+                                                isSelected = isSelected,
+                                            ) {
+                                                BranchProductCard(
+                                                    title = title,
+                                                    subtitle = subtitle,
+                                                    badgeText = badge,
+                                                    isBadgePrimary = index == 0,
+                                                    isSelected = isSelected,
+                                                    onClick = {
+                                                        if (index == 3) {
+                                                            setKind(InstrumentKind.WALLET)
+                                                            walletProvider = AccountPreset.YAPE
+                                                            if (!hasAliasBeenEdited) alias = "Billetera Yape"
+                                                        } else if (isSelected) {
+                                                            selectedProductName = null
+                                                            selectedStylePresetId = null
+                                                            network = CardNetwork.VISA
+                                                            if (!hasAliasBeenEdited) alias = "Cuenta ${bank.name}"
+                                                        } else {
+                                                            selectedProductName = title
+                                                            isProductTreeExpanded = false
+                                                            if (index == 0) {
+                                                                selectedStylePresetId = debitPreset?.id
+                                                                network = debitPreset?.network?.toCardNetwork() ?: CardNetwork.VISA
+                                                                if (!hasAliasBeenEdited) alias = "Cuenta ${bank.name}"
+                                                            } else {
+                                                                selectedStylePresetId = debitPreset?.id
+                                                                if (!hasAliasBeenEdited) alias = title
+                                                            }
+                                                        }
+                                                    },
+                                                )
+                                            }
+                                        }
+                                        DashedTreeAction(
+                                            label = "+ Agregar mi propia cuenta personalizada",
+                                            onClick = {
+                                                selectedProductName = null
+                                                selectedStylePresetId = null
+                                                isProductTreeExpanded = false
+                                                if (!hasAliasBeenEdited) alias = "Mi cuenta personalizada"
+                                            },
+                                        )
+                                        if (selectedProductName != null) {
+                                            TextButton(
+                                                onClick = { isProductTreeExpanded = false },
+                                                modifier = Modifier.align(Alignment.End),
+                                            ) {
+                                                Text("Plegar opciones", color = KipuTealPrimary, style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -626,53 +875,102 @@ fun UnifiedInstrumentFormScreen(
                                 isBankSelectorExpanded = isBankSelectorExpanded,
                                 onToggleBankSelector = { isBankSelectorExpanded = !isBankSelectorExpanded },
                                 onSelectBank = { option ->
-                                    bank = option
+                                    bankCode = option.code
                                     selectedProductName = null
                                     selectedStylePresetId = null
                                     network = CardNetwork.VISA
                                     if (!hasAliasBeenEdited) alias = "Tarjeta ${option.name}"
                                     isBankSelectorExpanded = false
+                                    isProductTreeExpanded = false
                                 },
                                 countLabel = "${productsForBank.size} disponibles",
                                 headerTitle = "BANCO O ENTIDAD FINANCIERA",
                                 reducedMotion = reducedMotion,
                             ) {
-                                if (productsForBank.isEmpty()) {
-                                    Text(
-                                        text = "No hay productos verificados para esta entidad. Puedes registrar la tarjeta con el estilo genérico.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = KipuTextMuted,
-                                        modifier = Modifier.padding(start = 28.dp),
-                                    )
-                                } else {
-                                    CreditProductFamilyTree(
-                                        products = productsForBank,
-                                        selectedProductName = selectedProductName,
-                                        reducedMotion = reducedMotion,
-                                        onSelect = { product ->
-                                            if (selectedProductName == product.name) {
-                                                selectedProductName = null
-                                                selectedStylePresetId = null
-                                                network = CardNetwork.VISA
-                                                if (!hasAliasBeenEdited) alias = "Tarjeta ${bank.name}"
-                                            } else {
-                                                selectedProductName = product.name
-                                                selectedStylePresetId = product.stylePreset?.id
-                                                network = product.network
-                                                if (!hasAliasBeenEdited) alias = product.name
+                                if (selectedProductName != null && !isProductTreeExpanded) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = rememberKipuColors().selectedSurface,
+                                        border = BorderStroke(1.5.dp, KipuTealPrimary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { isProductTreeExpanded = true }
+                                            .padding(start = 28.dp),
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Tarjeta seleccionada",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = KipuTealPrimary,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                )
+                                                Text(
+                                                    text = selectedProductName.orEmpty(),
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = KipuInkTitle,
+                                                )
                                             }
+                                            TextButton(onClick = { isProductTreeExpanded = true }) {
+                                                Text("Cambiar", color = KipuTealPrimary, fontWeight = FontWeight.SemiBold)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    if (productsForBank.isEmpty()) {
+                                        Text(
+                                            text = "No hay productos verificados para esta entidad. Puedes registrar la tarjeta con el estilo genérico.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = KipuTextMuted,
+                                            modifier = Modifier.padding(start = 28.dp),
+                                        )
+                                    } else {
+                                        CreditProductFamilyTree(
+                                            products = productsForBank,
+                                            selectedProductName = selectedProductName,
+                                            reducedMotion = reducedMotion,
+                                            onSelect = { product ->
+                                                if (selectedProductName == product.name) {
+                                                    selectedProductName = null
+                                                    selectedStylePresetId = null
+                                                    network = CardNetwork.VISA
+                                                    if (!hasAliasBeenEdited) alias = "Tarjeta ${bank.name}"
+                                                } else {
+                                                    selectedProductName = product.name
+                                                    selectedStylePresetId = product.stylePreset?.id
+                                                    network = product.network
+                                                    isProductTreeExpanded = false
+                                                    if (!hasAliasBeenEdited) alias = product.name
+                                                }
+                                            },
+                                        )
+                                    }
+                                    DashedTreeAction(
+                                        label = "+ Agregar mi propia tarjeta / producto personalizado",
+                                        onClick = {
+                                            selectedProductName = null
+                                            selectedStylePresetId = null
+                                            network = CardNetwork.VISA
+                                            isProductTreeExpanded = false
+                                            if (!hasAliasBeenEdited) alias = "Mi tarjeta personalizada"
                                         },
                                     )
+                                    if (selectedProductName != null) {
+                                        TextButton(
+                                            onClick = { isProductTreeExpanded = false },
+                                            modifier = Modifier.align(Alignment.End),
+                                        ) {
+                                            Text("Plegar opciones", color = KipuTealPrimary, style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
                                 }
-                                DashedTreeAction(
-                                    label = "+ Agregar mi propia tarjeta / producto personalizado",
-                                    onClick = {
-                                        selectedProductName = null
-                                        selectedStylePresetId = null
-                                        network = CardNetwork.VISA
-                                        if (!hasAliasBeenEdited) alias = "Mi tarjeta personalizada"
-                                    },
-                                )
                             }
 
                             if (selectedProduct?.reference != null) {
@@ -709,7 +1007,7 @@ fun UnifiedInstrumentFormScreen(
                                             borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
                                             selectedBorderColor = KipuTealPrimary,
                                         ),
-                                        modifier = Modifier.heightIn(min = 44.dp),
+                                        modifier = Modifier.heightIn(min = 48.dp),
                                     )
                                 }
                             }
@@ -724,21 +1022,33 @@ fun UnifiedInstrumentFormScreen(
             }
 
             // Alias Input
+            val aliasHasError = (isSubmitted || aliasTouched) && (
+                aliasError != null || alias.isBlank() || Card.isForbiddenSensitiveCardInput(alias)
+            )
             OutlinedTextField(
                 value = alias,
-                onValueChange = { value -> if (value.length <= 80) { alias = value; hasAliasBeenEdited = true; aliasError = null } },
+                onValueChange = { value ->
+                    if (value.length <= 80) {
+                        alias = value
+                        hasAliasBeenEdited = true
+                        aliasTouched = true
+                        aliasError = null
+                    }
+                },
                 label = { Text("Alias") },
                 placeholder = { Text(if (kind == InstrumentKind.CREDIT_CARD) "Ej. Tarjeta BCP Oro" else "Ej. Sueldo BCP") },
-                isError = aliasError != null || alias.isNotBlank() && Card.isForbiddenSensitiveCardInput(alias),
-                supportingText = aliasError?.let { message -> { Text(message) } }
-                    ?: when {
-                        alias.isBlank() -> ({ Text("Campo obligatorio") })
-                        Card.isForbiddenSensitiveCardInput(alias) -> ({ Text("No ingreses el número completo de la tarjeta ni el CVV.") })
-                        else -> null
-                    },
+                isError = aliasHasError,
+                supportingText = when {
+                    (isSubmitted || aliasTouched) && aliasError != null -> ({ Text(aliasError!!) })
+                    (isSubmitted || aliasTouched) && alias.isBlank() -> ({ Text("Campo obligatorio") })
+                    (isSubmitted || aliasTouched) && Card.isForbiddenSensitiveCardInput(alias) -> ({ Text("No ingreses el número completo de la tarjeta ni el CVV.") })
+                    else -> ({ Text("Nombre descriptivo para reconocer tu instrumento.") })
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(aliasBringIntoViewRequester),
             )
 
             // Balance or Credit Limit
@@ -748,22 +1058,42 @@ fun UnifiedInstrumentFormScreen(
                 fontWeight = FontWeight.SemiBold,
                 color = KipuInkTitle,
             )
+            val amountHasError = (isSubmitted || amountTouched) && (
+                (if (kind == InstrumentKind.CREDIT_CARD) limitError else balanceError) != null ||
+                    parsedAmountForValidation == null ||
+                    parsedAmountForValidation < 0L
+            )
             OutlinedTextField(
                 value = if (kind == InstrumentKind.CREDIT_CARD) creditLimitInput else balanceInput,
                 onValueChange = { value ->
                     val safe = value.filter { it.isDigit() || it == '.' || it == ',' }.replace(',', '.').take(14)
+                    amountTouched = true
                     if (kind == InstrumentKind.CREDIT_CARD) { creditLimitInput = safe; limitError = null }
                     else { balanceInput = safe; balanceError = null }
                 },
                 label = { Text("Importe en ${currency.name}") },
                 prefix = { Text(if (currency == Currency.PEN) "S/ " else "$ ") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = (if (kind == InstrumentKind.CREDIT_CARD) limitError else balanceError) != null || parsedAmountForValidation == null,
-                supportingText = (if (kind == InstrumentKind.CREDIT_CARD) limitError else balanceError)?.let { message -> { Text(message) } }
-                    ?: if (parsedAmountForValidation == null) ({ Text("Ingresa un importe válido con hasta dos decimales.") }) else null,
+                isError = amountHasError,
+                supportingText = when {
+                    (isSubmitted || amountTouched) && (if (kind == InstrumentKind.CREDIT_CARD) limitError else balanceError) != null -> {
+                        { Text((if (kind == InstrumentKind.CREDIT_CARD) limitError else balanceError)!!) }
+                    }
+                    (isSubmitted || amountTouched) && (parsedAmountForValidation == null || parsedAmountForValidation < 0L) -> {
+                        { Text("Ingresa un importe válido con hasta dos decimales.") }
+                    }
+                    kind == InstrumentKind.CREDIT_CARD -> {
+                        { Text("Línea asignada en tu contrato de tarjeta.") }
+                    }
+                    else -> {
+                        { Text("Saldo disponible al registrar la cuenta.") }
+                    }
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(amountBringIntoViewRequester),
             )
 
             // Currency Chips
@@ -788,7 +1118,7 @@ fun UnifiedInstrumentFormScreen(
                                 borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
                                 selectedBorderColor = KipuTealPrimary,
                             ),
-                            modifier = Modifier.heightIn(min = 44.dp),
+                            modifier = Modifier.heightIn(min = 48.dp),
                         )
                     }
                 }
@@ -822,115 +1152,96 @@ fun UnifiedInstrumentFormScreen(
                                 borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
                                 selectedBorderColor = KipuTealPrimary,
                             ),
-                            modifier = Modifier.heightIn(min = 44.dp),
+                            modifier = Modifier.heightIn(min = 48.dp),
                         )
                     }
                 }
 
+                val cardHasError = (isSubmitted || lastFourTouched) && (
+                    cardError != null ||
+                        (kind == InstrumentKind.CREDIT_CARD && lastFourDigits.length != 4) ||
+                        (kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.isNotEmpty() && lastFourDigits.length != 4)
+                )
                 OutlinedTextField(
                     value = lastFourDigits,
                     onValueChange = { value ->
                         lastFourDigits = value.filter(Char::isDigit).take(4)
+                        lastFourTouched = true
                         cardError = null
                     },
                     label = { Text("Últimos 4 dígitos del plástico") },
                     placeholder = { Text("7548") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = cardError != null,
-                    supportingText = cardError?.let { message -> { Text(message) } }
-                        ?: {
-                            Text(
-                                when {
-                                    kind == InstrumentKind.CREDIT_CARD && lastFourDigits.length != 4 -> "Ingresa exactamente cuatro dígitos numéricos."
-                                    kind == InstrumentKind.SAVINGS_DEBIT -> "Opcional: registra el plástico vinculado a esta cuenta."
-                                    else -> "Solo los 4 dígitos finales. Nunca solicitamos tu número completo, vencimiento ni CVV."
-                                },
-                            )
-                        },
+                    isError = cardHasError,
+                    supportingText = when {
+                        (isSubmitted || lastFourTouched) && cardError != null -> ({ Text(cardError!!) })
+                        (isSubmitted || lastFourTouched) && kind == InstrumentKind.CREDIT_CARD && lastFourDigits.length != 4 -> ({
+                            Text("Ingresa exactamente cuatro dígitos numéricos.")
+                        })
+                        (isSubmitted || lastFourTouched) && kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.isNotEmpty() && lastFourDigits.length != 4 -> ({
+                            Text("Completa los cuatro dígitos o deja el campo vacío.")
+                        })
+                        kind == InstrumentKind.SAVINGS_DEBIT -> ({
+                            Text("Opcional: registra el plástico vinculado a esta cuenta.")
+                        })
+                        else -> ({
+                            Text("Solo los 4 dígitos finales. Nunca solicitamos tu número completo, vencimiento ni CVV.")
+                        })
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bringIntoViewRequester(lastFourBringIntoViewRequester),
                 )
             }
 
             // Billing and Due Days for Credit Card
             if (kind == InstrumentKind.CREDIT_CARD) {
                 Text("Ciclo de facturación", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = KipuInkTitle)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val billingHasError = (isSubmitted || cycleTouched) && (cycleError != null || billingDayInput.toIntOrNull() !in 1..31)
+                val dueHasError = (isSubmitted || cycleTouched) && (cycleError != null || dueDayInput.toIntOrNull() !in 1..31)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bringIntoViewRequester(cycleBringIntoViewRequester),
+                ) {
                     OutlinedTextField(
                         value = billingDayInput,
-                        onValueChange = { billingDayInput = it.filter(Char::isDigit).take(2); cycleError = null },
+                        onValueChange = {
+                            billingDayInput = it.filter(Char::isDigit).take(2)
+                            cycleTouched = true
+                            cycleError = null
+                        },
                         label = { Text("Día de corte") },
                         placeholder = { Text("15") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        isError = cycleError != null || billingDayInput.toIntOrNull() !in 1..31,
-                        supportingText = if (billingDayInput.toIntOrNull() !in 1..31) ({ Text("Día entre 1 y 31") }) else null,
+                        isError = billingHasError,
+                        supportingText = if (billingHasError) ({ Text("Día entre 1 y 31") }) else null,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = dueDayInput,
-                        onValueChange = { dueDayInput = it.filter(Char::isDigit).take(2); cycleError = null },
+                        onValueChange = {
+                            dueDayInput = it.filter(Char::isDigit).take(2)
+                            cycleTouched = true
+                            cycleError = null
+                        },
                         label = { Text("Día de pago") },
                         placeholder = { Text("05") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
-                        isError = cycleError != null || dueDayInput.toIntOrNull() !in 1..31,
-                        supportingText = if (dueDayInput.toIntOrNull() !in 1..31) ({ Text("Día entre 1 y 31") }) else null,
+                        isError = dueHasError,
+                        supportingText = if (dueHasError) ({ Text("Día entre 1 y 31") }) else null,
                         modifier = Modifier.weight(1f),
                     )
                 }
-                cycleError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-
-            // Personalization
-            Text("Personalización", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = KipuInkTitle)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("institution" to "Banco", "kipu" to "Kipu teal").forEach { (key, label) ->
-                    val isSelected = selectedColor == key
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { selectedColor = key },
-                        label = { Text(label, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = rememberKipuColors().primary,
-                            selectedLabelColor = rememberKipuColors().onPrimary,
-                            containerColor = KipuSurfaceVariantNeutral,
-                            labelColor = KipuInkTitle,
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
-                            selectedBorderColor = KipuTealPrimary,
-                        ),
-                        modifier = Modifier.heightIn(min = 44.dp),
-                    )
-                }
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("account_balance", "credit_card", "wallet", "payments").forEach { icon ->
-                    val isSelected = selectedIcon == icon
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { selectedIcon = icon },
-                        label = { Text(iconLabel(icon)) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = rememberKipuColors().primary,
-                            selectedLabelColor = rememberKipuColors().onPrimary,
-                            containerColor = KipuSurfaceVariantNeutral,
-                            labelColor = KipuInkTitle,
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
-                            selectedBorderColor = KipuTealPrimary,
-                        ),
-                        modifier = Modifier.heightIn(min = 44.dp),
-                    )
+                if ((isSubmitted || cycleTouched) && cycleError != null) {
+                    Text(cycleError!!, color = MaterialTheme.colorScheme.error)
                 }
             }
 
@@ -957,159 +1268,188 @@ fun UnifiedInstrumentFormScreen(
                 }
             }
 
-            // Submit Button
-            Button(
-                onClick = {
-                    val parsedBalance = MoneyInputParser.parseMinorUnits(if (kind == InstrumentKind.CREDIT_CARD) creditLimitInput else balanceInput)
-                    var valid = true
-                    if (alias.isBlank()) { aliasError = "Escribe un alias para identificarlo."; valid = false }
-                    else if (Card.isForbiddenSensitiveCardInput(alias)) {
-                        aliasError = "No ingreses el número completo de la tarjeta ni el CVV."
-                        valid = false
+            // Personalización (plegable)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = KipuSurfaceVariantNeutral,
+                border = BorderStroke(1.dp, KipuBorderColor),
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isPersonalizationExpanded = !isPersonalizationExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Personalización",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = KipuInkTitle,
+                            )
+                            Text(
+                                text = "${if (selectedColor == "kipu") "Kipu teal" else "Color del banco"} · ${iconLabel(selectedIcon)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KipuTextMuted,
+                            )
+                        }
+                        IconButton(
+                            onClick = { isPersonalizationExpanded = !isPersonalizationExpanded },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (isPersonalizationExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isPersonalizationExpanded) "Plegar personalización" else "Desplegar personalización",
+                                tint = KipuInkTitle,
+                            )
+                        }
                     }
-                    if (parsedBalance == null || parsedBalance < 0L) {
-                        if (kind == InstrumentKind.CREDIT_CARD) limitError = "Ingresa una línea de crédito válida."
-                        else balanceError = "Ingresa un saldo válido."
-                        valid = false
-                    }
-                    if (kind == InstrumentKind.CREDIT_CARD && lastFourDigits.length != 4) {
-                        cardError = "Ingresa exactamente cuatro dígitos numéricos."
-                        valid = false
-                    } else if (kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.isNotEmpty() && lastFourDigits.length != 4) {
-                        cardError = "Completa los cuatro dígitos o deja el campo vacío."
-                        valid = false
-                    }
-                    val billingDay = billingDayInput.toIntOrNull()
-                    val dueDay = dueDayInput.toIntOrNull()
-                    if (kind == InstrumentKind.CREDIT_CARD && (billingDay !in 1..31 || dueDay !in 1..31)) {
-                        cycleError = "El corte y el pago deben estar entre los días 1 y 31."
-                        valid = false
-                    }
-                    if (!valid) return@Button
-                    isSubmitting = true
-                    val colorToken = if (selectedColor == "kipu") "custom_kipu_teal" else bank.accountPreset.defaultColorToken
-                    val iconToken = selectedIcon
-                    val trimmedAlias = alias.trim()
-                    when (kind) {
-                        InstrumentKind.SAVINGS_DEBIT -> {
-                            val accountTypeToCreate = if (selectedProductName?.startsWith("Cuenta Sueldo", ignoreCase = true) == true) {
-                                AccountType.BANK
-                            } else {
-                                AccountType.SAVINGS
-                            }
-                            viewModel.createAccount(
-                                alias = trimmedAlias,
-                                type = accountTypeToCreate,
-                                currency = currency,
-                                preset = bank.accountPreset,
-                                initialBalanceMinorUnits = requireNotNull(parsedBalance),
-                                colorToken = colorToken,
-                                iconToken = iconToken,
-                            ) { account ->
-                                if (lastFourDigits.length == 4) {
-                                    accountCreatedBeforeDebitFailure = true
-                                    viewModel.registerDebitCard(
-                                        alias = trimmedAlias,
-                                        issuer = bank.name,
-                                        network = network,
-                                        lastFourDigits = lastFourDigits,
-                                        linkedAccount = account,
-                                        preset = bank.cardPreset,
-                                        colorToken = colorToken,
-                                        iconToken = iconToken,
-                                        stylePresetId = selectedStylePreset?.id
-                                            ?: CardStylePresets.forInstitution(bank.code, CardStyleType.DEBIT).firstOrNull()?.id,
-                                    ) {
-                                        isSubmitting = false
-                                        finishInstrumentSave(
-                                            "Cuenta y tarjeta de débito registradas.", onSaveSuccess, onNavigateBack, snackbarHostState, scope,
-                                        )
-                                    }
-                                } else {
-                                    isSubmitting = false
-                                    finishInstrumentSave("Cuenta creada con éxito.", onSaveSuccess, onNavigateBack, snackbarHostState, scope)
-                                }
+
+                    if (isPersonalizationExpanded) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "Color",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = KipuInkTitle,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("institution" to "Banco", "kipu" to "Kipu teal").forEach { (key, label) ->
+                                val isSelected = selectedColor == key
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedColor = key },
+                                    label = { Text(label, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = rememberKipuColors().primary,
+                                        selectedLabelColor = rememberKipuColors().onPrimary,
+                                        containerColor = KipuSurfaceVariantNeutral,
+                                        labelColor = KipuInkTitle,
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = isSelected,
+                                        borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                                        selectedBorderColor = KipuTealPrimary,
+                                    ),
+                                    modifier = Modifier.heightIn(min = 48.dp),
+                                )
                             }
                         }
-                        InstrumentKind.CREDIT_CARD -> {
-                            viewModel.registerCreditCard(
-                                alias = trimmedAlias,
-                                issuer = bank.name,
-                                network = network,
-                                lastFourDigits = lastFourDigits,
-                                currency = currency,
-                                creditLimitMinorUnits = requireNotNull(parsedBalance),
-                                billingDay = requireNotNull(billingDay),
-                                dueDay = requireNotNull(dueDay),
-                                personalTeaBps = null,
-                                preset = bank.cardPreset,
-                                colorToken = colorToken,
-                                iconToken = iconToken,
-                                stylePresetId = selectedStylePreset?.id,
-                            ) { createdCreditCard ->
-                                isSubmitting = false
-                                registeredCreditCard = createdCreditCard
-                                showSuccessSheet = true
-                            }
-                        }
-                        InstrumentKind.WALLET, InstrumentKind.CASH -> {
-                            val preset = when (kind) {
-                                InstrumentKind.WALLET -> walletProvider
-                                InstrumentKind.CASH -> AccountPreset.CASH
-                                else -> error("Unreachable instrument kind")
-                            }
-                            val type = if (kind == InstrumentKind.WALLET) AccountType.DIGITAL_WALLET else AccountType.CASH
-                            viewModel.createAccount(
-                                alias = trimmedAlias,
-                                type = type,
-                                currency = currency,
-                                preset = preset,
-                                initialBalanceMinorUnits = requireNotNull(parsedBalance),
-                                colorToken = if (selectedColor == "kipu") "custom_kipu_teal" else preset.defaultColorToken,
-                                iconToken = iconToken,
-                            ) {
-                                isSubmitting = false
-                                finishInstrumentSave(
-                                    if (type == AccountType.CASH) "Cuenta de efectivo creada." else "Billetera registrada como saldo independiente.",
-                                    onSaveSuccess,
-                                    onNavigateBack,
-                                    snackbarHostState,
-                                    scope,
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "Icono representativo",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = KipuInkTitle,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("account_balance", "credit_card", "wallet", "payments").forEach { icon ->
+                                val isSelected = selectedIcon == icon
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedIcon = icon },
+                                    label = { Text(iconLabel(icon)) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = rememberKipuColors().primary,
+                                        selectedLabelColor = rememberKipuColors().onPrimary,
+                                        containerColor = KipuSurfaceVariantNeutral,
+                                        labelColor = KipuInkTitle,
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(
+                                        enabled = true,
+                                        selected = isSelected,
+                                        borderColor = if (isSelected) KipuTealPrimary else KipuBorderColor,
+                                        selectedBorderColor = KipuTealPrimary,
+                                    ),
+                                    modifier = Modifier.heightIn(min = 48.dp),
                                 )
                             }
                         }
                     }
-                },
-                enabled = !isSubmitting && canSaveInstrument,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = rememberKipuColors().primary,
-                    contentColor = rememberKipuColors().onPrimary,
-                    disabledContainerColor = KipuBorderColor,
-                    disabledContentColor = Color(0xFF94A3B8),
-                ),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 50.dp),
+                }
+            }
+
+            // Vista previa del instrumento (plegable)
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = KipuSurfaceVariantNeutral,
+                border = BorderStroke(1.dp, KipuBorderColor),
             ) {
-                Text(
-                    text = when {
-                        isSubmitting -> "Guardando…"
-                        kind == InstrumentKind.CREDIT_CARD -> "Guardar tarjeta de crédito"
-                        else -> "Guardar instrumento"
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isPreviewExpanded = !isPreviewExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Vista previa del instrumento",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = KipuInkTitle,
+                            )
+                            Text(
+                                text = previewTitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = KipuTextMuted,
+                            )
+                        }
+                        IconButton(
+                            onClick = { isPreviewExpanded = !isPreviewExpanded },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (isPreviewExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isPreviewExpanded) "Plegar vista previa" else "Desplegar vista previa",
+                                tint = KipuInkTitle,
+                            )
+                        }
+                    }
+
+                    if (isPreviewExpanded) {
+                        Spacer(Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateContentSize(
+                                    animationSpec = if (reducedMotion) tween(0) else tween(KipuMotionTokens.MediumMillis),
+                                ),
+                        ) {
+                            InstrumentCardPreview(
+                                title = previewTitle,
+                                instrumentType = kind.label,
+                                subtitle = selectedProductName ?: bank.name.takeIf { kind == InstrumentKind.SAVINGS_DEBIT || kind == InstrumentKind.CREDIT_CARD }
+                                    ?: if (kind == InstrumentKind.WALLET) walletProvider.defaultName else "Kipu · Andean Modernist",
+                                lastFourDigits = lastFourDigits,
+                                network = when (kind) {
+                                    InstrumentKind.SAVINGS_DEBIT, InstrumentKind.CREDIT_CARD -> cardNetworkLabel.takeIf {
+                                        selectedProductName != null || lastFourDigits.length == 4
+                                    }
+                                    else -> null
+                                },
+                                balanceLabel = previewLabel,
+                                amount = previewAmount,
+                                backgroundColor = cardBackground,
+                                foregroundColor = cardForeground,
+                                stylePreset = previewStylePreset,
+                                showCardHardware = kind == InstrumentKind.CREDIT_CARD ||
+                                    kind == InstrumentKind.SAVINGS_DEBIT && lastFourDigits.length == 4,
+                            )
+                        }
+                    }
+                }
             }
-            if (!isSubmitting && !canSaveInstrument) {
-                Text(
-                    text = "Completa los campos obligatorios para guardar.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = KipuTextMuted,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
+
+            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -1355,11 +1695,12 @@ private fun InstrumentKindSegment(
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(12.dp)
+    val colors = rememberKipuColors()
     Row(
         modifier = modifier
             .heightIn(min = 48.dp)
             .clip(shape)
-            .background(if (selected) rememberKipuColors().primary else Color.Transparent)
+            .background(if (selected) colors.primary else Color.Transparent)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .semantics {
                 contentDescription = label
@@ -1373,17 +1714,17 @@ private fun InstrumentKindSegment(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (selected) Color.White else KipuTextMuted,
+            tint = if (selected) colors.onPrimary else KipuTextMuted,
             modifier = Modifier.size(18.dp),
         )
         Spacer(Modifier.width(6.dp))
         Text(
             text = label,
-            color = if (selected) Color.White else KipuInkTitle,
+            color = if (selected) colors.onPrimary else KipuInkTitle,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+            maxLines = 2,
+            softWrap = true,
         )
     }
 }

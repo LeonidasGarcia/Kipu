@@ -17,6 +17,7 @@ import com.kipu.app.navigation.navigateToNotifications
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.feature.accounts.presentation.instruments.UnifiedInstrumentFormScreen
 import com.kipu.app.feature.accounts.presentation.instruments.RateCatalogScreen
+import com.kipu.app.feature.settings.presentation.SettingsViewModel
 
 const val ACCOUNTS_DASHBOARD_ROUTE = "accounts/dashboard"
 const val ACCOUNT_FORM_ROUTE = "accounts/create"
@@ -59,6 +60,7 @@ fun NavGraphBuilder.accountsDestinations(
 ) {
     composable(ACCOUNTS_DASHBOARD_ROUTE) { backStackEntry ->
         val viewModel: AccountsViewModel = hiltViewModel()
+        val settingsViewModel: SettingsViewModel = hiltViewModel()
         val notificationBadgeViewModel: NotificationBadgeViewModel = hiltViewModel()
         val unreadNotificationCount by notificationBadgeViewModel.unreadCount.collectAsStateWithLifecycle()
         val feedback = backStackEntry.savedStateHandle
@@ -66,15 +68,14 @@ fun NavGraphBuilder.accountsDestinations(
             .collectAsStateWithLifecycle()
         DashboardScreen(
             viewModel = viewModel,
+            onToggleMasked = { settingsViewModel.toggleHideBalances() },
             onNavigateToNewAccount = { navController.navigateToAccountForm() },
             onNavigateToNewCard = { navController.navigateToCardForm() },
-            onNavigateToMovements = { navController.navigate(MOVEMENTS_HISTORY_ROUTE) },
             onAccountClick = { accountId -> navController.navigateToAccountDetail(accountId) },
             onCardClick = { cardId -> navController.navigateToCardDetail(cardId) },
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
             onNavigateToNotifications = navController::navigateToNotifications,
             onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
-            onNavigateBack = { navController.popBackStack() },
             unreadNotificationCount = unreadNotificationCount,
             feedbackMessage = feedback.value,
             onFeedbackConsumed = { backStackEntry.savedStateHandle[ACCOUNT_DASHBOARD_FEEDBACK_KEY] = null },

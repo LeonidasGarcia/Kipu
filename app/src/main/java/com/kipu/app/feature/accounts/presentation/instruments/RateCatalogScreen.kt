@@ -287,11 +287,11 @@ fun RateCatalogScreen(
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "Verificación: ${rate.verificationStatus ?: "sin dato"} · Vigencia sin caducidad automática",
+                            "Verificación: ${humanizeVerificationStatus(rate.verificationStatus)} · Vigencia sin caducidad automática",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        rate.sourceUrl?.let { Text("Fuente: $it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline) }
+                        rate.sourceUrl?.let { Text(formatSourcesLabel(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
@@ -301,6 +301,19 @@ fun RateCatalogScreen(
             }
         }
     }
+}
+
+private fun humanizeVerificationStatus(status: String?): String = when (status?.trim()?.uppercase()) {
+    "VIGENTE_VERIFICADO" -> "Vigente y verificado"
+    "VERIFICADO" -> "Verificado"
+    "PENDIENTE", "PENDIENTE_VERIFICACION" -> "Pendiente de verificación"
+    "NO_VERIFICADO" -> "No verificado"
+    null, "" -> "Sin dato"
+    else -> status.orEmpty().replace('_', ' ').lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+private fun formatSourcesLabel(sourceUrl: String): String {
+    return "Fuente: $sourceUrl"
 }
 
 private fun formatTeaRange(minBps: Int?, maxBps: Int?): String = when {

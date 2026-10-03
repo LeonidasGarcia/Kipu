@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -76,6 +77,7 @@ data class QuickMovementUiState(
     val creditCardDebts: Map<String, Money> = emptyMap(),
     val creditCardAvailableCredits: Map<String, Money> = emptyMap(),
     val availableCategories: List<CategoryOption> = emptyList(),
+    val isLoadingCategories: Boolean = true,
     val isCreatingSubcategory: Boolean = false,
     val categoryCreationError: String? = null,
     val amountError: String? = null,
@@ -117,10 +119,20 @@ class QuickMovementViewModel @Inject constructor(
     val events = _events.receiveAsFlow()
 
     init {
-        getUserId()?.let { ownerId ->
+        val ownerId = getUserId()
+        if (ownerId != null) {
             categorySyncScheduler.scheduleSync(ownerId)
             viewModelScope.launch {
-                observeCategories(UserId(ownerId)).collect { items ->
+                observeCategories(UserId(ownerId))
+                    .catch {
+                        _uiState.update { current ->
+                            current.copy(
+                                isLoadingCategories = false,
+                                generalError = "No se pudieron cargar las categorías"
+                            )
+                        }
+                    }
+                    .collect { items ->
                     allCategoryOptions = items.filter { it.category.isActive }
                         .flatMap { root -> listOf(root to null) + root.subcategories.map { it to root } }
                         .filter { (item, _) -> item.category.isActive && !item.category.isPlanLocked }
@@ -139,14 +151,17 @@ class QuickMovementViewModel @Inject constructor(
                         val options = categoriesFor(current.type)
                         val selection = options.find { it.id == current.selectedCategoryId }
                         current.copy(
+                            isLoadingCategories = false,
                             availableCategories = options,
                             selectedCategoryId = selection?.id,
-                selectedCategoryName = selection?.displayName,
+                            selectedCategoryName = selection?.displayName,
                             selectedCategoryIcon = selection?.icon,
                         )
                     }
                 }
             }
+        } else {
+            _uiState.update { it.copy(isLoadingCategories = false) }
         }
         viewModelScope.launch {
             combine(

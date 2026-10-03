@@ -175,6 +175,9 @@
     <string name="movements_filter_reconnect">Conectar y revalidar</string>
     <string name="movements_filter_empty_title">Sin resultados para los filtros</string>
     <string name="movements_filter_empty_desc">Prueba a cambiar o limpiar los filtros seleccionados</string>
+    <string name="movements_search_empty_title">Sin resultados de búsqueda</string>
+    <string name="movements_search_empty_desc">No encontramos movimientos que coincidan con tu búsqueda</string>
+    <string name="movements_search_clear">Limpiar búsqueda</string>
 
 
     <!-- HU-53 / HU-54 / HU-56 purchase surface -->

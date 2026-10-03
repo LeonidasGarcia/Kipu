@@ -1,0 +1,130 @@
+{
+  "method": "WCAG sRGB relative luminance, (Lmax+0.05)/(Lmin+0.05); source nominal pairs, no display calibration",
+  "pairs": [
+    {
+      "pair": "Light: barra de estado blanca",
+      "foreground": "#FFFFFF",
+      "background": "#F7F9FB",
+      "ratio": 1.055,
+      "threshold": 3,
+      "passes": false,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Light: corte tarjeta",
+      "foreground": "#94A3B8",
+      "background": "#FFFFFF",
+      "ratio": 2.564,
+      "threshold": 4.5,
+      "passes": false,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Light: texto secundario KipuUiColors",
+      "foreground": "#64748B",
+      "background": "#FFFFFF",
+      "ratio": 4.759,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Dark: texto secundario KipuUiColors",
+      "foreground": "#94A3B8",
+      "background": "#131B2E",
+      "ratio": 6.692,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Dark: texto Material secundario",
+      "foreground": "#94A3B8",
+      "background": "#131B2E",
+      "ratio": 6.692,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "CTA local: blanco sobre teal",
+      "foreground": "#FFFFFF",
+      "background": "#0D6E64",
+      "ratio": 6.12,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Historial: chip seleccionado",
+      "foreground": "#A3FAEF",
+      "background": "#0F766E",
+      "ratio": 4.555,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Dark: deuda",
+      "foreground": "#FCA5A5",
+      "background": "#131B2E",
+      "ratio": 9.04,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Light: deuda",
+      "foreground": "#B91C1C",
+      "background": "#FFFFFF",
+      "ratio": 6.47,
+      "threshold": 4.5,
+      "passes": true,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Dark: surface contra background",
+      "foreground": "#131B2E",
+      "background": "#0B1220",
+      "ratio": 1.091,
+      "threshold": null,
+      "passes": null,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Dark: borde contra surface",
+      "foreground": "#334155",
+      "background": "#131B2E",
+      "ratio": 1.657,
+      "threshold": null,
+      "passes": null,
+      "kind": "source-token calculation, except screenshot status background"
+    },
+    {
+      "pair": "Dark: chip seleccionado de comercios",
+      "foreground": "#FFFFFF",
+      "background": "#80D5CB",
+      "ratio": 1.708,
+      "threshold": 4.5,
+      "passes": false,
+      "kind": "source-token calculation; selected chip visually corroborated in quick_merchant_picker.png"
+    }
+  ],
+  "light_runtime_background_samples": {
+    "(500, 60)": [
+      247,
+      249,
+      251
+    ],
+    "(10, 60)": [
+      247,
+      249,
+      251
+    ],
+    "(500, 240)": [
+      247,
+      249,
+      251
+    ]
+  }
+}

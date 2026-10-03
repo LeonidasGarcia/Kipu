@@ -74,7 +74,8 @@ fun MovementFinancialState.uiLabel(): String = when (this) {
 fun MovementSyncStatus.uiLabel(): String = when (this) {
     MovementSyncStatus.SYNCED -> "Sincronizado"
     MovementSyncStatus.MIGRATED_LOCAL -> "Histórico local"
-    MovementSyncStatus.PENDING, MovementSyncStatus.IN_FLIGHT -> "Pendiente de sincronizar"
+    MovementSyncStatus.PENDING -> "Pendiente de sincronizar"
+    MovementSyncStatus.IN_FLIGHT -> "Sincronizando"
     MovementSyncStatus.CONFLICT -> "Revisar cambios"
     MovementSyncStatus.FAILED_PERMANENT -> "Requiere revisión"
 }

@@ -12,26 +12,72 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.Money
+import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.util.Locale
 
 val LocalBalanceMasked = compositionLocalOf { false }
 
-private val AmountFormat = DecimalFormat("#,##0.00", DecimalFormatSymbols(Locale.US))
-
 fun formatMinorUnits(minorUnits: Long): String {
-    val isNegative = minorUnits < 0
-    val absVal = kotlin.math.abs(minorUnits)
-    val major = absVal / 100
-    val cents = absVal % 100
-    val formatted = AmountFormat.format(major + cents / 100.0)
-    return if (isNegative) "-$formatted" else formatted
+    val bd = BigDecimal.valueOf(minorUnits, 2)
+    val df = DecimalFormat("#,##0.00", DecimalFormatSymbols(Locale.US))
+    return df.format(bd)
 }
 
 fun Currency.symbol(): String = when (this) {
     Currency.PEN -> "S/"
     Currency.USD -> "$"
+}
+
+internal fun formatMoneyTextDisplay(
+    amount: String,
+    currencySymbol: String?,
+    isMasked: Boolean,
+): String {
+    if (isMasked) {
+        return if (currencySymbol != null) "$currencySymbol ••••••" else "••••••"
+    }
+
+    var text = amount.trim()
+    var sign = ""
+
+    if (text.startsWith("-") || text.startsWith("−")) {
+        sign = "-"
+        text = text.drop(1).trimStart()
+    } else if (text.startsWith("+")) {
+        sign = "+"
+        text = text.drop(1).trimStart()
+    }
+
+    while (text.startsWith("-") || text.startsWith("+") || text.startsWith("−")) {
+        text = text.drop(1).trimStart()
+    }
+
+    if (currencySymbol != null && text.startsWith(currencySymbol)) {
+        text = text.removePrefix(currencySymbol).trimStart()
+        if (sign.isEmpty()) {
+            if (text.startsWith("-") || text.startsWith("−")) {
+                sign = "-"
+                text = text.drop(1).trimStart()
+            } else if (text.startsWith("+")) {
+                sign = "+"
+                text = text.drop(1).trimStart()
+            }
+        }
+    }
+
+    while (text.startsWith("-") || text.startsWith("+") || text.startsWith("−")) {
+        text = text.drop(1).trimStart()
+    }
+
+    val cleanAmount = text
+
+    return if (currencySymbol != null) {
+        if (sign.isNotEmpty()) "$sign$currencySymbol $cleanAmount" else "$currencySymbol $cleanAmount"
+    } else {
+        if (sign.isNotEmpty()) "$sign$cleanAmount" else cleanAmount
+    }
 }
 
 /**
@@ -50,11 +96,7 @@ fun MoneyText(
     style: TextStyle = MaterialTheme.typography.bodyLarge,
     fontWeight: FontWeight? = null,
 ) {
-    val displayValue = if (isMasked) {
-        if (currencySymbol != null) "$currencySymbol ••••••" else "••••••"
-    } else {
-        if (currencySymbol != null) "$currencySymbol $amount" else amount
-    }
+    val displayValue = formatMoneyTextDisplay(amount, currencySymbol, isMasked)
 
     val finalStyle = if (style.fontFeatureSettings?.contains("tnum") == true) {
         style
@@ -68,7 +110,7 @@ fun MoneyText(
             contentDescription = if (isMasked) {
                 "Monto oculto"
             } else {
-                if (currencySymbol != null) "$currencySymbol $amount" else amount
+                displayValue
             }
         },
         color = color,
@@ -90,6 +132,26 @@ fun MoneyText(
         amount = formatMinorUnits(money.minorUnits),
         modifier = modifier,
         currencySymbol = money.currency.symbol(),
+        isMasked = isMasked,
+        color = color,
+        style = style,
+        fontWeight = fontWeight,
+    )
+}
+
+@Composable
+fun MoneyText(
+    minorUnits: Long,
+    modifier: Modifier = Modifier,
+    currency: Currency = Currency.PEN,
+    isMasked: Boolean = LocalBalanceMasked.current,
+    color: Color = Color.Unspecified,
+    style: TextStyle = MaterialTheme.typography.bodyLarge,
+    fontWeight: FontWeight? = null,
+) {
+    MoneyText(
+        money = Money(minorUnits = minorUnits, currency = currency),
+        modifier = modifier,
         isMasked = isMasked,
         color = color,
         style = style,

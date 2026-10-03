@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,11 +12,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import com.kipu.app.ui.component.KipuFilterChip
+import com.kipu.app.ui.component.KipuEmptyState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +34,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -82,7 +87,7 @@ import com.kipu.app.ui.component.formatMinorUnits
 import com.kipu.app.ui.theme.KipuExpense
 import com.kipu.app.ui.theme.KipuIncome
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MovementHistoryRoute(
     onNavigateToSettings: () -> Unit = {},
@@ -196,11 +201,35 @@ fun MovementHistoryRoute(
                             )
                         },
                         trailingIcon = {
-                            IconButton(onClick = { viewModel.onToggleAdvancedFilterPanel(true) },
-                                modifier = Modifier.size(48.dp).testTag("btn_open_filters")
-                                    .semantics { contentDescription = "Abrir filtros" }) {
-                                Icon(Icons.Default.FilterList, contentDescription = null,
-                                    tint = if (uiState.hasActiveAdvancedFilters) colorScheme.primary else colorScheme.onSurfaceVariant)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (uiState.searchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { viewModel.onSearchQueryChanged("") },
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .testTag("btn_clear_search")
+                                            .semantics { contentDescription = "Limpiar búsqueda" }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = null,
+                                            tint = colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                IconButton(
+                                    onClick = { viewModel.onToggleAdvancedFilterPanel(true) },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .testTag("btn_open_filters")
+                                        .semantics { contentDescription = "Abrir filtros" }
+                                ) {
+                                    Icon(
+                                        Icons.Default.FilterList,
+                                        contentDescription = null,
+                                        tint = if (uiState.hasActiveAdvancedFilters) colorScheme.primary else colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         },
                         singleLine = true,
@@ -221,74 +250,51 @@ fun MovementHistoryRoute(
                     )
 
                     // Filter Chips (Todos, Gasto, Ingreso, Transferencia)
-                    LazyRow(
+                    FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
                     ) {
-                        item {
-                            FilterChip(
-                                selected = uiState.selectedFilterType == null,
-                                onClick = { viewModel.onFilterTypeSelected(null) },
-                                label = { Text("Todos", color = if (uiState.selectedFilterType == null) colorScheme.onPrimaryContainer else colorScheme.onSurfaceVariant) },
-                                colors = filterChipColors,
-                                shape = CircleShape,
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .testTag("chip_filter_all"),
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.selectedFilterType == MovementType.EXPENSE,
-                                onClick = { viewModel.onFilterTypeSelected(MovementType.EXPENSE) },
-                                label = { Text(stringResource(R.string.movement_type_expense)) },
-                                colors = filterChipColors,
-                                shape = CircleShape,
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .testTag("chip_filter_expense"),
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.selectedFilterType == MovementType.INCOME,
-                                onClick = { viewModel.onFilterTypeSelected(MovementType.INCOME) },
-                                label = { Text(stringResource(R.string.movement_type_income)) },
-                                colors = filterChipColors,
-                                shape = CircleShape,
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .testTag("chip_filter_income"),
-                            )
-                        }
-                        item {
-                            FilterChip(
-                                selected = uiState.selectedFilterType == MovementType.TRANSFER,
-                                onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
-                                label = { Text(stringResource(R.string.movement_type_transfer)) },
-                                colors = filterChipColors,
-                                shape = CircleShape,
-                                modifier = Modifier
-                                    .heightIn(min = 48.dp)
-                                    .testTag("chip_filter_transfer"),
-                            )
-                        }
+                        KipuFilterChip(
+                            selected = uiState.selectedFilterType == null,
+                            onClick = { viewModel.onFilterTypeSelected(null) },
+                            label = { Text("Todos") },
+                            colors = filterChipColors,
+                            modifier = Modifier.testTag("chip_filter_all"),
+                        )
+                        KipuFilterChip(
+                            selected = uiState.selectedFilterType == MovementType.EXPENSE,
+                            onClick = { viewModel.onFilterTypeSelected(MovementType.EXPENSE) },
+                            label = { Text(stringResource(R.string.movement_type_expense)) },
+                            colors = filterChipColors,
+                            modifier = Modifier.testTag("chip_filter_expense"),
+                        )
+                        KipuFilterChip(
+                            selected = uiState.selectedFilterType == MovementType.INCOME,
+                            onClick = { viewModel.onFilterTypeSelected(MovementType.INCOME) },
+                            label = { Text(stringResource(R.string.movement_type_income)) },
+                            colors = filterChipColors,
+                            modifier = Modifier.testTag("chip_filter_income"),
+                        )
+                        KipuFilterChip(
+                            selected = uiState.selectedFilterType == MovementType.TRANSFER,
+                            onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
+                            label = { Text(stringResource(R.string.movement_type_transfer)) },
+                            colors = filterChipColors,
+                            modifier = Modifier.testTag("chip_filter_transfer"),
+                        )
                         if (uiState.hasActiveAdvancedFilters || uiState.selectedFilterType != null || uiState.searchQuery.isNotBlank()) {
-                            item {
-                                FilterChip(
-                                    selected = false,
-                                    onClick = viewModel::onClearFilters,
-                                    label = { Text(stringResource(R.string.movements_filter_clear)) },
-                                    colors = filterChipColors,
-                                    shape = CircleShape,
-                                    modifier = Modifier
-                                        .heightIn(min = 48.dp)
-                                        .testTag("btn_clear_filters")
-                                        .semantics { contentDescription = "Limpiar todos los filtros" },
-                                )
-                            }
+                            KipuFilterChip(
+                                selected = false,
+                                onClick = viewModel::onClearFilters,
+                                label = { Text(stringResource(R.string.movements_filter_clear)) },
+                                colors = filterChipColors,
+                                modifier = Modifier
+                                    .testTag("btn_clear_filters")
+                                    .semantics { contentDescription = "Limpiar todos los filtros" },
+                            )
                         }
                     }
 
@@ -318,10 +324,16 @@ fun MovementHistoryRoute(
                     }
                 }
                 uiState.filteredTransactions.isEmpty() -> item(key = "empty") {
-                    EmptyMovementsState(hasActiveFilters = uiState.hasActiveAdvancedFilters ||
-                        uiState.selectedFilterType != null || uiState.searchQuery.isNotBlank(),
-                        onClearFilters = viewModel::onClearFilters, onRegister = viewModel::onOpenRegisterSheet,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp).padding(horizontal = 32.dp))
+                    val isSearch = uiState.searchQuery.isNotBlank()
+                    val hasFilters = uiState.hasActiveAdvancedFilters || uiState.selectedFilterType != null
+                    EmptyMovementsState(
+                        isSearchActive = isSearch,
+                        hasActiveFilters = hasFilters,
+                        onClearSearch = { viewModel.onSearchQueryChanged("") },
+                        onClearFilters = viewModel::onClearFilters,
+                        onRegister = viewModel::onOpenRegisterSheet,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp).padding(horizontal = 32.dp),
+                    )
                 }
                 else -> uiState.filteredTransactions.forEach { (dateHeader, rows) ->
                     item(key = "header_$dateHeader") {
@@ -446,119 +458,146 @@ fun TransactionRow(
     }
 
     val currencySymbol = if (tx.currency == "PEN") "S/" else "$"
+    val formattedAmount = formatMinorUnits(tx.amountMinor)
+    val fullAmountText = "$amountPrefix$currencySymbol $formattedAmount"
 
     Surface(
         shape = MaterialTheme.shapes.large,
         color = colorScheme.surface,
-
         modifier = modifier
             .testTag("tx_row_${tx.id}")
             .clickable(onClick = onClick),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        BoxWithConstraints(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Category / Avatar Icon
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isVoided) {
-                            colorScheme.surfaceContainerHigh
-                        } else when (tx.type) {
-                            MovementType.INCOME -> KipuIncome.copy(alpha = 0.12f)
-                            MovementType.EXPENSE -> KipuExpense.copy(alpha = 0.12f)
-                            MovementType.TRANSFER -> colorScheme.primary.copy(alpha = 0.12f)
-                        }
-                    )
+            val fontScale = LocalDensity.current.fontScale
+            val stackedAmount = fontScale > 1.3f || maxWidth < 340.dp || (maxWidth < 420.dp && (title.length > 20 || fullAmountText.length > 12))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = title.take(1).uppercase(),
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = if (isVoided) {
-                            colorScheme.onSurfaceVariant
-                        } else when (tx.type) {
-                            MovementType.INCOME -> KipuIncome
-                            MovementType.EXPENSE -> KipuExpense
-                            MovementType.TRANSFER -> colorScheme.primary
-                        }
-                    )
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Title & Subtitle
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // Category / Avatar Icon
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isVoided) {
+                                colorScheme.surfaceContainerHigh
+                            } else when (tx.type) {
+                                MovementType.INCOME -> KipuIncome.copy(alpha = 0.12f)
+                                MovementType.EXPENSE -> KipuExpense.copy(alpha = 0.12f)
+                                MovementType.TRANSFER -> colorScheme.primary.copy(alpha = 0.12f)
+                            }
+                        )
+                ) {
                     Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            textDecoration = TextDecoration.None,
-                        ),
-                        color = if (isVoided) colorScheme.onSurfaceVariant else colorScheme.onSurface,
-                        maxLines = 2,
-                        modifier = Modifier.weight(1f, fill = false),
+                        text = title.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = if (isVoided) {
+                                colorScheme.onSurfaceVariant
+                            } else when (tx.type) {
+                                MovementType.INCOME -> KipuIncome
+                                MovementType.EXPENSE -> KipuExpense
+                                MovementType.TRANSFER -> colorScheme.primary
+                            }
+                        )
                     )
-                    if (isVoided) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = colorScheme.errorContainer.copy(alpha = 0.5f),
-                            modifier = Modifier.testTag("tx_voided_badge_${tx.id}"),
-                        ) {
-                            Text(
-                                text = stringResource(R.string.movement_void_status_badge),
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colorScheme.error,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Title & Subtitle
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                textDecoration = TextDecoration.None,
+                            ),
+                            color = if (isVoided) colorScheme.onSurfaceVariant else colorScheme.onSurface,
+                            maxLines = 2,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (isVoided) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = colorScheme.errorContainer.copy(alpha = 0.5f),
+                                modifier = Modifier.testTag("tx_voided_badge_${tx.id}"),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.movement_void_status_badge),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = colorScheme.error,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                     }
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        // Sync badge
+                        SyncStatusIcon(status = tx.syncStatus)
+                    }
                     Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant,
-                        maxLines = 2,
+                        tx.syncStatus.uiLabel(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    // Sync badge
-                    SyncStatusIcon(status = tx.syncStatus)
+                    if (tx.status == TransactionStatus.REVISED) {
+                        Text(
+                            "Corregido",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colorScheme.primary
+                        )
+                    }
+                    if (stackedAmount) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        MoneyText(
+                            amount = "$amountPrefix$formattedAmount",
+                            currencySymbol = currencySymbol,
+                            color = amountColor,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum",
+                                textDecoration = TextDecoration.None,
+                            ),
+                            modifier = Modifier.testTag("tx_amount_${tx.id}"),
+                        )
+                    }
                 }
-                Text(tx.syncStatus.uiLabel(), style = MaterialTheme.typography.labelMedium,
-                    color = colorScheme.onSurfaceVariant)
-                if (tx.status == TransactionStatus.REVISED) Text("Corregido", style = MaterialTheme.typography.labelMedium,
-                    color = colorScheme.primary)
-                if (stackedAmount) MoneyText("$amountPrefix${formatMinorUnits(tx.amountMinor)}", currencySymbol = currencySymbol,
-                    color = amountColor, style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.testTag("tx_amount_${tx.id}"))
-            }
 
-            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            // Amount with tnum
-            if (!stackedAmount) Column(horizontalAlignment = Alignment.End) {
-                val formattedAmount = formatMinorUnits(tx.amountMinor)
-                MoneyText(
-                    amount = "$amountPrefix$formattedAmount",
-                    currencySymbol = currencySymbol,
-                    color = amountColor,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = "tnum",
-                        textDecoration = TextDecoration.None,
-                    ),
-                    modifier = Modifier.testTag("tx_amount_${tx.id}"),
-                )
-            }
+                // Amount with tnum
+                if (!stackedAmount) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        MoneyText(
+                            amount = "$amountPrefix$formattedAmount",
+                            currencySymbol = currencySymbol,
+                            color = amountColor,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum",
+                                textDecoration = TextDecoration.None,
+                            ),
+                            modifier = Modifier.testTag("tx_amount_${tx.id}"),
+                        )
+                    }
+                }
 
             // Options menu (Editar / Anular) - only for active / non-voided transactions
             if (!isVoided) {
@@ -609,6 +648,7 @@ fun TransactionRow(
         }
     }
 }
+}
 
 @Composable
 fun SyncStatusIcon(
@@ -649,68 +689,76 @@ fun SyncStatusIcon(
 
 @Composable
 fun EmptyMovementsState(
+    isSearchActive: Boolean = false,
     hasActiveFilters: Boolean = false,
+    onClearSearch: (() -> Unit)? = null,
     onClearFilters: (() -> Unit)? = null,
     onRegister: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(72.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(36.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        Text(
-            text = if (hasActiveFilters) {
-                stringResource(R.string.movements_filter_empty_title)
-            } else {
-                stringResource(R.string.movements_empty_title)
-            },
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = if (hasActiveFilters) {
-                stringResource(R.string.movements_filter_empty_desc)
-            } else {
-                stringResource(R.string.movements_empty_desc)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        if (!hasActiveFilters && onRegister != null) {
-            Button(onClick = onRegister, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(stringResource(R.string.history_register))
-            }
-        }
-        if (hasActiveFilters && onClearFilters != null) {
-            Spacer(modifier = Modifier.height(16.dp))
-            OutlinedButton(
-                onClick = onClearFilters,
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .testTag("btn_empty_clear_filters")
-                    .semantics { contentDescription = "Limpiar filtros de búsqueda" },
-            ) {
-                Text(stringResource(R.string.movements_filter_clear))
-            }
-        }
+    val title = when {
+        isSearchActive -> stringResource(R.string.movements_search_empty_title)
+        hasActiveFilters -> stringResource(R.string.movements_filter_empty_title)
+        else -> stringResource(R.string.movements_empty_title)
     }
+    val message = when {
+        isSearchActive -> stringResource(R.string.movements_search_empty_desc)
+        hasActiveFilters -> stringResource(R.string.movements_filter_empty_desc)
+        else -> stringResource(R.string.movements_empty_desc)
+    }
+    KipuEmptyState(
+        title = title,
+        message = message,
+        modifier = modifier,
+        icon = {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        },
+        action = {
+            if (!isSearchActive && !hasActiveFilters && onRegister != null) {
+                Button(
+                    onClick = onRegister,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
+                ) {
+                    Text(stringResource(R.string.history_register))
+                }
+            } else if (isSearchActive && onClearSearch != null) {
+                OutlinedButton(
+                    onClick = onClearSearch,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_empty_clear_search")
+                        .semantics { contentDescription = "Limpiar búsqueda" },
+                ) {
+                    Text(stringResource(R.string.movements_search_clear))
+                }
+            } else if (hasActiveFilters && onClearFilters != null) {
+                OutlinedButton(
+                    onClick = onClearFilters,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_empty_clear_filters")
+                        .semantics { contentDescription = "Limpiar filtros" },
+                ) {
+                    Text(stringResource(R.string.movements_filter_clear))
+                }
+            }
+        }
+    )
 }

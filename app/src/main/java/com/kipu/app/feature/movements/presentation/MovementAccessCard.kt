@@ -57,20 +57,22 @@ fun MovementAccessCard(
         modifier = modifier,
     ) {
         val colors = rememberKipuColors()
-        val warning = content in setOf(AccessCardContent.RECONNECT, AccessCardContent.RETRY, AccessCardContent.NO_PURCHASE)
-        Surface(
-            color = if (warning) colors.warningContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = MaterialTheme.shapes.medium,
+        AnimatedContent(
+            targetState = content,
+            transitionSpec = {
+                if (reducedMotion) EnterTransition.None togetherWith ExitTransition.None
+                else fadeIn(tween(KipuMotionTokens.QuickMillis)) togetherWith fadeOut(tween(KipuMotionTokens.MicroMillis))
+            },
+            label = "historyAccessFeedback",
             modifier = Modifier.fillMaxWidth().testTag("banner_fallback_used"),
-        ) {
-            AnimatedContent(
-                targetState = content,
-                transitionSpec = {
-                    if (reducedMotion) EnterTransition.None togetherWith ExitTransition.None
-                    else fadeIn(tween(KipuMotionTokens.QuickMillis)) togetherWith fadeOut(tween(KipuMotionTokens.MicroMillis))
-                },
-                label = "historyAccessFeedback",
-            ) { target ->
+        ) { target ->
+            val warning = target in setOf(AccessCardContent.RECONNECT, AccessCardContent.RETRY, AccessCardContent.NO_PURCHASE)
+            val canInteract = target == content && show && state.recovery != HistoryAccessRecovery.VERIFYING
+            Surface(
+                color = if (warning) colors.warningContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Icon(
@@ -80,11 +82,17 @@ fun MovementAccessCard(
                             modifier = Modifier.size(24.dp),
                         )
                         Column(Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite }) {
-                            Text(stringResource(target.title), style = MaterialTheme.typography.titleSmall,
-                                color = if (warning) colors.onWarningContainer else MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                stringResource(target.title),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = if (warning) colors.onWarningContainer else MaterialTheme.colorScheme.onSurface,
+                            )
                             Spacer(Modifier.height(4.dp))
-                            Text(stringResource(target.body), style = MaterialTheme.typography.bodyMedium,
-                                color = if (warning) colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                stringResource(target.body),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (warning) colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                     Spacer(Modifier.height(8.dp))
@@ -92,24 +100,38 @@ fun MovementAccessCard(
                         AccessCardContent.VERIFYING -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.heightIn(min = 48.dp)) {
                             CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                         }
-                        AccessCardContent.SUCCESS -> TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+                        AccessCardContent.SUCCESS -> TextButton(
+                            onClick = onDismiss,
+                            enabled = canInteract,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
                             Text(stringResource(R.string.history_dismiss_notice))
                         }
                         else -> {
                             OutlinedButton(
                                 onClick = if (target == AccessCardContent.PREMIUM) onViewPlans else onVerify,
-                                enabled = target == content && state.recovery != HistoryAccessRecovery.VERIFYING,
+                                enabled = canInteract,
                                 modifier = Modifier.heightIn(min = 48.dp).testTag("btn_revalidate_premium"),
                             ) {
-                                Text(stringResource(if (target == AccessCardContent.PREMIUM) R.string.history_view_premium
-                                    else if (target == AccessCardContent.RECONNECT) R.string.history_access_verify else R.string.history_retry))
+                                Text(
+                                    stringResource(
+                                        if (target == AccessCardContent.PREMIUM) R.string.history_view_premium
+                                        else if (target == AccessCardContent.RECONNECT) R.string.history_access_verify else R.string.history_retry
+                                    )
+                                )
                             }
-                            if (target == AccessCardContent.NO_PURCHASE) TextButton(onClick = onViewPlans, modifier = Modifier.heightIn(min = 48.dp)) {
+                            if (target == AccessCardContent.NO_PURCHASE) TextButton(
+                                onClick = onViewPlans,
+                                enabled = canInteract,
+                                modifier = Modifier.heightIn(min = 48.dp),
+                            ) {
                                 Text(stringResource(R.string.history_view_premium))
                             }
-                            if (target == AccessCardContent.PREMIUM) TextButton(onClick = onVerify,
-                                enabled = target == content && state.recovery != HistoryAccessRecovery.VERIFYING,
-                                modifier = Modifier.heightIn(min = 48.dp).testTag("btn_restore_history")) {
+                            if (target == AccessCardContent.PREMIUM) TextButton(
+                                onClick = onVerify,
+                                enabled = canInteract,
+                                modifier = Modifier.heightIn(min = 48.dp).testTag("btn_restore_history"),
+                            ) {
                                 Text(stringResource(R.string.history_restore_purchases))
                             }
                         }
