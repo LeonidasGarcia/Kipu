@@ -306,3 +306,21 @@ SC-001 conserva los escenarios oficiales por sprint; SC-006 mantiene el alta his
 - [x] T101 HIGH [F12] Completar T073/T078/T083 en `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementEditorViewModel.kt`, `MovementEditorSheet.kt`, `VoidMovementDialog.kt`, `MovementHistoryScreen.kt` y `navigation/MovementsNavigation.kt`: faltan editor/anulación/conflictos/filtros avanzados y navegación correspondiente. Probar resumen anterior/nuevo, advertencia especializada, cancelar sin escritura, fila anulada legible, limpiar/cero resultados/reconexión, TalkBack/48 dp/enmascaramiento en todas las superficies, per FR-011–018/029/032, US4/US5/US6, plan: Pantallas 10/11 (partial).
 - [x] T102 HIGH [F13] Completar evidencia verificable de T064–T089 y remediaciones T090–T101 en `app/src/test/`, `app/src/androidTest/`, `supabase/tests/database/`, `specs/004-ep-mov-movimientos-ledger/quickstart.md` y `review-record.md`: faltan suites S4 de revisiones/migración/acceso y `MovementHistoryPerformanceTest.kt` usa ViewModel mock con umbral de render 5 s, sin medir consultas locales p95 <300 ms. Registrar pruebas de rollback/replay/migración/RLS/reloj/offline/regresión, dispositivo/dataset, integración EP-PLA real, cross-review y demo sin HU-25; conservar el test de render como prueba distinta y no reutilizar aprobación S2/diseño como PASS S4. Depende del trabajo financiero/query/UI e integración real T084; no declarar Sprint cerrado mientras haya bloqueantes, per SC-001–013 según alcance S4, plan: Fase 5/DoD, Constitution IX (partial).
 
+## Phase 14: Approved S4 UI/UX refinement (2026-10-03)
+
+**Propagated**: 2026-10-03 — FR-033–FR-039 / SC-014–SC-017; historical tasks stay intact.
+
+- [X] T103 Refine approved S4 UX decisions, consumer contract, plan and UI state model; preserve ledger/schema and prior task history (FR-033–039).
+- [X] T104 Add meaningful draft validation/cancel/apply, owner-switch, read-error and privacy-semantic coverage in `app/src/test/` and `app/src/androidTest/` (SC-014–017; depends on T103).
+- [X] T105 Implement owner-scoped read-only detail with existing revision history and explicit actions, including VOIDED, in `MovementHistoryViewModel.kt`, `MovementDetailSheet.kt` and repository read boundaries (FR-033; depends on T103).
+- [X] T106 Implement draft filters, date/account/category/card/merchant/financial-state/sync-status controls, currency/decimal amount validation, applied/parked chips and individual removal in `MovementHistoryViewModel.kt` and `MovementFiltersSheet.kt` (FR-034; depends on T104).
+- [X] T107 Protect editor/conflict/void amounts and semantics; implement changed-field Before/After comparison and consistent theme tokens in `MovementEditorSheet.kt` and `VoidMovementDialog.kt` (FR-035/037; depends on T104).
+- [X] T108 Polish history rows, separate financial/sync states, empty/error actions and accessible motion in `MovementHistoryScreen.kt` (FR-036/038/039; depends on T105–T107 and EP-PLA T116).
+- [X] T109 Run applicable JVM regressions and AndroidTest compilation, inspect privacy/access/motion behavior, and record device limitations plus analyze/refine status in `quickstart.md` and `review-record.md` (SC-014–017; depends on T108 and EP-PLA T117). Runtime acceptance remains pending until actual device evidence.
+
+Dependency DAG: T103 → T104; T103 → T105; T104 → T106/T107; T105/T106/T107 + EP-PLA T116 → T108; T108 + EP-PLA T117 → T109. No completed historical checkbox is reused as evidence of this refinement.
+
+
+- [ ] T110 [Baseline HU-22] Resolve canonical movement-source provenance with Obsidian Mind and the existing data authorities; refine/propagate the Room/domain/query contract and implement the source selector with authorization/combination tests, preserving unknown historical provenance (FR-017; full HU-22 acceptance remains open; requires a confirmed data contract before implementation).
+
+**Propagated**: 2026-10-03 — T103–T109 completed for the approved UI refinement. T110 is a pre-existing functional gap uncovered by cross-artifact review. EP-PLA T112/T113 retain their baseline/release gates. No statement here closes Sprint 4 as a whole.

@@ -50,3 +50,24 @@ T094 source, local database, Edge boundary, and unsigned release APK review is c
 
 - Inspect the deployed Edge Function and signed distribution artifact in the target release environment.
 - Obtain the constitution-required independent cross-review before release.
+
+## Sprint 4 Offline Entitlement Security Review — 2026-10-02
+
+**Status**: Signed-grant enforcement and local database checks pass. Android device execution, release signing-key provisioning, and external deployment remain release gates.
+
+### Verified in source and local checks
+
+- The Edge verifier issues an ES256 grant only after authenticated Google Play verification, durable purchase persistence, and an effective Premium result. The grant binds owner, P-256 installation-key thumbprint, policy version, server verification time, commercial end, and `notAfter = min(serverVerifiedAt + 72h, entitlementEnd)`; Lifetime remains capped at 72 hours.
+- `ENTITLEMENT_GRANT_PRIVATE_JWK` and `ENTITLEMENT_GRANT_KEY_ID` are read only as Edge Function environment secrets. Android receives only `OFFLINE_GRANT_KEY_ID` and `OFFLINE_GRANT_PUBLIC_KEY_X509_BASE64`, supplied through untracked local properties or environment configuration. No production signing values are stored in this repository.
+- Android verifies the exact signed payload and owner/install/policy claims, then evaluates the lease with `SystemClock.elapsedRealtime()` plus same-boot `Settings.Global.BOOT_COUNT`. The entitlement path has no civil-clock input; missing boot continuity, owner/install mismatch, malformed or unsigned legacy cache, and the exact expiry boundary deny Premium and require reconnection.
+- Category/instrument quota checks and the EP-MOV advanced-filter gate consume the shared evaluator. Free registration, basic history search/type/date filters, and local outbox paths remain available after Premium denial; over-limit resources and financial history are retained.
+- Room v17→18 is additive. Schema 18 is generated, a v17 row-preservation migration test is present and compiles, and cloud-backup/device-transfer rules continue to exclude the complete `kipu.db` files.
+- The local Supabase migration is applied and recorded as `20261003042759`. The new `entitlement_lease_test.sql` passes 8 pgTAP assertions: `authenticated` can execute `get_feature_access()` while `anon` and `PUBLIC` cannot; the function keeps SECURITY DEFINER, owner-from-`auth.uid()`, and an empty `search_path`; its legacy offline field is null and it has no rolling 72-hour calculation. A transaction-scoped function smoke test also passed and rolled back temporary fixture objects.
+- Automated evidence: 371 Android JVM tests pass; the full Android instrumented-test source set compiles; 17 Deno verify-purchase tests pass; `git diff --check` passes.
+
+### Environment and release limits
+
+- The local Postgres container is missing the pre-existing `public.v_feature_access` view and `public.user_devices` relation even though the current production database has the view. The migration does not create or alter those baseline objects. Its local behavior was smoke-tested with transaction-only fixtures; no fixture objects or rows were retained.
+- No emulator, AVD, or attached Android device is available, so the new Room migration and movement access instrumented tests were compiled but not executed.
+- The production ES256 private key and matching Android public verification configuration have not been provisioned. Until the approved environment supplies both sides, new offline Premium grants are unavailable and the safe behavior is Kipu Free after any already-valid lease expires.
+- No remote Supabase migration, Edge deployment, release signing, or publication was performed.

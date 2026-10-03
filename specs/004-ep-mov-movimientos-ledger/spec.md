@@ -428,3 +428,25 @@ SC-001 conserva los 33 escenarios oficiales de la épica; las adiciones S4 se ve
 - **EP-PRE**: periodos y consumo presupuestario requeridos por HU-25.
 - **EP-INF**: consultas y analítica que consumen movimientos, filtros y reembolsos.
 - **EP-AUT**: candidatos que deben reutilizar las mismas reglas de registro y deduplicación.
+# Refinamiento UI/UX aprobado — 2026-10-03
+
+**Refined**: 2026-10-03 — Aprobada la mejora integral S4 de consulta, filtros, privacidad, comparación y movimiento mediante UI/UX Pro Max y Compose Animations. Se conserva el alcance financiero y la historia S2/S4.
+
+- **FR-033**: Abrir un movimiento presenta detalle de lectura, también para VOIDED; editar y anular requieren acciones explícitas y conservan los bloqueos de operaciones especializadas.
+- **FR-034**: El panel de filtros usa borrador, validación y aplicación explícita. Cancelar conserva la consulta aplicada. Fechas/tipo/texto siguen Free; criterios avanzados requieren autorización efectiva. Importes se presentan en moneda y unidades mayores, se convierten con el parser financiero existente y no mezclan monedas. Criterios aplicados pueden retirarse individualmente; los guardados sin acceso se identifican como pendientes.
+- **FR-035**: El enmascaramiento global protege los importes visibles y semánticos en historial, detalle, formularios, resumen, conflicto y anulación.
+- **FR-036**: El historial prioriza lectura comparativa de comercio/categoría/cuenta e importes tabulares, distingue estado financiero de sincronización y adapta alturas al texto ampliado.
+- **FR-037**: La edición muestra Antes/Después de cada campo modificado; la anulación identifica el movimiento y las consecuencias por cuenta, sin ofrecer resurrección/undo de VOIDED.
+- **FR-038**: Vacío inicial, cero coincidencias y fallo de lectura tienen mensajes y acciones diferentes (registrar, retirar/limpiar filtros, reintentar).
+- **FR-039**: El movimiento usa tokens compartidos y respeta reducción de animaciones. Feedback y acceso no dependen de terminar una animación; los resultados protegidos se retiran inmediatamente cuando se pierde autorización.
+- **SC-014**: Pruebas de privacidad no encuentran importes originales en el árbol semántico de las superficies enmascaradas.
+- **SC-015**: Cancelar un borrador no cambia resultados; aplicar rechaza rangos inválidos; las fechas son Free y los montos se interpretan en unidades mayores con moneda explícita.
+- **SC-016**: VOIDED admite consulta de detalle sin edición y el resumen identifica los campos modificados.
+- **SC-017**: Compilación/pruebas y evidencia de accesibilidad/movimiento documentan límites de dispositivo; no se confunde compilar AndroidTest con ejecutarlo.
+
+
+## Evidencia de cierre del refinamiento — 2026-10-03
+
+**Refined**: 2026-10-03 — Se preserva FR-017. La auditoría detectó un pendiente heredado: el filtro por **fuente** exigido por HU-22 no tiene un campo de procedencia en `Transaction`/`AdvancedHistoryCriteria`/la proyección Room consumida por esta UI. Sincronización y cuenta de origen son conceptos distintos. Este refinamiento implementa los controles respaldados por los contratos actuales; no fabrica procedencia histórica ni modifica el ledger para inferirla. T110 conserva explícitamente el trabajo restante de contrato y filtro por fuente antes de aceptar HU-22 íntegramente.
+
+Evidencia de autoridad: consulta MCP Obsidian Mind `"HU-22" "fuente" filtros avanzados historial manual SMS notificación`, contrastada con la sección completa de `work/active/kipu/Kipu md/02_Kipu_V4.2_Product_Backlog.md` (HU-22, reglas 1–3). El requerimiento original continúa vigente.

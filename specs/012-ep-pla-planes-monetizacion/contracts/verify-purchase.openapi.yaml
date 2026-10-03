@@ -1,7 +1,7 @@
 ﻿openapi: 3.1.0
 info:
   title: Kipu verified billing purchase
-  version: 1.0.0
+  version: 1.1.0
   description: >-
     Server verifies ephemeral Google Play purchase tokens. The caller identity comes
     from Supabase Auth. Tokens are never echoed, persisted in clear text, or logged.
@@ -36,6 +36,10 @@ paths:
                   maxLength: 4096
                   writeOnly: true
                   description: Ephemeral provider credential. Never log, persist, or echo this value.
+                installationPublicKey:
+                  type: string
+                  maxLength: 512
+                  description: Optional standard Base64 DER SubjectPublicKeyInfo for an Android Keystore P-256 key. Required to receive an offline grant; older clients may omit it and receive no grant.
       responses:
         '200':
           description: Normalized verification result; PENDING never grants entitlement.
@@ -83,7 +87,7 @@ components:
     VerificationResult:
       type: object
       additionalProperties: false
-      required: [outcome, purchaseId, productId, planType, purchaseState, entitlementState, startsAt, effectivePremium, expiresAt, effectiveExpiresAt, isLifetime, willRenew, orderId, acknowledgementState]
+      required: [outcome, purchaseId, productId, planType, purchaseState, entitlementState, startsAt, effectivePremium, expiresAt, effectiveExpiresAt, isLifetime, willRenew, orderId, acknowledgementState, offlineEntitlementGrant]
       properties:
         outcome:
           type: string
@@ -129,6 +133,11 @@ components:
         acknowledgementState:
           type: string
           enum: [PENDING, ACKNOWLEDGED, NOT_APPLICABLE]
+        offlineEntitlementGrant:
+          oneOf:
+            - $ref: '#/components/schemas/OfflineEntitlementGrant'
+            - type: 'null'
+          description: Present only for a verified, currently effective entitlement and a valid installation public key. The client must verify the signature and claims; effectivePremium alone is not authorization evidence.
         isLifetime:
           type: boolean
         willRenew:
@@ -137,6 +146,20 @@ components:
           oneOf:
             - type: string
             - type: 'null'
+    OfflineEntitlementGrant:
+      type: object
+      additionalProperties: false
+      required: [payload, signature, keyId]
+      properties:
+        payload:
+          type: string
+          description: Base64url without padding of the exact UTF-8 signed claims payload.
+        signature:
+          type: string
+          description: Base64url without padding of the ES256 P-256 r||s signature over decoded payload bytes.
+        keyId:
+          type: string
+          description: Must match the signed keyId claim and a configured Android verification key.
     Error:
       type: object
       additionalProperties: false

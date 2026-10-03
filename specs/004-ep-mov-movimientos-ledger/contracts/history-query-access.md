@@ -61,3 +61,6 @@ Revalidar también un enlace creado durante Premium; ID ajeno devuelve mensaje n
 EP-MOV implementa query/cursor, revalidación y alternativa Free (T079–T083); T061 deja definida esta interfaz desde requisitos aprobados. EP-PLA implementa evidencia, evaluación temporal, firma/validación y revalidación remota en HU-58/59. La interfaz permite dobles controlados para pruebas de consumidor, no falsos entitlements en release.
 
 T084 permanece bloqueada hasta productor integrado, contrato compatible y pruebas de reloj/reinicio/restore en dispositivo más proveedor cuando aplique. T063 revisa el diseño de consumo; no marca HU-58/59 completas ni fuerza su implementación dentro de EP-MOV. Ningún acuerdo con otro equipo o prueba de proveedor se presume realizado.
+
+
+**Propagated**: 2026-10-03 — The current Kotlin/Room history projection lacks a persisted capture-source field; source in FR-017 remains an explicit baseline gap tracked by T110. Sync status and source/destination accounts must not be interpreted as capture provenance. No source migration/backfill is included in the approved UI refinement.

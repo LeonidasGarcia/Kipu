@@ -142,3 +142,21 @@ Propietarios A/B, dos cuentas propias PEN y otra ajena; montos enteros en cénti
   - Keyset pagination mediante cursor `(occurred_at DESC, id DESC)` sin saltos ni duplicados (1000 items recolectados en 20 páginas sin colisión).
   - LazyColumn en Jetpack Compose sin bloqueo de hilo de interfaz de usuario.
 
+
+
+## UI/UX S4 refinement — validation 2026-10-03
+
+- Skills applied: `ui-ux-pro-max`, `compose-animations`, Android Kotlin and Spec Kit refine/update/propagate/implement. Focused UX/Compose skill searches informed decimal keyboards, persistent labels, 48 dp targets, theme semantics and reduced motion.
+- Full JVM regression: **383 tests, 0 failures, 0 errors** (`:app:testDebugUnitTest`). Draft tests cover decimal/currency parsing, invalid ranges and DST-inclusive dates; history tests cover apply/removal, owner reset, query retry and duplicate restore requests. Billing recovery tests cover no purchases, pending, failure and bounded timeout.
+- Debug application and AndroidTest APKs assemble successfully. Android deprecation warnings remain for existing test-rule/Hilt APIs; no compilation errors.
+- Instrumentation: **39 distinct checks passed** on the booted `Pixel_10` emulator: 38 in the combined UI/editor/history-access/Room run plus the integrated history route check, including light/dark rendering. The final UI refinement suite is rerun against the latest APK; command and summaries are retained in the local `.backups/` validation logs. These are selected instrumentation suites, not the entire AndroidTest catalog.
+- Privacy assertions inspect unmerged semantics for detail, editor/conflict, Before/After and void amounts. Reduced motion and outgoing/incoming AnimatedContent identities are exercised; a draft survives UI saved-state restoration without applying or granting access.
+- The history route opens VOIDED read-only detail, blocks financial actions there, retains parked filters and renders contextual recovery. Search/filter controls and results share one scroll container so enlarged text does not permanently displace history. Filter access is visible beside search; applied chips remove individual selections. Audit reads are owner-scoped and sorted by revision.
+- Visual evidence uses synthetic fixture data only: `validation/ui/history-route-light.png`, `history-route-dark.png`, `history-large-font.png` in EP-MOV. Light, dark and 1.6× text captures were inspected. This is visual inspection plus automated semantic coverage; it does not certify a complete manual TalkBack traversal on a physical device.
+- The first physical Samsung attempt encountered a locked/dozing screen; its failures are not acceptance evidence. Canonical-category/UUID/setup fixtures were corrected without relaxing production invariants; old assertions were updated to current copy and the unmerged badge semantics tree.
+- Database evidence here is local Room instrumentation. This UI refinement adds no ledger/Postgres migration and performs no remote deployment or real purchase.
+- Gates: approved visual/refined FR-033–FR-039 and EP-PLA FR-056–FR-058 are implemented and checked. **Full Sprint 4 is still open**: EP-MOV T110 preserves the required source filter whose current data contract is absent; EP-PLA T112/T113 preserve PostgreSQL baseline and production signing/provider/release acceptance. Historical performance/SQL claims were not rerun or re-certified by this UI audit.
+
+### Refine status and semantic cross-check
+
+Both feature directories contain spec, plan, tasks, research, data-model and contracts. Refinement/propagation entries are current and no artifact-warning **STALE** marker remains. Requirement IDs and existing financial contracts are preserved. Source provenance is explicitly mapped to open T110; all new visual requirements have implementation tasks and evidence. Marker synchronization does not mean whole-sprint functional acceptance. The remaining high-priority finding is the pre-existing FR-017 source contract gap, with explicit task coverage and no inferred replacement.

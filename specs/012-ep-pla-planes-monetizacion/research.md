@@ -195,3 +195,17 @@ La sesión de implementación no dispone de evidencia de IDs aprobados, cuenta l
 - Google Play Billing integration: https://developer.android.com/google/play/billing/integrate (9.1.0, ProductDetails, estado PENDING, verificación de servidor y acknowledge solo luego de PURCHASED).
 - Google Play Developer API — subscriptions v2: https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptionsv2 (estados de ciclo de vida, vencimiento y acknowledgement).
 - Google Play Developer API — products v2: https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.productsv2 (estado de compra de productos de una sola vez).
+
+## Sprint 4 — Concesión offline HU-58/HU-59
+
+**Decisión**: emitir una concesión firmada por servidor, ligada al `userId`, huella de la clave pública por instalación y `policyVersion`. La autoridad de tiempo se incluye en los claims firmados por el Edge Function tras verificar/persistir la compra. Android calcula tiempo transcurrido con `SystemClock.elapsedRealtime()` y compara `Settings.Global.BOOT_COUNT`; cambio de boot, contador ausente o regresión monotónica exige reconexión. `notAfter = min(serverVerifiedAt + 72h, entitlementEndsAt)`; Lifetime conserva el límite de 72h.
+
+**Alternativas revisadas**: la revisión de agy propuso extraer `Date` HTTP y guardar un ancla auxiliar en DataStore/SharedPreferences para evitar Room v18. No se usa `Date` HTTP como concesión porque el contrato consumidor EP-MOV T061 exige evidencia firmada ligada a usuario/dispositivo/política; tampoco se usa la hora civil como fallback. Se elige Room v18 aditivo para guardar grant y ancla monotónica en una transacción y probar migración explícita desde v17. Si el estado monotónico no se puede verificar, se niega solo Premium; registro Free, historia básica y outbox siguen activos.
+
+**Límite operativo**: ninguna clave privada de firma de servidor se crea ni se sube desde esta implementación. El runtime local/producción debe configurarse mediante secretos Edge y la clave pública correspondiente debe llegar por configuración Android de build/release. Sin pareja válida, el comportamiento es Free y no se emite/acepta un grant.
+
+**Fuentes**: Obsidian Mind `Procesos/31-aplicar-cupos-accesos-y-vigencia-offline.md`, HU-58/HU-59 en `Kipu md/02_Kipu_V4.2_Product_Backlog.md`, EP-MOV `contracts/history-query-access.md`; Android `Settings.Global.BOOT_COUNT` (API 24+) permite leer el contador de arranque y las apps pueden leer valores de `Settings.Global` (Android Developers API reference).
+
+## S4 UI/UX approved research — 2026-10-03
+
+User approved the broadened UI/UX Pro Max and Compose Animations plan. Recommendations prioritize readable minimal finance surfaces, explicit filter application/recovery, privacy and semantic state labels. Sources: existing Stitch design system; Obsidian Mind `work/active/kipu/Procesos/15-consultar-y-filtrar-historial.md`, `work/active/kipu/Procesos/14-corregir-o-anular-movimiento.md`, and HU-58/HU-59 in the product backlog. Motion uses existing shared tokens/reduced-motion adapter. No new financial operation, undo of VOIDED, remote deployment or database migration is introduced.

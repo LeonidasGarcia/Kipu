@@ -218,3 +218,16 @@ El refinamiento está propagado documentalmente; no se declara PASS de implement
 ### Remediación del hash de alta (T093)
 
 Seguir contracts/register-transaction-v2.md: nuevos payloads contract_version=2 y RPC v2; no reinterpretar colas históricas v1. El servidor deriva owner, recalcula hash, rechaza campos no firmados y delega registro estándar existente atómicamente. Reconciliar Kotlin/Postgres con golden vectors y probar compatibilidad antes de cerrar T093.
+
+## S4 UI/UX refinement — 2026-10-03
+
+**Propagated**: 2026-10-03 — FR-033–FR-039 / SC-014–SC-017; preserved completed S2/S4 design and financial implementation.
+
+Use the existing Stitch theme, Inter, semantic warning surfaces, 4/8 dp spacing, adaptive heights and 48 dp touch targets. Read-only movement detail is a history-owned modal, including VOIDED, with explicit edit/void callbacks and owner-scoped revision reads. Filter editing is a local draft; apply validates decimal money/currency and inclusive UI dates converted to exclusive domain bounds. Accounts/categories/merchants/cards use existing historical references; labels never expose IDs. Basic and advanced criteria remain subject to existing domain access decisions. Repository read failures expose retry separately from empty content.
+
+Use MoneyText/LocalBalanceMasked in every financial summary and password transformation plus sanitized semantics for masked input. Compare each changed editor field; preserve atomic commit and specialized restrictions. Animate access cards and summary regions with KipuMotionTokens and rememberReducedMotionEnabled; never fade retained protected results. UI decisions are independent of animation completion.
+
+Validation: draft cancel/apply, invalid dates/amounts/currencies, filters removed individually, masked semantics, VOIDED read-only detail, owner changes, error retry, interrupted motion and direct access restoration. JVM tests run locally; instrumentation must compile and be executed when a device is available. Record device limitations accurately.
+
+
+**Propagated**: 2026-10-03 — Source-provenance baseline finding: T110 resolves the canonical persisted provenance and its authorized query/UI mapping before complete HU-22 acceptance. This is an open baseline dependency, independent of the completed FR-033–FR-039 visual refinement. Do not substitute sync state or account identity for provenance. No provenance schema or historical backfill is approved by this visual change.
