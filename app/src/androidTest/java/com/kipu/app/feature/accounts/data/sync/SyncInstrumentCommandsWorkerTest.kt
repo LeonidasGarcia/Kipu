@@ -21,6 +21,7 @@ import com.kipu.app.feature.accounts.data.remote.CreditTransactionCommandDto
 import com.kipu.app.feature.accounts.data.remote.FinancialApiResponse
 import com.kipu.app.feature.accounts.data.remote.FinancialInstrumentsApi
 import com.kipu.app.feature.movements.data.local.MovementDao
+import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
 import com.kipu.app.feature.movements.data.local.TransactionEntity
 import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
 import io.mockk.coEvery
@@ -162,6 +163,21 @@ class SyncInstrumentCommandsWorkerTest {
                 installmentCount = 3,
             ),
         )
+        val originalLedgerId = UUID.randomUUID().toString()
+        database.movementDao().insertLedgerEntries(
+            listOf(
+                LedgerEntryEntity(
+                    id = originalLedgerId,
+                    userId = userId,
+                    transactionId = transactionId,
+                    accountId = UUID.randomUUID().toString(),
+                    role = "LIABILITY",
+                    signedAmountMinor = -request.transaction.amountMinor,
+                    currencyCode = "PEN",
+                    createdAt = 1_000L,
+                ),
+            ),
+        )
         database.creditDao().insertInstallments((1..3).map { number ->
             CreditInstallmentEntity(
                 id = UUID.randomUUID().toString(),
@@ -193,11 +209,23 @@ class SyncInstrumentCommandsWorkerTest {
 
         assertEquals(ListenableWorker.Result.success(), result)
         val rejected = database.movementDao().getTransactionById(userId, transactionId)
-        assertEquals("FAILED", rejected?.status)
+        assertEquals("VOIDED", rejected?.status)
         assertEquals("FAILED_PERMANENT", rejected?.syncStatus)
-        assertEquals(emptyList<CreditInstallmentEntity>(), database.creditDao().getInstallmentsForTransaction(userId, transactionId))
+        assertEquals(3, database.creditDao().getInstallmentsForTransaction(userId, transactionId).size)
+        assertEquals(setOf("VOIDED"), database.creditDao().getInstallmentsForTransaction(userId, transactionId).map { it.status }.toSet())
+        val ledgerRows = database.movementDao().getLedgerEntriesForTransaction(userId, transactionId)
+        assertEquals(2, ledgerRows.size)
+        assertEquals(1, ledgerRows.count { it.id == originalLedgerId })
+        assertEquals(0L, ledgerRows.sumOf { it.signedAmountMinor })
         assertEquals(0L, database.creditDao().getLedgerOutstandingPrincipalForCard(userId, request.transaction.cardId!!))
         assertEquals("REJECTED", database.movementDao().getReceipt(userId, command.operationId)?.status)
+        assertEquals(
+            "VOIDED",
+            database.movementDao().getReceipt(
+                userId,
+                UUID.nameUUIDFromBytes("kipu-local-rejection-receipt:$userId:${command.operationId}".toByteArray()).toString(),
+            )?.status,
+        )
         coVerify(exactly = 1) { syncDao.updateState(userId, command.operationId, "FAILED_PERMANENT", null, "CREDIT_LIMIT_EXCEEDED", any()) }
     }
 

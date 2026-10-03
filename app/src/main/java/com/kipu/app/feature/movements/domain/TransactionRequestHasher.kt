@@ -2,27 +2,24 @@ package com.kipu.app.feature.movements.domain
 
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import java.security.MessageDigest
+import java.util.Locale
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 
 class TransactionRequestHasher {
-
+    // Only new commands use v2. Persisted v1 outbox hashes are never recalculated.
     fun computeHash(command: RegisterTransactionCommand): String {
-        // Canonical sorted string representation
-        val canonical = buildString {
-            append("amount_minor:").append(command.amountMinor).append(";")
-            append("category_id:").append(command.categoryId ?: "").append(";")
-            append("currency_code:").append(command.currency).append(";")
-            append("destination_account_id:").append(command.destinationAccountId ?: "").append(";")
-            append("merchant_id:").append(command.merchantId ?: "").append(";")
-            append("merchant_provisional_text:").append(command.merchantProvisionalText ?: "").append(";")
-            append("note:").append(command.note ?: "").append(";")
-            append("occurred_at:").append(command.occurredAt).append(";")
-            append("source_account_id:").append(command.sourceAccountId ?: "").append(";")
-            append("type:").append(command.type.name).append(";")
-            append("user_id:").append(command.userId)
-        }
-
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hashBytes = digest.digest(canonical.toByteArray(Charsets.UTF_8))
-        return hashBytes.joinToString("") { "%02x".format(it) }
+        val values = listOf(
+            "MOV_REGISTER_V2", command.userId.lowercase(Locale.ROOT), command.type.name,
+            command.amountMinor.toString(), command.currency.uppercase(Locale.ROOT),
+            command.sourceAccountId?.lowercase(Locale.ROOT),
+            command.destinationAccountId?.lowercase(Locale.ROOT),
+            command.categoryId?.lowercase(Locale.ROOT), command.merchantId?.lowercase(Locale.ROOT),
+            command.merchantProvisionalText, command.occurredAt.toString(), command.note,
+        )
+        val canonical = JsonArray(values.map { it?.let(::JsonPrimitive) ?: JsonNull }).toString()
+        val digest = MessageDigest.getInstance("SHA-256").digest(canonical.toByteArray(Charsets.UTF_8))
+        return digest.joinToString("") { "%02x".format(it) }
     }
 }

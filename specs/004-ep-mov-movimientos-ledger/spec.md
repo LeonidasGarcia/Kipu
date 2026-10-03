@@ -1,10 +1,16 @@
 # Feature Specification: EP-MOV - Movimientos y Ledger
 
-**Feature Branch**: `4-ep-mov`
+**Feature Branch**: `004-ep-mov-movimientos-ledger`
 
 **Created**: 2026-09-22
 
-**Status**: Draft
+**Status**: Refined
+
+**Refined**: 2026-10-02 — Remediación T093/F04: representación inequívoca y versionada para altas nuevas, validación remota y compatibilidad inmutable de outbox S2; no cambia el alcance funcional ni los puntos del Sprint.
+
+**Refined**: 2026-10-02 — Incremento Sprint 4 aprobado: HU-20/HU-21/HU-22, mantenimiento de movimientos estándar, VOIDED y compensación auditable sin DELETE físico; decisiones P1–P5 y dependencia de acceso EP-PLA. Se conserva el incremento S2 y HU-25 en S7.
+
+**Refined**: 2026-10-02 — Correcciones del análisis aprobadas: consumo por periodo verificable sobre revisión vigente, corte temporal exacto y continuidad segura tras reinicio; contexto explícito EP-MOV y serialización de pruebas compartidas en tasks.md.
 
 **Input**: Especificar funcionalmente EP-MOV completa, con HU-18 a HU-25; Sprint 2 entrega registro manual, saldos atómicos y detección de duplicados, y los sprints 4, 6 y 7 amplían correcciones, consulta, obligaciones, metas y reembolsos sin crear una segunda verdad financiera.
 
@@ -43,6 +49,30 @@ Permitir que una persona registre, consulte y corrija hechos financieros con una
 
 Las capacidades futuras quedan especificadas para preservar contratos e invariantes, pero no se consideran entregadas antes de su sprint de cierre.
 
+### Alcance Implementable del Sprint 4
+
+- HU-20 (5 puntos): corregir importe, fecha, cuentas, categoría, comercio y nota de movimientos estándar propios con revisión conocida; conservar la versión anterior y aplicar compensaciones atómicas.
+- HU-21 (5 puntos): anular movimientos estándar mediante revisión `VOIDED`, contrapartidas y conservación de historia; revertir juntas ambas cuentas de una transferencia.
+- HU-22 (5 puntos): historial completo, texto, fechas y tipos Gasto/Ingreso/Transferencia disponibles en Free; filtros avanzados por cuenta, tarjeta, categoría, comercio, monto, fuente y estado autorizados mediante EP-PLA.
+- EP-MOV aporta 15 puntos al Sprint 4; HU-58/HU-59 aportan 16 puntos desde EP-PLA. El compromiso total se mantiene en 31 puntos.
+- La edición y anulación genéricas se limitan a operaciones estándar. Compras/pagos de tarjeta, movimientos con cuotas, dependencias de deuda u otras relaciones especializadas conservan lectura e historia y muestran una advertencia amigable sin mutación genérica.
+- Toda confirmación local persiste revisión, efectos, proyecciones, recibo y outbox como una unidad; la reconciliación remota aplica revisión esperada e idempotencia y presenta conflictos sin mezclar importes.
+- HU-24 permanece en Sprint 6 y HU-25 en Sprint 7. No se incorpora devolución parcial a la implementación ni a la demo S4.
+
+### Clarificaciones Aprobadas del Sprint 4 (2026-10-02)
+
+| Decisión | Resolución aprobada | Aplicación en EP-MOV |
+| :--- | :--- | :--- |
+| P1 — Demo y reembolsos | Corregir el guion S4; HU-25 sigue en S7 y se conservan 31 puntos. | Demo de corrección, anulación, filtros y reconexión; sin devolución parcial. La discrepancia con el cronograma del vault queda identificada para su actualización por el responsable. |
+| P2 — Operaciones especializadas | Solo editar/anular movimientos estándar Gasto, Ingreso y Transferencia. Cuotas/deudas bloquean la edición genérica con advertencia amigable. | Guardar la restricción en dominio y UI; no tratar compra/pago de tarjeta como estándar por su tipo principal. |
+| P3 — Concesión offline | Concesión válida antes del menor límite entre validación +72 h y vencimiento conocido; al alcanzar el límite (incluidas exactamente 72 h), suspender capacidades Premium hasta reconexión. Free y registro local permanecen operativos. | Consumir HU-58/HU-59 sin emitir concesiones desde EP-MOV. Si tras un reinicio no puede demostrarse vigencia con evidencia temporal confiable, requerir revalidación Premium; nunca reiniciar la ventana desde reloj local, backup o reinstalación. |
+| P4 — Línea base | Se acepta el main consolidado con cierre de auditoría DB S3. | Baseline `c80ea0ddea80dfe5332971f12418758ea1bc9923`, coincidente con origin/main al crear la rama; Room v16. La aceptación no sustituye evidencia nueva de pruebas/proveedor. |
+| P5 — Rechazos financieros | Cero DELETE físico; rechazo o anulación con VOIDED y compensación contable auditable. | Si existen efectos confirmados localmente, conservar evidencia y compensar una sola vez. Una solicitud rechazada antes del commit no crea un movimiento ni asientos ficticios. Un conflicto de edición no anula el hecho vigente ni destruye la propuesta. |
+
+### Guion de Demo del Sprint 4 Refinado
+
+Corregir un gasto de S/20 a S/15 y mostrar revisión y recuperación de S/5; anular una transferencia y mostrar ambas contrapartidas; mostrar búsqueda antigua/filtros básicos Free y rechazo de consulta avanzada no autorizada; caducar concesión Premium, guardar un gasto manual offline y reconectar sin duplicados; demostrar al menos un conflicto y su recuperación explícita. HU-25 se demuestra en S7.
+
 ### Fuera de Alcance
 
 - Mover dinero en bancos, ejecutar pagos reales u otorgar crédito.
@@ -73,6 +103,7 @@ Las capacidades futuras quedan especificadas para preservar contratos e invarian
 - HU-07 aporta las cuentas e instrumentos y HU-14 las categorías requeridas por HU-18.
 - Cada incremento posterior inicia únicamente cuando sus dependencias bloqueantes están aceptadas.
 - Los criterios de acceso por plan están disponibles, pero nunca cambian el valor contable de operaciones válidas existentes.
+- La línea base de S4 es main aceptado por P4. HU-58/HU-59 deben integrarse desde EP-PLA antes de aceptar los escenarios de filtros avanzados, caducidad y reconexión; no se sustituye su autorización por un booleano local.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -142,6 +173,9 @@ Como usuario de Kipu, quiero corregir mis movimientos para mantener saldos, pres
 2. **Given** un gasto ubicado en el periodo equivocado, **When** se corrige la fecha, **Then** se recalculan los consumos de ambos periodos.
 3. **Given** una revisión modificada por otro dispositivo, **When** se envía una edición incompatible, **Then** se presenta un conflicto sin mezclar importes.
 4. **Given** una categoría histórica bloqueada por plan, **When** solo se corrige la nota, **Then** se conserva esa relación sin habilitar nuevas operaciones sobre el objeto bloqueado.
+5. **Given** una operación con tarjeta, cuotas o dependencias de deuda, **When** se solicita edición genérica, **Then** se explica la restricción sin crear revisión, efectos ni outbox.
+6. **Given** una corrección estándar confirmada offline, **When** se cierra y reinicia la aplicación, **Then** la revisión, sus efectos y el comando pendiente permanecen completos y se sincronizan sin duplicación.
+7. **Given** un único gasto de S/20 en el periodo A y ninguno en B, **When** se cambia su fecha efectiva de A a B, **Then** el gasto confirmado calculado queda en S/0 para A y S/20 para B, sin cambiar el saldo ni contar revisiones antiguas; si se anula, ambos periodos quedan en S/0. Los intervalos y la zona de referencia se fijan en el escenario.
 
 ---
 
@@ -159,6 +193,9 @@ Como usuario de Kipu, quiero anular movimientos equivocados para corregir mis ci
 2. **Given** una solicitud de confirmación de anulación, **When** se cancela la acción, **Then** el movimiento no cambia.
 3. **Given** una transferencia entre dos cuentas, **When** se anula, **Then** ambos efectos se revierten juntos.
 4. **Given** un movimiento ya anulado, **When** llega una edición anterior, **Then** el registro no se reactiva silenciosamente.
+5. **Given** una anulación ya aplicada, **When** se reenvía el mismo comando, **Then** se devuelve el resultado previo sin una segunda compensación.
+6. **Given** una operación especializada, **When** se solicita anulación genérica, **Then** se muestra una advertencia y se conserva la operación sin modificar relaciones.
+7. **Given** una operación con efectos locales confirmados recibe rechazo financiero permanente, **When** se reconcilia el rechazo, **Then** se conserva su evidencia, se registra VOIDED y se compensan solo sus efectos aplicados sin DELETE físico ni duplicación por reintento.
 
 ---
 
@@ -176,6 +213,9 @@ Como usuario de Kipu, quiero buscar y filtrar movimientos para revisar mi histor
 2. **Given** una autorización Premium vigente y gastos en distintas cuentas, **When** se combinan cuenta, categoría y rango, **Then** solo se muestran los movimientos que cumplen todas las condiciones.
 3. **Given** una consulta sin coincidencias, **When** se aplican filtros, **Then** se muestra un estado vacío con opción de limpiarlos.
 4. **Given** modalidad Free y un enlace con filtros avanzados, **When** se intenta ejecutar, **Then** se explica la restricción y se mantiene disponible el historial básico.
+5. **Given** una concesión Premium caducada y datos locales, **When** se aplica una consulta avanzada, **Then** se exige revalidación sin ejecutar la consulta protegida y siguen disponibles historial básico y registro manual.
+6. **Given** referencias archivadas o movimientos VOIDED, **When** se consulta el historial propio, **Then** siguen legibles con su estado y no reaparecen efectos financieros anulados.
+7. **Given** una concesión con límite conocido, **When** se alcanza exactamente el límite o tras reiniciar no existe evidencia temporal confiable, **Then** no se ejecuta consulta avanzada hasta revalidar y se conservan lectura básica y registro manual offline.
 
 ---
 
@@ -251,11 +291,11 @@ Como usuario de Kipu, quiero registrar devoluciones totales o parciales para cor
 - **FR-005**: Kipu MUST mostrar el efecto local confirmado sin esperar conectividad.
 - **FR-006**: Kipu MUST garantizar que una operación con múltiples efectos sea aplicada por completo o no sea aplicada.
 - **FR-007**: Kipu MUST conservar una operación confirmada y su envío pendiente tras el cierre inesperado o reinicio.
-- **FR-008**: Kipu MUST distinguir un reintento idéntico, un conflicto de identidad con contenido diferente y una coincidencia solo probable.
+- **FR-008**: Kipu MUST distinguir un reintento idéntico, un conflicto de identidad con contenido diferente y una coincidencia solo probable. La representación canónica de comandos nuevos MUST distinguir delimitadores dentro de textos, null y cadena vacía, preservando Unicode. Una evolución versionada MUST conservar sin reinterpretación los bytes/hash de comandos S2 ya encolados y permitir su replay compatible; el servidor valida el hash del contrato nuevo.
 - **FR-009**: Kipu MUST evitar efectos adicionales ante doble toque, reenvío, reordenamiento o respuesta de red perdida.
 - **FR-010**: Kipu MUST permitir confirmar dos operaciones similares como hechos distintos cuando poseen identidades diferentes.
 - **FR-011**: Kipu MUST registrar cada corrección como una nueva revisión enlazada a la versión previa.
-- **FR-012**: Kipu MUST recalcular todos los efectos dependientes cuando cambien importe, fecha, cuenta, categoría o clasificación.
+- **FR-012**: Kipu MUST recalcular todos los efectos dependientes cuando cambien importe, fecha, cuenta, categoría o clasificación. En S4 el consumo base por periodo MUST calcularse sobre el payload vigente de gastos confirmados/revisados, por propietario, moneda e intervalo definido, contando cada movimiento una vez y excluyendo VOIDED. Una corrección de fecha MUST retirar el gasto del periodo anterior y atribuirlo al nuevo; los módulos presupuestarios futuros consumen este cálculo sin implementar su administración en S4.
 - **FR-013**: Kipu MUST rechazar o presentar para resolución una edición basada en una revisión incompatible; nunca MUST mezclar importes silenciosamente.
 - **FR-014**: Kipu MUST anular lógicamente un movimiento y revertir juntos todos sus efectos relacionados.
 - **FR-015**: Kipu MUST impedir que una actualización atrasada reactive silenciosamente un movimiento anulado.
@@ -272,6 +312,10 @@ Como usuario de Kipu, quiero registrar devoluciones totales o parciales para cor
 - **FR-026**: Kipu MUST sincronizar operaciones confirmadas mediante reintentos seguros y comunicar conflictos que puedan cambiar la verdad financiera.
 - **FR-027**: Kipu MUST mantener disponibles consulta y registro manual para una persona previamente autenticada cuando no haya conexión.
 - **FR-028**: Kipu MUST excluir de registros y mensajes diagnósticos los datos financieros sensibles que no sean necesarios para resolver el fallo.
+- **FR-029**: En S4 Kipu MUST limitar edición y anulación genéricas a operaciones estándar; una operación especializada MUST conservarse sin cambios y mostrar una advertencia amigable.
+- **FR-030**: Kipu MUST conservar los asientos anteriores y agregar compensaciones auditables para anulación o rechazo de efectos locales confirmados; MUST NOT usar DELETE físico. Rechazar antes de confirmar no crea efectos; un conflicto no anula automáticamente el movimiento vigente.
+- **FR-031**: Kipu MUST confirmar atómicamente revisión, compensaciones, proyecciones, recibo y outbox, comprobando la revisión esperada y preservando VOIDED frente a sincronización atrasada.
+- **FR-032**: EP-MOV MUST revalidar la autorización de HU-58/HU-59 antes de ejecutar filtros avanzados, incluidos enlaces y paginación. La autorización offline solo es válida mientras el tiempo confiable sea estrictamente anterior al menor límite conocido; igualdad implica caducidad. Si un reinicio impide demostrar vigencia, MUST exigir revalidación para Premium. La caducidad MUST preservar Free y registro local y MUST NOT prolongarse por manipulación de reloj.
 
 ### Requisitos Transversales de Aceptación
 
@@ -287,9 +331,9 @@ Como usuario de Kipu, quiero registrar devoluciones totales o parciales para cor
 | :--- | :--- | :--- |
 | HU-18 | FR-001 a FR-005, FR-007, FR-027 | Registro manual local de tres tipos con efectos correctos |
 | HU-19 | FR-004 a FR-007, FR-026 | Saldos inmediatos y ausencia de medias operaciones |
-| HU-20 | FR-011 a FR-013 | Correcciones auditables y conflictos explícitos |
-| HU-21 | FR-014, FR-015 | Anulación completa sin resurrección |
-| HU-22 | FR-016 a FR-018 | Historial básico permanente y filtros avanzados autorizados |
+| HU-20 | FR-011 a FR-013, FR-029, FR-031 | Correcciones estándar auditables y conflictos explícitos |
+| HU-21 | FR-014, FR-015, FR-029 a FR-031 | VOIDED y compensación completa sin DELETE ni resurrección |
+| HU-22 | FR-016 a FR-018, FR-032 | Historial básico permanente y filtros avanzados autorizados |
 | HU-23 | FR-008 a FR-010, FR-019 | Reintentos sin duplicación y similitudes confirmables |
 | HU-24 | FR-020 a FR-022 | Principal, cobros y reservas sin clasificación doble |
 | HU-25 | FR-023 a FR-025 | Reembolso limitado, vinculado y conciliado entre periodos |
@@ -353,6 +397,11 @@ No quedan decisiones funcionales abiertas que impidan planificar el incremento d
 - **SC-008**: Después de reiniciar sin red, el 100% de las operaciones que habían sido confirmadas reaparece con los mismos saldos y queda disponible para sincronización.
 - **SC-009**: Correcciones, anulaciones y reembolsos dejan una cadena auditable completa y ninguna operación antigua reactiva un estado supersedido.
 - **SC-010**: Ninguna pérdida de Premium, reducción de cupo o relación bloqueada elimina o altera el efecto financiero de movimientos válidos existentes.
+- **SC-011**: Los escenarios adicionales S4 de HU-20/21/22 y las decisiones P1–P5 se verifican con evidencia de dominio, Room, RPC/sync y UI; las operaciones especializadas no producen mutación genérica.
+- **SC-012**: En las pruebas de anulación y rechazo de efectos locales confirmados se conserva el 100% de los asientos originales y se obtiene una sola compensación efectiva por comando.
+- **SC-013**: Ninguna consulta avanzada de la matriz Free/concesión caducada/enlace directo se ejecuta sin autorización; el registro manual persiste y sincroniza sin duplicados.
+
+SC-001 conserva los 33 escenarios oficiales de la épica; las adiciones S4 se verifican con SC-011. En S4 se aceptan HU-20/21/22 y regresión del incremento existente; SC-009 para reembolsos y FR-020–025 permanecen sujetos a S6/S7, sin adelantar sus módulos.
 
 ## Assumptions
 
@@ -373,7 +422,7 @@ No quedan decisiones funcionales abiertas que impidan planificar el incremento d
 - **EP-APS**: sesión, propietario e aislamiento de datos.
 - **EP-CTA**: cuentas, tarjetas, monedas y saldos derivados.
 - **EP-CCO**: categorías, subcategorías y comercios.
-- **EP-PLA**: decisión de acceso y selección de objetos bajo límites Free.
+- **EP-PLA**: decisión de acceso y selección de objetos bajo límites Free; HU-58/HU-59 autorizan las consultas Premium y su concesión offline. Su implementación pertenece a `specs/012-ep-pla-planes-monetizacion/` y bloquea la aceptación integrada de esos escenarios S4.
 - **EP-DEU**: deudas y préstamos requeridos por HU-24.
 - **EP-MET**: metas y reservas requeridas por HU-24.
 - **EP-PRE**: periodos y consumo presupuestario requeridos por HU-25.

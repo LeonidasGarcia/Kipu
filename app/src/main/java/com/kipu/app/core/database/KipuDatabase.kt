@@ -24,9 +24,14 @@ import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.movements.data.local.BalanceProjectionEntity
 import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
 import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
+import com.kipu.app.feature.movements.data.local.MovementConflictProposalEntity
 import com.kipu.app.feature.movements.data.local.MovementDao
+import com.kipu.app.feature.movements.data.local.MovementLedgerAliasEntity
+import com.kipu.app.feature.movements.data.local.MovementLedgerEffectEntity
+import com.kipu.app.feature.movements.data.local.MovementOfficialRevisionEntity
 import com.kipu.app.feature.movements.data.local.MovementOutboxEntity
 import com.kipu.app.feature.movements.data.local.MovementSyncCheckpointEntity
+import com.kipu.app.feature.movements.data.local.TransactionRevisionEntity
 import com.kipu.app.feature.movements.data.local.TransactionEntity
 import com.kipu.app.feature.notifications.data.local.AppNotificationDao
 import com.kipu.app.feature.notifications.data.local.AppNotificationEntity
@@ -70,6 +75,12 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         CategoryConflictEntity::class,
         CategorySyncOutboxEntity::class,
         TransactionEntity::class,
+        TransactionRevisionEntity::class,
+        MovementOfficialRevisionEntity::class,
+        MovementLedgerEffectEntity::class,
+        MovementLedgerAliasEntity::class,
+        MovementConflictProposalEntity::class,
+
         LedgerEntryEntity::class,
         LocalCommandReceiptEntity::class,
         MovementOutboxEntity::class,
@@ -80,7 +91,7 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         AppNotificationEntity::class,
         NotificationSyncOutboxEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

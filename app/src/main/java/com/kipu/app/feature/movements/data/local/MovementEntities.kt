@@ -65,6 +65,10 @@ data class TransactionEntity(
     val operationKind: String? = null,
     @ColumnInfo(name = "installment_count")
     val installmentCount: Int? = null,
+    @ColumnInfo(name = "revision", defaultValue = "1") val revision: Long = 1L,
+    @ColumnInfo(name = "acknowledged_revision") val acknowledgedRevision: Long? = null,
+    @ColumnInfo(name = "current_revision_id") val currentRevisionId: String? = null,
+    @ColumnInfo(name = "source") val source: String? = null,
 )
 
 @Entity(
@@ -114,6 +118,10 @@ data class LocalCommandReceiptEntity(
     val status: String,
     @ColumnInfo(name = "response_payload")
     val responsePayload: String? = null,
+    @ColumnInfo(name = "contract_version", defaultValue = "1") val contractVersion: Int = 1,
+    @ColumnInfo(name = "command_type", defaultValue = "'REGISTER'") val commandType: String = "REGISTER",
+    @ColumnInfo(name = "expected_revision") val expectedRevision: Long? = null,
+    @ColumnInfo(name = "resulting_revision") val resultingRevision: Long? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
@@ -139,6 +147,11 @@ data class MovementOutboxEntity(
     val aggregateId: String,
     @ColumnInfo(name = "payload")
     val payload: String,
+    @ColumnInfo(name = "contract_version", defaultValue = "1") val contractVersion: Int = 1,
+    @ColumnInfo(name = "command_type", defaultValue = "'REGISTER'") val commandType: String = "REGISTER",
+    @ColumnInfo(name = "expected_revision") val expectedRevision: Long? = null,
+    @ColumnInfo(name = "depends_on_command_id") val dependsOnCommandId: String? = null,
+    @ColumnInfo(name = "revision_id") val revisionId: String? = null,
     @ColumnInfo(name = "state")
     val state: String = "PENDING",
     @ColumnInfo(name = "attempt_count")

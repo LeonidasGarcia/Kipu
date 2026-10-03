@@ -56,3 +56,13 @@ docs/audits/evidence/
 /AUDITORIA_Y_PLAN_FIXES.md
 /CHECKLIST_FIXES_AUDITORIA.md
 /PROMPT_ORCA_*.md
+
+# Local workspace, agent and test baseline files
+.backups/
+.mcp.json
+.om-project
+AGENTS.md
+CLAUDE.md
+supabase/local-baseline/
+supabase/sprint_3_remote_baseline_routines.sql
+

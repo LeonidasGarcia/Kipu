@@ -10,6 +10,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,7 +35,12 @@ class MovementApi @Inject constructor(
     ): MovementApiResponse<RegisterTransactionResponseDto> {
         return try {
             val auth = getAuthHeader() ?: return MovementApiResponse.Error(401, "No active session")
-            val response = httpClient.post("rest/v1/rpc/register_transaction_v1") {
+            val rpc = when (request.contractVersion) {
+                1 -> "register_transaction_v1"
+                2 -> "register_transaction_v2"
+                else -> return MovementApiResponse.Error(400, "Unsupported contract version")
+            }
+            val response = httpClient.post("rest/v1/rpc/$rpc") {
                 contentType(ContentType.Application.Json)
                 header(HttpHeaders.Authorization, auth)
                 setBody(mapOf("p_command" to request))
@@ -43,6 +49,34 @@ class MovementApi @Inject constructor(
                 HttpStatusCode.OK -> MovementApiResponse.Success(response.body<RegisterTransactionResponseDto>())
                 else -> MovementApiResponse.Error(response.status.value, response.body<String>())
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            MovementApiResponse.NetworkFailure(e)
+        }
+    }
+
+    suspend fun reviseOrVoidTransaction(
+        request: ReviseOrVoidTransactionRequestDto,
+    ): MovementApiResponse<ReviseOrVoidTransactionResponseDto> {
+        return try {
+            val auth = getAuthHeader() ?: return MovementApiResponse.Error(401, "No active session")
+            val rpc = when (request.commandType) {
+                "REVISE_TRANSACTION" -> "revise_transaction_v1"
+                "VOID_TRANSACTION" -> "void_transaction_v1"
+                else -> return MovementApiResponse.Error(400, "Unsupported command type: ${request.commandType}")
+            }
+            val response = httpClient.post("rest/v1/rpc/$rpc") {
+                contentType(ContentType.Application.Json)
+                header(HttpHeaders.Authorization, auth)
+                setBody(mapOf("p_command" to request))
+            }
+            when (response.status) {
+                HttpStatusCode.OK -> MovementApiResponse.Success(response.body<ReviseOrVoidTransactionResponseDto>())
+                else -> MovementApiResponse.Error(response.status.value, response.body<String>())
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             MovementApiResponse.NetworkFailure(e)
         }

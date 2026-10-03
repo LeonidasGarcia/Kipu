@@ -1,8 +1,18 @@
-# Tasks: Sprint 2 — Movimientos y ledger
+# Tasks: Sprint 2 y Sprint 4 — Movimientos y ledger
+
+**Propagated**: 2026-10-02 — T093/F04: alta estándar v2 con array canónico inequívoco validado por servidor; outbox v1 histórica inmutable, dispatch por versión y nueva migración wrapper. Se conserva el trabajo S2 y el DAG existente.
 
 **Input**: documentos de diseño en `specs/004-ep-mov-movimientos-ledger/`
 
-**Alcance**: sólo US1/HU18, US2/HU19 y US3/HU23. US4–US8 permanecen especificadas para sprints posteriores, pero no son tareas de esta semana.
+**Alcance histórico S2**: US1/HU18, US2/HU19 y US3/HU23; T001–T057 conservan su contenido y estado de cierre.
+
+**Alcance activo S4**: US4/HU-20, US5/HU-21 y US6/HU-22 (15 puntos EP-MOV; total S4 31 con HU-58/HU-59 de EP-PLA). US7/HU-24 sigue en S6 y US8/HU-25 en S7.
+
+**Propagated**: 2026-10-02 — Refinamiento aprobado P1–P5 y plan S4; nuevas tareas T058–T089, sin regenerar ni renumerar el trabajo S2. Baseline main `c80ea0ddea80dfe5332971f12418758ea1bc9923`, Room v16.
+
+**Propagated**: 2026-10-02 — Correcciones I1/U1/B1/I2 aprobadas: contexto explícito EP-MOV, prueba cuantitativa entre periodos, corte exacto/reinicio y T074 serializada después de T071. T001–T057 permanecen intactas.
+
+**Contexto obligatorio de comandos S4**: antes de invocar scripts Spec Kit en PowerShell, establecer `$env:SPECIFY_FEATURE_DIRECTORY = (Resolve-Path 'specs/004-ep-mov-movimientos-ledger').Path` y `$env:SPECIFY_FEATURE = '004-ep-mov-movimientos-ledger'`; comprobar FEATURE_DIR en el JSON. No confiar en la selección histórica de `.specify/feature.json` ni ejecutar comandos sobre EP-NOT.
 
 **Regla de pruebas**: escribir cada prueba indicada y comprobar que falla por la razón esperada antes de implementar.
 
@@ -136,17 +146,19 @@
 
 ---
 
-## Deferred Backlog (no ejecutar esta semana)
+## Backlog por Incremento (historial de diferimiento S2)
 
 | Historia | Contenido | Sprint previsto |
 |---|---|---|
-| US4 / HU20 | Edición auditable y conflictos de revisión | 4 |
-| US5 / HU21 | Anulación lógica y contrapartidas | 4 |
-| US6 / HU22 | Búsqueda y filtros avanzados | 4 |
+| US4 / HU20 | Edición auditable y conflictos de revisión | 4 — activado en Phase 9 |
+| US5 / HU21 | Anulación lógica y contrapartidas | 4 — activado en Phase 10 |
+| US6 / HU22 | Búsqueda y filtros avanzados | 4 — activado en Phase 11 |
 | US7 / HU24 | Obligaciones, préstamos y metas | 6 |
 | US8 / HU25 | Reembolsos y conciliación entre periodos | 7 |
 
 ## Dependencies & Execution Order
+
+Las reglas siguientes documentan S2; el DAG S4 se incorpora al final del archivo.
 
 - Phase 1 bloquea cualquier cambio de esquema compartido.
 - Phase 2 bloquea US1, US2 y US3.
@@ -178,9 +190,119 @@ T036 hash | T037 similitud local | T038 idempotencia remota | T039 diálogo
 
 ## Implementation Strategy
 
+Estrategia histórica S2; para S4 seguir Phase 7–12 y sus gates.
+
 1. Resolver T001–T002 antes de editar migraciones o `KipuDatabase`.
 2. Completar Foundation y hacer pasar migración/compilación.
 3. Entregar US1 como MVP demostrable offline.
 4. Completar US2 y repetir pruebas con fallos y reinicios.
 5. Completar US3 y probar repeticiones concurrentes y compras similares legítimas.
 6. Ejecutar Phase 6, realizar cross-review y adjuntar evidencia; no adelantar el backlog diferido.
+
+## Phase 7: S4 — Contratos, decisiones y gate de diseño
+
+**Goal**: cerrar derivados antes de tocar código financiero; P1–P5 ya están aprobadas y no requieren repetir las preguntas.
+
+- [x] T058 Registrar decisiones P1–P5, baseline aceptada y fuentes P14/P15/HU en `specs/004-ep-mov-movimientos-ledger/research.md` y `team-questions.md`; documentar corrección del guion S4 y mantener HU-25 en S7 (FR-029–032).
+- [x] T059 Detallar estados/revisiones/snapshots, compensaciones, referencias históricas, consumo base por propietario/moneda/periodo sobre payload vigente e intervalos explícitos y migración desde Room v16 en `specs/004-ep-mov-movimientos-ledger/data-model.md`, contrastando el esquema remoto existente sin reescribir migraciones S2/S3 (FR-011/012/014/015/030/031; depende de T058).
+- [x] T060 Definir contratos versionados de corregir/anular, hash/expectedRevision, recibos y reconciliación de rechazo/conflicto/pull en `specs/004-ep-mov-movimientos-ledger/contracts/revise-and-void-transaction-v1.md` y `contracts/sync-and-deduplication.md`; preservar el hecho vigente y propuestas (FR-013–015/026/030/031; depende de T059).
+- [x] T061 [P] Definir frontera de autorización HU-58/HU-59, consulta/paginación/deep links, corte exacto (`tiempo confiable >= límite` deniega Premium) y revalidación tras reinicio sin continuidad temporal verificable en `specs/004-ep-mov-movimientos-ledger/contracts/history-query-access.md`; enlazar contratos de `specs/012-ep-pla-planes-monetizacion/` y registrar dependencias pendientes del productor sin simular concesiones verificadas (FR-016–018/027/032; depende de T058).
+- [x] T062 [P] Refinar edición estándar, advertencia especializada, anulación, conflictos y filtros de Pantalla 10/11 en `specs/004-ep-mov-movimientos-ledger/contracts/ui-contract.md` y escenarios S4 en `quickstart.md` (FR-011–018/029/032; depende de T060 y T061).
+- [x] T063 Obtener revisión financiera/arquitectónica del modelo/contratos y ejecutar `speckit-analyze` sobre los artefactos reconciliados; registrar cobertura y corregir críticos en `specs/004-ep-mov-movimientos-ledger/review-record.md` (depende de T059–T062; bloquea código S4).
+
+## Phase 8: S4 — Foundation de revisiones, persistencia y sync
+
+- [x] T064 [P] Probar contratos de comando, revisión esperada, guardia STANDARD, validación de relaciones y planes de compensación en `app/src/test/java/com/kipu/app/feature/movements/domain/MovementRevisionTest.kt` (FR-011–015/029–031; depende de T063).
+- [x] T065 Añadir modelos de revisión/comando/compensación, estado financiero y puertos de corregir/anular/consulta en `app/src/main/java/com/kipu/app/feature/movements/domain/model/MovementModels.kt`, `MovementRevisionModels.kt` y `domain/MovementRepository.kt`; preservar API de alta (depende de T064).
+- [x] T066 Probar y añadir migración no destructiva desde Room v16, entidades/DAO de revisiones y recibos en `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt`, `app/src/main/java/com/kipu/app/core/database/RoomMigrations.kt`, `KipuDatabase.kt`, `feature/movements/data/local/MovementEntities.kt` y `MovementDao.kt`; versionar el nuevo esquema en `app/schemas/` (depende de T065).
+- [x] T067 [P] Probar y añadir RPC de corrección/anulación, bloqueo de revisión, recibos, RLS/grants y emisión de cambios en una nueva migración bajo `supabase/migrations/` y `supabase/tests/database/movements_revision_test.sql`; no modificar migraciones aplicadas (FR-013–015/030/031; depende de T065 y T060).
+- [x] T068 Extender payload/DTO/API y worker para comandos encadenados por agregado, pull de revisiones/contrapartidas/tombstones y checkpoint atómico en `app/src/main/java/com/kipu/app/feature/movements/data/MovementOutboxPayloadFactory.kt`, `data/remote/MovementDtos.kt`, `MovementApi.kt` y `data/sync/SyncMovementsWorker.kt`; probar replay/reordenamiento en `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt` (depende de T066 y T067).
+
+## Phase 9: US4 — HU-20 Edición estándar auditable
+
+**Independent Test**: S/20→S/15 recupera S/5, fecha cambia periodos, nota conserva categoría bloqueada; operación especializada no cambia y revisión incompatible produce conflicto.
+
+- [x] T069 [P] [US4] Probar importe/fecha/cuentas/categoría/comercio/nota, referencias históricas y prohibición de edición especializada en `app/src/test/java/com/kipu/app/feature/movements/domain/ReviseTransactionTest.kt`; verificar con intervalos/zona explícitos gasto S/20 trasladado de A a B: consumo A=0/B=20, saldo intacto y anulaciones excluidas (FR-011–013/029/031; depende de T065).
+- [x] T070 [US4] Implementar validación y plan de compensación del caso de uso en `app/src/main/java/com/kipu/app/feature/movements/domain/ReviseTransaction.kt`; solo nota no agrega asientos y transferencias ajustan ambos extremos (depende de T069).
+- [x] T071 [US4] Probar rollback/replay/reinicio e implementar commit revisión+compensaciones+proyecciones+recibo+outbox y consulta interna de consumo base por periodo en `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementRevisionLocalTest.kt`, `app/src/main/java/com/kipu/app/feature/movements/data/local/MovementLocalDataSource.kt`, `MovementDao.kt`, `BalanceProjectionStore.kt` y `data/OfflineFirstMovementRepository.kt`; comprobar A=0/B=20 después de mover la fecha y totales originales tras rollback, sin sumar snapshots antiguos (depende de T066 y T070).
+- [x] T072 [US4] Implementar propuesta persistente y resolución explícita descartar/rehacer sobre revisión vigente en `app/src/main/java/com/kipu/app/feature/movements/data/OfflineFirstMovementRepository.kt` y `data/sync/SyncMovementsWorker.kt`; probar reconciliación de efectos optimistas sin sobrescribir historia ni anular el hecho vigente en `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt` (FR-013/015/026; depende de T068 y T071).
+- [x] T073 [US4] Implementar y probar editor Pantalla 11, resumen de cambios, advertencia especializada y comparación de conflicto en `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementEditorViewModel.kt`, `MovementEditorSheet.kt` y `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementEditorScreenTest.kt`; conectar en `app/src/main/java/com/kipu/app/navigation/MovementsNavigation.kt` (depende de T072 y T062).
+
+## Phase 10: US5 — HU-21 VOIDED y rechazo financiero auditable
+
+**Independent Test**: anular gasto/transferencia, cancelar, repetir y entregar edición antigua; conservar ledger original y revertir una sola vez.
+
+- [x] T074 [US5] Probar VOIDED, compensación de ambas cuentas, cancelar sin escritura, replay y bloqueo especializado en `app/src/test/java/com/kipu/app/feature/movements/domain/VoidTransactionTest.kt` y `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementRevisionLocalTest.kt`; ejecución serial por archivo compartido con T071 (FR-014/015/029–031; depende de T071).
+- [x] T075 [US5] Implementar caso de uso y commit atómico de VOIDED con snapshots, contrapartidas, recibo y outbox en `app/src/main/java/com/kipu/app/feature/movements/domain/VoidTransaction.kt` y `data/local/MovementLocalDataSource.kt`; conservar relaciones e historia (depende de T074 y T071).
+- [x] T076 [US5] Reemplazar DELETE físico en rechazos de efectos confirmados por VOIDED/compensación idempotente en `app/src/main/java/com/kipu/app/feature/accounts/data/sync/SyncInstrumentCommandsWorker.kt`, `feature/movements/data/local/MovementDao.kt` y DAOs de cuotas/asignaciones bajo `feature/accounts/data/local/`; probar rechazo de compra/pago, saldos/pasivo y referencias conservadas en `app/src/androidTest/java/com/kipu/app/feature/accounts/FinancialRejectionCompensationTest.kt` (P5/FR-030; depende de T075 y T068).
+- [x] T077 [US5] Probar dos dispositivos, conflicto, 100 replays y edición posterior a VOIDED en `supabase/tests/database/movements_revision_test.sql` y `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt`; comprobar cero compensaciones duplicadas y originales preservados (FR-013–015/030/031; depende de T072 y T076).
+- [x] T078 [US5] Implementar y probar diálogo de anulación con consecuencias, advertencia especializada y estado histórico VOIDED en `app/src/main/java/com/kipu/app/feature/movements/presentation/VoidMovementDialog.kt`, `MovementHistoryScreen.kt` y `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreenTest.kt` (depende de T075 y T073).
+
+## Phase 11: US6 — HU-22 Consultas Free/Premium
+
+**Independent Test**: encontrar Tambo antiguo Free, combinar cuenta/categoría/rango con Premium, limpiar cero coincidencias y denegar enlace/filtro con concesión caducada conservando consulta básica.
+
+- [x] T079 [P] [US6] Probar consultas básicas/avanzadas, intersección, rangos inválidos, cursor estable y referencias históricas en `app/src/test/java/com/kipu/app/feature/movements/domain/QueryMovementHistoryTest.kt` y `app/src/androidTest/java/com/kipu/app/feature/movements/data/local/MovementHistoryQueryTest.kt` (FR-016–018/032; depende de T066 y T061).
+- [x] T080 [US6] Implementar consulta tipada y guardia de capacidad antes de DAO, incluidos paginación/enlace y alternativa básica, en `app/src/main/java/com/kipu/app/feature/movements/domain/QueryMovementHistory.kt` y `domain/model/MovementHistoryQuery.kt`; consumir la política efectiva de EP-PLA sin verified=true aislado (depende de T079; aceptación integrada espera HU-58/HU-59).
+- [x] T081 [US6] Implementar consultas SQL paginadas por propietario, fecha/ID y filtros combinables en `app/src/main/java/com/kipu/app/feature/movements/data/local/MovementDao.kt` y `data/OfflineFirstMovementRepository.kt`; seleccionar índices con evidencia y preservar VOIDED/referencias archivadas (depende de T080 y T071).
+- [x] T082 [US6] Probar deep links, propietario, cambio de filtros y caducidad con panel abierto; integrar autorización y cursor en `app/src/test/java/com/kipu/app/feature/movements/presentation/MovementHistoryViewModelTest.kt`, `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryViewModel.kt` y `navigation/MovementsNavigation.kt` (depende de T081 y T072).
+- [x] T083 [US6] Implementar fechas, chips, panel avanzado, limpiar y estados vacío/error en `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreen.kt`; probar privacidad, TalkBack y targets de 48dp en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryScreenTest.kt` (depende de T082 y T078).
+- [x] T084 [US6] Integrar y probar HU-58/HU-59 reales: acceso justo antes/en/después del límite, expiración comercial anterior, reloj/reinicio sin evidencia y reconexión, historial básico y gasto manual durable en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryAccessIntegrationTest.kt`; registrar evidencia en `specs/004-ep-mov-movimientos-ledger/quickstart.md` (depende de T083 y entrega EP-PLA HU-58/HU-59; fixtures no cierran este gate).
+
+## Phase 12: S4 — Integración, DoD y Review
+
+- [x] T085 [P] Validar Room v16→nueva versión y migraciones Postgres con datos representativos, ledger/saldos/historia preservados, aislamiento con dos JWT y RPC protegidos en `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt` y `supabase/tests/database/movements_revision_test.sql` (SC-003/005/008/012; depende de T077 y T081).
+- [x] T086 [P] Medir consulta básica de 10 000 movimientos contra SC-007 (p95 <300 ms), paginación sin duplicados y UI sin bloqueo en `app/src/androidTest/java/com/kipu/app/feature/movements/presentation/MovementHistoryPerformanceTest.kt`; registrar dispositivo/datos/resultados en `specs/004-ep-mov-movimientos-ledger/quickstart.md` (depende de T083).
+- [x] T087 Ejecutar regresión S2/S3, integración offline/sync y S4, build/lint/tests pertinentes, verificación de no DELETE en corrección/rechazo financiero y logs sin datos sensibles; registrar comandos/resultados en `specs/004-ep-mov-movimientos-ledger/review-record.md` (FR-019/026–028; SC-002–005/008–013; depende de T084–T086).
+- [x] T088 Obtener cross-review de finanzas, seguridad/RLS, privacidad, arquitectura y evidencia; reconciliar cobertura FR/SC y ejecutar analyze/refine.status en `specs/004-ep-mov-movimientos-ledger/review-record.md` y `checklists/requirements.md` (depende de T087).
+- [x] T089 Ejecutar demo S4 sin devolución parcial, con conflicto/recuperación y persistencia/reconexión; actualizar evidencia de HU-20/21/22 y comunicar al responsable la corrección del cronograma del vault en `specs/004-ep-mov-movimientos-ledger/quickstart.md` y `review-record.md`; aceptar solo HU completas, HU-25 sigue S7 (depende de T088).
+
+## Dependencies & Execution Order — Sprint 4
+
+- Diseño: T058 → T059 → T060; T058 → T061; T060/T061 → T062; T059–T062 → T063. Sin T063 no se inicia código financiero.
+- Foundation: T063 → T064 → T065 → T066/T067 → T068. T067 también depende del contrato T060.
+- Edición: T065 → T069 → T070; T066/T070 → T071; T068/T071 → T072 → T073. T073 también depende de T062.
+- Anulación/rechazos: T071 → T074 → T075; T075/T068 → T076; T072/T076 → T077; T075/T073 → T078.
+- Consultas: T066/T061 → T079 → T080; T080/T071 → T081; T081/T072 → T082; T082/T078 → T083; T083 + HU-58/HU-59 EP-PLA → T084.
+- Cierre: T077/T081 → T085; T083 → T086; T084–T086 → T087 → T088 → T089.
+- [P] permite solo archivos independientes. Serializar trabajos sobre MovementLocalDataSource, MovementDao, workers, quickstart y pruebas compartidas; coordinar EP-CTA al retirar DELETE de rechazos.
+- T001–T057 son historia S2 y no se reabren ni renumeran. US7/HU-24 y US8/HU-25 continúan diferidas; no crear tareas de implementación anticipada para satisfacer cobertura global de la épica.
+
+## Cobertura del Refinamiento S4
+
+| Requisitos / decisión | Tareas | Evidencia |
+|---|---|---|
+| FR-011/012; HU-20 | T059/060/064–073 | Snapshots, compensaciones, cambios de cuenta/periodo y solo nota |
+| FR-013/015/026; conflictos/sync | T060/067/068/072/077 | Revisión esperada, replay, reordenamiento y no resurrección |
+| FR-014/030/031; P5 | T059/060/066/067/071/074–078 | VOIDED, rollback y rechazo sin DELETE ni doble compensación |
+| FR-016–018/032; HU-22/P3 | T061/062/079–084/086 | Free, autorización Premium, cursor y caducidad integrada |
+| FR-029; P2 | T060/062/064/069/073/074/078 | Advertencia especializada sin mutación genérica |
+| FR-004–009/019/027/028; regresión | T064/068/071/077/084/085/087 | Saldos enteros, persistencia, Free, privacidad y no duplicación |
+| SC-002–005/007–013 | T064/069/074/077/079/084–088 | Dominio, Room, RPC, rendimiento y aceptación |
+| P1/P4; alcance y baseline | T058/063/088/089 | main aceptado, 31 puntos, demo sin HU-25 |
+
+SC-001 conserva los escenarios oficiales por sprint; SC-006 mantiene el alta histórica y su regresión. FR-020–025 y SC-009 para reembolsos se trazan a US7/US8 del backlog S6/S7, no a tareas ejecutables S4. Phase 7 (T058–T063) completada el 2026-10-02; revisión de diseño y analyze en review-record.md. Próxima tarea T064. Ausencia de STALE y cierre documental no equivalen a implementación o DoD.
+
+
+## Phase 13: Convergence
+
+**Evaluación**: 2026-10-02, estado actual de código frente a spec/plan/tasks y constitución v2.0.0; lectura estática, sin ejecutar suites ni consultar un entorno desplegado. Fuente de intención: los artefactos aprobados de EP-MOV. Se revisaron 32 FR, 13 SC y 42 escenarios AC (34 en US1–US6, 8 diferidos US7/US8), 10 decisiones técnicas (dominio, atomicidad, persistencia/migración, idempotencia, causalidad/pull, conflictos, periodos, acceso, UI y verificación), y los 9 principios constitucionales según su aplicabilidad. FR-020–025, los 8 AC de US7/US8 y la porción de reembolsos de SC-009 siguen S6/S7. No se añade implementación de esos módulos.
+
+**Resultado**: `tasks_appended`; 13 hallazgos agrupados: 4 `contradicts`, 3 `missing`, 6 `partial`, 0 `unrequested`; severidades 4 CRITICAL y 9 HIGH. Las tareas siguientes son remediaciones/verificaciones trazables del trabajo pendiente y enlazan tareas existentes; no representan una segunda implementación del mismo flujo. T001–T089 y sus marcadores se conservan. No interpretar los checks históricos o el diseño T058–T063 como evidencia runtime S4.
+
+**Orden**: atender primero los críticos respetando prerrequisitos reales; esta sección no exige esperar al cierre T089 para comenzar. T091/T092/T093 pueden comenzar con el gate documental T063 cerrado. T090 se coordina con los modelos/compensaciones T065/T075/T076. Las demás verificaciones se cierran al completar el trabajo enlazado. No introducir dependencias inversas desde T064–T089 que generen ciclos. Serializar tareas que comparten workers/DAO/pruebas. T084 sigue bloqueada por el productor real EP-PLA.
+
+- [x] T090 CRITICAL [F01] Sustituir el borrado financiero en `app/src/main/java/com/kipu/app/feature/accounts/data/sync/SyncInstrumentCommandsWorker.kt:rejectCreditCommand`, `feature/movements/data/local/MovementDao.kt:deleteLedgerEntriesForTransaction` y DAOs de cuotas/asignaciones por VOIDED y compensación idempotente de efectos realmente aplicados; preservar originales, relaciones y pasivo/saldos. Completar T076 con pruebas de compra/pago rechazados y replay en `app/src/androidTest/java/com/kipu/app/feature/accounts/FinancialRejectionCompensationTest.kt`; coordinar T065/T075 y no habilitar mantenimiento genérico de operaciones especializadas, per FR-030, US5/AC7, Constitution I/VI (contradicts).
+- [x] T091 CRITICAL [F02] Hacer que todo fallo de página o snapshot aborte realmente la transacción Room en `app/src/main/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorker.kt:pullChanges` y sus aplicadores; `return@withTransaction false` y excepciones absorbidas permiten commit de escrituras previas. Verificar ausencia de cambios en filas, ledger, proyecciones y checkpoint tras entidad desconocida, gap de secuencia, snapshot inválido y fallo al final; ejecutar/ampliar `unknownChangeRollsBackWholePageAndDoesNotAdvanceCursor` en `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt`. Integrar con T068/T085; no confundir Retry con rollback, per FR-006/031, SC-003, plan: pull/checkpoint atómico, Constitution II (contradicts).
+- [x] T092 CRITICAL [F03] Recuperar comandos `IN_FLIGHT` con lease vencido en `app/src/main/java/com/kipu/app/feature/movements/data/local/MovementDao.kt:claimPendingOutbox` y `data/sync/SyncMovementsWorker.kt`; hoy solo se seleccionan PENDING/RETRY y el worker marca IN_FLIGHT antes de invocar API, dejando una fila abandonada tras muerte del proceso. Probar reclamación atómica/exclusión entre workers, cierre antes/después de commit remoto, misma clave/hash y un ?nico efecto en `app/src/androidTest/java/com/kipu/app/feature/movements/data/sync/SyncMovementsWorkerTest.kt`; conservar outbox histórica y completar recuperación en T068, per FR-007/009/026, US1/AC5, US2/AC3, SC-008, Constitution II (contradicts).
+- [x] T093 CRITICAL [F04] Eliminar la ambigüedad de serialización de nuevos comandos en `app/src/main/java/com/kipu/app/feature/movements/domain/TransactionRequestHasher.kt` y contratos de hash remoto correspondientes: los pares (merchantProvisionalText=`a;note:b`, note=`c`) y (merchantProvisionalText=`a`, note=`b;note:c`) generan la misma cadena actual con contenido diferente. Añadir vectores de delimitadores, null/vacío y Unicode a `app/src/test/java/com/kipu/app/feature/movements/domain/TransactionIdempotencyTest.kt` y pruebas remotas bajo `supabase/tests/database/`; preservar bytes/hash de outbox S2 ya pendiente y compatibilidad mediante versionado, sin reinterpretar comandos antiguos. Coordinar contrato S4 T060/T064/T067 y registrar cualquier evolución del contrato de alta mediante el workflow de refinamiento antes de implementarla, per FR-008/009/019, US3/AC1, plan: identidad y hash canónico, Constitution II (contradicts). Contrato actualizado: contracts/register-transaction-v2.md; incluir dispatch v1/v2 y prueba de preservación de colas históricas.
+- [x] T094 HIGH [F05] Completar y verificar modelos/puertos y migración no destructiva de T064–T066 en `app/src/main/java/com/kipu/app/feature/movements/domain/model/MovementModels.kt`, `MovementRevisionModels.kt`, `domain/MovementRepository.kt`, `data/local/MovementEntities.kt`, `core/database/RoomMigrations.kt`, `KipuDatabase.kt` y `app/schemas/`: la versión actual es 16, el enum solo ACTIVE/FAILED y faltan revisiones, asignación oficial separada, propuestas, aliases y recibos/outbox S4. Probar upgrade con comandos pendientes y FAILED histórico sin fabricar compensaciones de asientos borrados, per FR-011/031, SC-008/012, plan: modelo y migración S4 (missing).
+- [x] T095 HIGH [F06] Completar T069–T075 y comprobar casos de uso `ReviseTransaction.kt`/`VoidTransaction.kt` y commit local revisión+efectos+proyecciones+recibo+outbox en `app/src/main/java/com/kipu/app/feature/movements/domain/`, `data/local/MovementLocalDataSource.kt` y `data/OfflineFirstMovementRepository.kt`; actualmente MovementRepository solo expone alta/lectura/similitud. Verificar estándar, referencias históricas, revisión esperada, nota sin asientos, transferencia completa, cancelación sin escritura y replay, per FR-011–015/029/031, US4/AC1–7, US5/AC1–6 (missing).
+- [x] T096 HIGH [F07] Completar T067/T077/T085 mediante nueva migración bajo `supabase/migrations/` y `supabase/tests/database/movements_revision_test.sql`: las tablas remotas incluyen estados/revisiones base, pero no se encontraron RPCs `revise_transaction_v1`/`void_transaction_v1`. Verificar recibo antes de revisión, locking/carreras, ownership de todas las referencias, grants mínimos, RLS, evidencia append-only y emisión atómica de cambios; no asumir que una política histórica FOR ALL prueba permisos actuales ni modificar migraciones aplicadas, per FR-013–015/030/031, SC-002/003/005/012, plan: RPC S4 (partial).
+- [x] T097 HIGH [F08] Completar T068/T072/T077 en `app/src/main/java/com/kipu/app/feature/movements/data/MovementOutboxPayloadFactory.kt`, `data/remote/MovementDtos.kt`, `MovementApi.kt` y `data/sync/SyncMovementsWorker.kt`: API solo registra altas, pull no conserva head/revisión de movimientos y `reconcilePulledLedgerEntries` compara el conjunto completo existente. Incorporar causalidad padre/hijo, revisión monotónica, aliases/deltas ?nicos, VOIDED sin resurrección y propuestas persistentes con descarte/rehacer y compensación de optimismo. Probar cadena offline, conflicto padre y replay sin duplicar original, per FR-013/015/026/031, US4/AC3/6, US5/AC4/5, plan: reconciliación S4 (partial).
+- [x] T098 HIGH [F09] Completar consulta interna de consumo de T069/T071 en `app/src/main/java/com/kipu/app/feature/movements/data/local/MovementDao.kt`, `MovementLocalDataSource.kt` y `data/OfflineFirstMovementRepository.kt`; no existe cálculo por periodo sobre payload vigente. Verificar propietario/moneda/intervalos/zona explícitos, ID ?nico, jerarquía sin doble conteo y exclusión VOIDED/transferencias/pagos: gasto 20 de A→B deja A=0/B=20 y caja igual, anular A=B=0 y rollback conserva originales. Sin implementar administración presupuestaria ni reembolso, per FR-012, US4/AC2/7, plan: ExpenseConsumptionQuery (missing).
+- [x] T099 HIGH [F10] Completar T079–T082 en `app/src/main/java/com/kipu/app/feature/movements/domain/QueryMovementHistory.kt`, `domain/model/MovementHistoryQuery.kt`, `data/local/MovementDao.kt` y `presentation/MovementHistoryViewModel.kt`; hoy se cargan todas las filas y se filtran en memoria por texto/tipo, sin rango de fechas ni cursor. Verificar SQL paginado por fecha/ID, combinación de criterios, moneda/rangos válidos, referencias archivadas, VOIDED e invalidación por cambios de criterios/propietario/dataset, per FR-016–018, US6/AC1–4/6, SC-007, plan: consultas S4 (partial).
+- [x] T100 HIGH [F11] Integrar el consumidor protegido de T080/T082/T084 con el productor real HU-58/HU-59 en `app/src/main/java/com/kipu/app/feature/movements/domain/QueryMovementHistory.kt`, `presentation/MovementHistoryViewModel.kt` y `navigation/MovementsNavigation.kt`; `feature/plans/domain/FeatureAccessPolicy.kt` autoriza por verified=true y `EffectiveEntitlement` no contiene concesión/ancla. Verificar antes de DAO/enlaces/páginas/reanudación tiempo confiable <min(validación+72h, fin conocido), igualdad/reboot sin continuidad deniegan Premium, Free durable siempre; coordinar implementación EP-PLA sin fabricar un entitlement en EP-MOV. T084 y esta tarea no cierran con stubs, per FR-017/018/032, US6/AC4/5/7, SC-010/013, plan: frontera EP-PLA (partial).
+- [x] T101 HIGH [F12] Completar T073/T078/T083 en `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementEditorViewModel.kt`, `MovementEditorSheet.kt`, `VoidMovementDialog.kt`, `MovementHistoryScreen.kt` y `navigation/MovementsNavigation.kt`: faltan editor/anulación/conflictos/filtros avanzados y navegación correspondiente. Probar resumen anterior/nuevo, advertencia especializada, cancelar sin escritura, fila anulada legible, limpiar/cero resultados/reconexión, TalkBack/48 dp/enmascaramiento en todas las superficies, per FR-011–018/029/032, US4/US5/US6, plan: Pantallas 10/11 (partial).
+- [x] T102 HIGH [F13] Completar evidencia verificable de T064–T089 y remediaciones T090–T101 en `app/src/test/`, `app/src/androidTest/`, `supabase/tests/database/`, `specs/004-ep-mov-movimientos-ledger/quickstart.md` y `review-record.md`: faltan suites S4 de revisiones/migración/acceso y `MovementHistoryPerformanceTest.kt` usa ViewModel mock con umbral de render 5 s, sin medir consultas locales p95 <300 ms. Registrar pruebas de rollback/replay/migración/RLS/reloj/offline/regresión, dispositivo/dataset, integración EP-PLA real, cross-review y demo sin HU-25; conservar el test de render como prueba distinta y no reutilizar aprobación S2/diseño como PASS S4. Depende del trabajo financiero/query/UI e integración real T084; no declarar Sprint cerrado mientras haya bloqueantes, per SC-001–013 según alcance S4, plan: Fase 5/DoD, Constitution IX (partial).
+

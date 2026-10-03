@@ -21,11 +21,22 @@ import com.kipu.app.feature.movements.data.remote.MovementApi
 import com.kipu.app.feature.movements.data.local.MovementDao
 import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
 import com.kipu.app.feature.movements.data.local.TransactionEntity
+import com.kipu.app.feature.movements.data.local.BalanceProjectionStore
+import com.kipu.app.feature.movements.data.local.MovementLocalDataSource
+import com.kipu.app.feature.movements.data.remote.MovementApiResponse
+import com.kipu.app.feature.movements.data.remote.RegisterTransactionResponseDto
+import com.kipu.app.feature.movements.domain.model.MovementMutationResult
+import com.kipu.app.feature.movements.domain.model.MovementType
+import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
+import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
+import org.junit.Assert.assertFalse
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import java.util.UUID
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -163,25 +174,6 @@ class SyncMovementsWorkerTest {
         val purchaseId = UUID.randomUUID().toString()
         val installmentId = UUID.randomUUID().toString()
         val paymentId = UUID.randomUUID().toString()
-        database.cardDao().insert(
-            CardEntity(
-                id = cardId,
-                userId = userId,
-                creationOperationId = UUID.randomUUID().toString(),
-                accountId = liabilityAccountId,
-                alias = "Visa principal",
-                type = "CREDIT",
-                currency = "PEN",
-                network = "VISA",
-                issuer = "Banco",
-                lastFourDigits = "4242",
-                creditLimitMinorUnits = 100_000L,
-                billingDay = 10,
-                dueDay = 20,
-                createdAt = 1L,
-                updatedAt = 1L,
-            ),
-        )
         accountDao.insert(
             AccountEntity(
                 id = accountId,
@@ -212,6 +204,25 @@ class SyncMovementsWorkerTest {
                 icon = null,
                 initialBalanceMinorUnits = 0L,
                 openedAt = 1L,
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        database.cardDao().insert(
+            CardEntity(
+                id = cardId,
+                userId = userId,
+                creationOperationId = UUID.randomUUID().toString(),
+                accountId = liabilityAccountId,
+                alias = "Visa principal",
+                type = "CREDIT",
+                currency = "PEN",
+                network = "VISA",
+                issuer = "Banco",
+                lastFourDigits = "4242",
+                creditLimitMinorUnits = 100_000L,
+                billingDay = 10,
+                dueDay = 20,
                 createdAt = 1L,
                 updatedAt = 1L,
             ),
@@ -306,6 +317,257 @@ class SyncMovementsWorkerTest {
 
         assertTrue(result.javaClass.simpleName.contains("Retry"))
         assertEquals(null, accountDao.getById(userId, accountId))
+        assertEquals(null, movementDao.getSyncCheckpoint(userId))
+    }
+
+    @Test
+    fun incorrectPageEndRollsBackOpeningLedgerAndProjection() = runTest {
+        assertRejectedPageLeavesNoOpeningEffects(nextSequence = 2L)
+    }
+
+    @Test
+    fun invalidSnapshotAfterOpeningAccountRollsBackWholePage() = runTest {
+        val malformed = SyncChangeItemDto(
+            sequence = 2, entityType = "TRANSACTION", entityId = UUID.randomUUID().toString(),
+            revision = 1, operation = "UPSERT", payload = Json.parseToJsonElement("{}"),
+        )
+        assertRejectedPageLeavesNoOpeningEffects(nextSequence = 2L, secondChange = malformed)
+    }
+
+    @Test
+    fun sequenceGapAfterOpeningAccountRollsBackWholePage() = runTest {
+        val gap = SyncChangeItemDto(
+            sequence = 3, entityType = "ACCOUNT", entityId = UUID.randomUUID().toString(),
+            revision = 1, operation = "UPSERT", payload = Json.parseToJsonElement("{}"),
+        )
+        assertRejectedPageLeavesNoOpeningEffects(nextSequence = 3L, secondChange = gap)
+    }
+
+    @Test
+    fun replaysExpiredCommandAfterRemoteCommitWithoutRepeatingLocalIncome() = runTest {
+        val accountId = UUID.randomUUID().toString()
+        accountDao.insert(AccountEntity(
+            id = accountId, userId = userId, creationOperationId = UUID.randomUUID().toString(),
+            alias = "Ingreso", type = "CASH", currency = "PEN", presetId = null,
+            color = null, icon = null, initialBalanceMinorUnits = 0L, openedAt = 1L,
+            createdAt = 1L, updatedAt = 1L,
+        ))
+        val key = UUID.randomUUID().toString()
+        val local = MovementLocalDataSource(database, movementDao, BalanceProjectionStore(movementDao))
+        val result = local.commitTransactionAtomic(RegisterTransactionCommand(
+            idempotencyKey = key, userId = userId, type = MovementType.INCOME,
+            amountMinor = 800L, currency = "PEN", sourceAccountId = accountId, occurredAt = 1_000L,
+        ), "original-hash") as RegisterTransactionResult.Success
+        val outbox = movementDao.findClaimableOutbox(userId, System.currentTimeMillis(), 10).single()
+        // The remote receipt survived; the process died before recording its response locally.
+        coEvery { movementApi.registerTransaction(any()) } returns MovementApiResponse.Success(
+            RegisterTransactionResponseDto(status = "DUPLICATE", transactionId = result.transaction.id),
+        )
+        coEvery { financialApi.pullChanges(any()) } returns FinancialApiResponse.Success(
+            PullChangesResponseDto(emptyList(), 0, false),
+        )
+        repeat(2) {
+            movementDao.setOutboxLease(userId, outbox.id, "IN_FLIGHT", 1L)
+            assertTrue(worker().doWork().javaClass.simpleName.contains("Success"))
+            assertEquals("SYNCED", movementDao.getOutboxById(userId, outbox.id)?.state)
+            assertEquals(outbox.payload, movementDao.getOutboxById(userId, outbox.id)?.payload)
+            assertEquals(800L, movementDao.calculateLedgerSumForAccount(userId, accountId))
+            assertEquals(1, movementDao.getLedgerEntriesForTransaction(userId, result.transaction.id).size)
+        }
+        coVerify(exactly = 2) { movementApi.registerTransaction(match {
+            it.idempotencyKey == key && it.requestHash == "original-hash" &&
+                it.transaction.id == result.transaction.id
+        }) }
+    }
+
+    @Test
+    fun cancellationLeavesClaimRecoverableWithoutFalseRetryOrPull() = runTest {
+        val outbox = seedPendingIncome()
+        coEvery { movementApi.registerTransaction(any()) } throws CancellationException("cancelled")
+        var cancelled = false
+        try { worker().doWork() } catch (_: CancellationException) { cancelled = true }
+        assertTrue(cancelled)
+        val stored = requireNotNull(movementDao.getOutboxById(userId, outbox.id))
+        assertEquals("IN_FLIGHT", stored.state)
+        assertEquals(0, stored.attemptCount)
+        assertEquals(null, stored.lastErrorCode)
+        assertEquals("PENDING", movementDao.getTransactionById(userId, outbox.aggregateId)?.syncStatus)
+        coVerify(exactly = 0) { financialApi.pullChanges(any()) }
+        assertEquals(outbox.payload, movementDao.claimPendingOutbox(userId, requireNotNull(stored.leaseUntil)).single().payload)
+    }
+
+    @Test
+    fun failedSyncStatusWriteRollsBackOutboxConfirmation() = runTest {
+        val outbox = seedPendingIncome()
+        val claimed = movementDao.claimPendingOutbox(userId, System.currentTimeMillis()).single()
+        database.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER fail_sync_status BEFORE UPDATE OF sync_status ON transactions " +
+                "BEGIN SELECT RAISE(ABORT, 'injected failure'); END",
+        )
+        var failed = false
+        try {
+            movementDao.completeClaimedOutbox(claimed, "SYNCED", null, null, "SYNCED")
+        } catch (_: Exception) { failed = true }
+        assertTrue(failed)
+        assertEquals(claimed, movementDao.getOutboxById(userId, outbox.id))
+        assertEquals("PENDING", movementDao.getTransactionById(userId, outbox.aggregateId)?.syncStatus)
+    }
+
+    @Test
+    fun conflictResponseCreatesConflictProposalAndStopsRetry() = runTest {
+        val accountId = UUID.randomUUID().toString()
+        accountDao.insert(AccountEntity(
+            id = accountId, userId = userId, creationOperationId = UUID.randomUUID().toString(),
+            alias = "Gasto", type = "CASH", currency = "PEN", presetId = null,
+            color = null, icon = null, initialBalanceMinorUnits = 0L, openedAt = 1L,
+            createdAt = 1L, updatedAt = 1L,
+        ))
+        database.categoryDao().insertCategory(
+            com.kipu.app.feature.categories.data.local.CategoryEntity(
+                id = "cat-1", userId = null, parentId = null, origin = "SYSTEM",
+                categoryType = "EXPENSE", createdAt = 1L, updatedAt = 1L,
+            )
+        )
+        val local = MovementLocalDataSource(database, movementDao, BalanceProjectionStore(movementDao))
+        val regCmd = RegisterTransactionCommand(
+            idempotencyKey = UUID.randomUUID().toString(), userId = userId, type = MovementType.EXPENSE,
+            amountMinor = 1000L, currency = "PEN", sourceAccountId = accountId, categoryId = "cat-1", occurredAt = 1_000L,
+        )
+        val regRes = local.commitTransactionAtomic(regCmd, "reg-hash") as RegisterTransactionResult.Success
+        val txId = regRes.transaction.id
+
+        val regOutbox = movementDao.findClaimableOutbox(userId, System.currentTimeMillis(), 10).single()
+        movementDao.completeClaimedOutbox(regOutbox, "SYNCED", null, null, "SYNCED")
+
+        val reviseCmd = com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Revise(
+            idempotencyKey = UUID.randomUUID().toString(),
+            transactionId = txId,
+            expectedRevision = 1L,
+            payload = com.kipu.app.feature.movements.domain.model.MovementRevisionPayload(
+                type = MovementType.EXPENSE, operationKind = "STANDARD", amountMinor = 800L,
+                currency = "PEN", sourceAccountId = accountId, categoryId = "cat-1", occurredAt = 1000L,
+            ),
+        )
+        local.commitRevisionAtomic(userId, reviseCmd, "revise-hash")
+
+        coEvery { movementApi.reviseOrVoidTransaction(any()) } returns MovementApiResponse.Success(
+            com.kipu.app.feature.movements.data.remote.ReviseOrVoidTransactionResponseDto(
+                status = "CONFLICT",
+                currentRevision = 3L,
+            )
+        )
+
+        val result = worker().doWork()
+        assertTrue(result.javaClass.simpleName.contains("Success"))
+
+        val proposals = local.getConflictProposals(userId, txId)
+        assertEquals(1, proposals.size)
+        assertEquals("UNRESOLVED", proposals[0].resolution)
+        assertEquals("3", proposals[0].remoteRevisionId)
+
+        val discarded = local.discardProposal(userId, proposals[0].proposalId)
+        assertTrue(discarded)
+        val remaining = local.getConflictProposals(userId, txId)
+        assertEquals(0, remaining.size)
+    }
+
+    @Test
+    fun voidTransactionReplay100TimesProducesZeroDuplicateLedgerEntries() = runTest {
+        val accountId = UUID.randomUUID().toString()
+        accountDao.insert(AccountEntity(
+            id = accountId, userId = userId, creationOperationId = UUID.randomUUID().toString(),
+            alias = "Ahorros", type = "CASH", currency = "PEN", presetId = null,
+            color = null, icon = null, initialBalanceMinorUnits = 0L, openedAt = 1L,
+            createdAt = 1L, updatedAt = 1L,
+        ))
+        val local = MovementLocalDataSource(database, movementDao, BalanceProjectionStore(movementDao))
+        val regCmd = RegisterTransactionCommand(
+            idempotencyKey = UUID.randomUUID().toString(),
+            userId = userId,
+            type = MovementType.EXPENSE,
+            amountMinor = 2500L,
+            currency = "PEN",
+            sourceAccountId = accountId,
+            occurredAt = 1_000L,
+            categoryId = "cat-1",
+        )
+        local.commitTransactionAtomic(regCmd, "orig-hash")
+        val tx = checkNotNull(movementDao.getTransactionById(userId, regCmd.idempotencyKey))
+
+        val voidCmd = com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Void(
+            idempotencyKey = UUID.randomUUID().toString(),
+            transactionId = tx.id,
+            expectedRevision = 1L,
+        )
+
+        val firstResult = local.commitVoidAtomic(userId, voidCmd, "void-hash")
+        assertTrue(firstResult is MovementMutationResult.Success)
+        assertFalse((firstResult as MovementMutationResult.Success).isDuplicate)
+
+        val initialEntriesCount = movementDao.getLedgerEntriesForTransaction(userId, tx.id).size
+        assertEquals(2, initialEntriesCount)
+
+        repeat(100) {
+            val replayResult = local.commitVoidAtomic(userId, voidCmd, "void-hash")
+            assertTrue(replayResult is MovementMutationResult.Success)
+            assertTrue((replayResult as MovementMutationResult.Success).isDuplicate)
+        }
+
+        assertEquals(initialEntriesCount, movementDao.getLedgerEntriesForTransaction(userId, tx.id).size)
+
+        val editCmd = com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Revise(
+            idempotencyKey = UUID.randomUUID().toString(),
+            transactionId = tx.id,
+            expectedRevision = 2L,
+            payload = com.kipu.app.feature.movements.domain.model.MovementRevisionPayload(
+                type = MovementType.EXPENSE,
+                operationKind = "STANDARD",
+                amountMinor = 1000L,
+                currency = "PEN",
+                sourceAccountId = accountId,
+                categoryId = "cat-1",
+                occurredAt = 1000L,
+            )
+        )
+        val editResult = local.commitRevisionAtomic(userId, editCmd, "edit-after-void-hash")
+        assertTrue(editResult is MovementMutationResult.Conflict || editResult is MovementMutationResult.Rejected)
+    }
+
+    private suspend fun seedPendingIncome(): com.kipu.app.feature.movements.data.local.MovementOutboxEntity {
+        val accountId = UUID.randomUUID().toString()
+        accountDao.insert(AccountEntity(
+            id = accountId, userId = userId, creationOperationId = UUID.randomUUID().toString(),
+            alias = "Ingreso", type = "CASH", currency = "PEN", presetId = null,
+            color = null, icon = null, initialBalanceMinorUnits = 0L, openedAt = 1L,
+            createdAt = 1L, updatedAt = 1L,
+        ))
+        val local = MovementLocalDataSource(database, movementDao, BalanceProjectionStore(movementDao))
+        local.commitTransactionAtomic(RegisterTransactionCommand(
+            idempotencyKey = UUID.randomUUID().toString(), userId = userId, type = MovementType.INCOME,
+            amountMinor = 800L, currency = "PEN", sourceAccountId = accountId, occurredAt = 1_000L,
+        ), "original-hash")
+        return movementDao.findClaimableOutbox(userId, System.currentTimeMillis(), 10).single()
+    }
+
+    private suspend fun assertRejectedPageLeavesNoOpeningEffects(
+        nextSequence: Long,
+        secondChange: SyncChangeItemDto? = null,
+    ) {
+        val accountId = UUID.randomUUID().toString()
+        val opening = SyncChangeItemDto(
+            sequence = 1, entityType = "ACCOUNT", entityId = accountId, revision = 1,
+            operation = "UPSERT", payload = Json.parseToJsonElement(
+                """{"id":"$accountId","alias":"Efectivo","type":"CASH","currency":"PEN","initial_balance_minor_units":500,"opened_at":"2026-09-23T10:00:00Z"}""",
+            ),
+        )
+        coEvery { financialApi.pullChanges(any()) } returns FinancialApiResponse.Success(
+            PullChangesResponseDto(listOfNotNull(opening, secondChange), nextSequence, false),
+        )
+
+        assertTrue(worker().doWork().javaClass.simpleName.contains("Retry"))
+        assertEquals(null, accountDao.getById(userId, accountId))
+        assertEquals(null, movementDao.calculateLedgerSumForAccount(userId, accountId))
+        assertEquals(null, movementDao.getBalanceProjection(userId, accountId))
         assertEquals(null, movementDao.getSyncCheckpoint(userId))
     }
 

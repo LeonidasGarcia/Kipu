@@ -121,6 +121,57 @@
     <string name="movement_action_delete">Eliminar</string>
     <string name="movement_action_refund">Reembolso</string>
 
+    <!-- Movement Edition & Revision strings (HU-20 / US4) -->
+    <string name="movement_edit_title">Editar movimiento</string>
+    <string name="movement_edit_save">Guardar cambios</string>
+    <string name="movement_edit_saving">Guardando corrección&#8230;</string>
+    <string name="movement_edit_specialized_warning">Este movimiento tiene cuotas o una deuda asociada. Revísalo desde su gestión específica.</string>
+    <string name="movement_edit_conflict_title">Este movimiento cambió en otro dispositivo</string>
+    <string name="movement_edit_conflict_discard">Descartar propuesta</string>
+    <string name="movement_edit_conflict_redo">Rehacer sobre versión oficial</string>
+    <string name="movement_edit_conflict_voided">El movimiento fue anulado en el servidor</string>
+    <string name="movement_edit_discard_dialog_title">¿Descartar cambios?</string>
+    <string name="movement_edit_discard_dialog_message">Tienes cambios sin guardar. ¿Deseas descartarlos?</string>
+    <string name="movement_edit_discard_dialog_confirm">Descartar</string>
+    <string name="movement_edit_discard_dialog_cancel">Continuar editando</string>
+    <string name="movement_edit_summary_title">Resumen de cambios</string>
+    <string name="movement_edit_summary_only_note">Solo se modificó la nota (sin cambios en saldos ni asientos contables)</string>
+    <string name="movement_edit_summary_date_period">Fecha actualizada (Afecta cálculo por periodo)</string>
+    <string name="movement_edit_error_amount">El monto debe ser mayor a 0</string>
+    <string name="movement_edit_error_source_account">Selecciona una cuenta de origen</string>
+    <string name="movement_edit_error_destination_account">La cuenta destino debe ser diferente al origen</string>
+    <string name="movement_edit_error_category">Selecciona una categoría para el gasto</string>
+    <string name="movement_edit_success_pending_sync">Movimiento corregido (Pendiente de sincronizar)</string>
+
+    <!-- Movement Void strings (HU-21 / US5) -->
+    <string name="movement_void_dialog_title">¿Anular movimiento?</string>
+    <string name="movement_void_dialog_cancel">Cancelar</string>
+    <string name="movement_void_dialog_confirm">Anular</string>
+    <string name="movement_void_dialog_desc_transfer">Esta acción revertirá los saldos en ambas cuentas (%1$s y %2$s). Los registros originales se conservarán con asientos de compensación.</string>
+    <string name="movement_void_dialog_desc_expense">Se revertirá el impacto financiero de este gasto. Los registros contables originales se conservarán con un asiento de compensación.</string>
+    <string name="movement_void_dialog_desc_income">Se revertirá el impacto financiero de este ingreso. Los registros contables originales se conservarán con un asiento de compensación.</string>
+    <string name="movement_void_dialog_audit_notice">Los registros originales no se eliminarán y se mantendrán en la auditoría.</string>
+    <string name="movement_void_status_badge">Anulado</string>
+    <string name="movement_void_specialized_warning">Este movimiento tiene cuotas o una deuda asociada. Revísalo desde su gestión específica.</string>
+    <string name="movement_void_success_message">Movimiento anulado correctamente</string>
+    <string name="movement_void_already_voided_message">El movimiento ya se encuentra anulado</string>
+
+    <!-- Movement Advanced Filters strings (HU-22 / US6) -->
+    <string name="movements_filter_button">Filtros</string>
+    <string name="movements_filter_active">Filtros (activos)</string>
+    <string name="movements_filter_clear">Limpiar filtros</string>
+    <string name="movements_filter_title">Filtros avanzados</string>
+    <string name="movements_filter_financial_state">Estado financiero</string>
+    <string name="movements_filter_voided_only">Solo anulados</string>
+    <string name="movements_filter_amount_range">Rango de importe (centavos)</string>
+    <string name="movements_filter_min_amount">Mínimo</string>
+    <string name="movements_filter_max_amount">Máximo</string>
+    <string name="movements_filter_reset">Limpiar criterios</string>
+    <string name="movements_filter_apply">Listo</string>
+    <string name="movements_filter_fallback_notice">Filtros avanzados requieren Kipu Premium o revalidación de acceso.</string>
+    <string name="movements_filter_empty_title">Sin resultados para los filtros</string>
+    <string name="movements_filter_empty_desc">Prueba a cambiar o limpiar los filtros seleccionados</string>
+
 
     <!-- HU-53 / HU-54 / HU-56 purchase surface -->
     <string name="purchase_title">Kipu Premium</string>

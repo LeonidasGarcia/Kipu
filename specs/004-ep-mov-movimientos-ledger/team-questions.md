@@ -69,3 +69,23 @@ Las preguntas siguientes quedan como registro de conversación y validación con
 25. ¿Qué commits o ramas de EP-CTA y EP-CCO son prerrequisito y cuándo se integrarán a `main`?
 26. Si ya existe código de Sprint 3 en `main`, ¿se conserva, se marca como experimental o se corrige dentro de esta entrega?
 27. ¿Quién resuelve conflictos en migraciones compartidas y `KipuDatabase` cuando se integren las ramas?
+
+## Decisiones aprobadas S4 — T058 (2026-10-02)
+
+Las preguntas 1–27 anteriores son historia S2. Las aclaraciones S4 siguientes están resueltas por producto y no se vuelven a solicitar.
+
+| ID | Resolución | Artefactos |
+|---|---|---|
+| P1 | HU-25 sigue S7; demo S4 sin devolución parcial. MOV=15 puntos, PLA=16, total=31. | spec.md, plan.md, quickstart.md |
+| P2 | Editar/anular genéricamente solo movimientos STANDARD G/I/T sin cuotas/deuda u otras dependencias especializadas. Advertencia sin mutación para compra/pago de tarjeta. | data-model.md y contracts/revise-and-void-transaction-v1.md |
+| P3 | Ventana máxima 72 h acotada por fin comercial. Tiempo confiable igual al límite ya caduca. Sin continuidad temporal demostrable tras reboot, revalidar Premium; Free sigue operativo. | contracts/history-query-access.md; productor HU-58/59 EP-PLA |
+| P4 | Main consolidado `c80ea0ddea80dfe5332971f12418758ea1bc9923`, Room v16, aceptado como baseline. No implica nuevas pruebas reales de Play/RLS en esta fase. | research.md, modelo/migración S4 |
+| P5 | Cero DELETE físico en rechazo/anulación financiera. Conservar evidencia y compensar efectos locales confirmados; rechazo antes de commit no crea contabilidad; conflicto no anula hecho vigente. | modelo, comando y contrato sync |
+| U1 | Consumo por intervalo se calcula desde el payload vigente; fixture A=20/B=0 pasa a A=0/B=20 al mover la fecha y ambos=0 al anular, sin cambiar saldo por fecha. | FR-012, data-model.md, quickstart.md, T069/T071 |
+| I1/I2 | Contexto Spec Kit explícito EP-MOV y T074 serial después de T071. | tasks.md |
+
+### Dependencias de ejecución (no preguntas de producto)
+
+- EP-PLA debe implementar el productor verificado del contrato history-query-access para HU-58/59. T084 no se cierra con fixtures; T061 documenta la frontera de consumo y no acredita entrega del productor.
+- La siguiente versión Room se decide en T066 sobre baseline/rebase actual; v16 es el origen aquí verificado.
+- T063 documenta revisión de diseño; T088 exige revisión cruzada de implementación y evidencia. La revisión no autoriza alterar P1–P5 ni omitir RLS o pruebas reales.

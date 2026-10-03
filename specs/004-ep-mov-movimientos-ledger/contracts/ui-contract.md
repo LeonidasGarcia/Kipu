@@ -51,7 +51,7 @@
      - Estado de sincronización: Indicador sutil de sincronizado / pendiente de sincronizar.
      - Soporte para ocultamiento dinámico de saldos mediante `LocalBalanceMasked` (MoneyText).
 - **Menú Contextual (Preparación para Sprints 4 y 7)**:
-  - Al mantener presionado o deslizar la fila: acciones rápidas "Editar", "Anular", "Eliminar", "Reembolso".
+  - Preparación histórica S2: edición, anulación y reembolso. El incremento S4 siguiente fija las acciones habilitadas; no existe eliminación física de hechos contables.
 
 ---
 
@@ -62,3 +62,48 @@
 - Lectura accesible de monto, moneda y signo por TalkBack.
 - Respetar el modo de privacidad global de enmascaramiento de cifras numéricas.
 - Prohibición estricta de etiquetas (*tags*) en formularios y filtros.
+
+---
+
+## Incremento S4 — T062: Pantallas 10/11
+
+Prevalece para HU-20/21/22; conserva tokens, navegación y accesibilidad S2. Contratos normativos: [comandos](./revise-and-void-transaction-v1.md), [consulta y autorización](./history-query-access.md), [reconciliación](./sync-and-deduplication.md).
+
+### Pantalla 11: edición
+
+- Abrir el snapshot vigente y conservar la revisión de partida; título «Editar movimiento». Guardar usa el comando de revisión, nunca el de alta.
+- Permitir importe, fecha, cuentas aplicables, categoría/subcategoría, comercio y nota. Tipo, moneda y naturaleza permanecen fijos. Cuentas de transferencia distintas; mostrar referencias históricas archivadas, pero exigir elegibilidad para nuevas selecciones.
+- Mostrar resumen anterior/nuevo antes de guardar. Solo nota conserva categoría y no agrega asientos; fecha actualiza consumo de ambos periodos sin cambiar por sí misma el saldo.
+- Validar junto al campo, importes positivos en unidades menores y transferencia completa. Impedir doble envío durante commit; volver al historial tras persistencia durable con «Pendiente de sincronizar».
+- Cancelar antes del commit no escribe movimiento, ledger ni outbox; pedir confirmación para descartar cambios sin guardar.
+- Tarjeta, cuotas, deuda o relaciones especializadas bloquean edición/anulación genéricas: «Este movimiento tiene cuotas o una deuda asociada. Revísalo desde su gestión específica». Sin mutación ni rutas nuevas que no existan.
+
+### Pantalla 10: anulación e historia
+
+- Acciones S4 «Editar» y «Anular» para estándar vigente. No mostrar «Eliminar». «Reembolso» diferido a HU-25/S7.
+- Diálogo «Anular movimiento»: identificar movimiento y consecuencias concretas para ambas cuentas si es transferencia. «Cancelar» no escribe; «Anular» aplica VOIDED/compensación atómicos conservando originales.
+- Fila VOIDED visible con texto «Anulado», detalles y revisiones; no admite edición/resurrección. Replay del mismo comando no compensa otra vez.
+- Separar estado financiero y sync: «Anulado» puede coexistir con «Pendiente de sincronizar»; un error de red no implica ausencia de efectos.
+- Menú accesible además del gesto; 48 dp, TalkBack y texto para estados. Enmascaramiento en lista, editor, resumen, diálogo y conflicto.
+
+### Conflictos y fallos
+
+| Situación | Presentación y acción |
+|---|---|
+| Validación previa al commit | Error junto al campo; conservar formulario, sin efectos |
+| Fallo de red tras commit | Pendiente/reintento sin repetir efecto local |
+| Revisión incompatible | «Este movimiento cambió en otro dispositivo»; comparar vigente y propuesta persistida |
+| Descartar | Resolver propuesta preservando historia y compensación de efectos optimistas |
+| Rehacer | Reabrir sobre versión oficial vigente y validar comando nuevo |
+| Oficial VOIDED | Mostrar anulación; impedir rehacer como edición del mismo movimiento |
+| Rechazo financiero | Mensaje seguro; compensar solo efectos realmente aplicados, sin borrar historia |
+| Evidencia insuficiente | Conflicto pendiente; no calcular compensación por suposición |
+
+### Búsqueda y filtros
+
+- Free: texto, fechas/periodo y tipo sobre todo el historial local. Premium: cuenta/tarjeta, categoría/subcategoría, comercio, monto, origen y estado conforme al contrato tipado. Sin etiquetas.
+- Chips expresan valores y permiten retirar criterios. Criterios distintos se intersectan; varios valores del mismo criterio se unen conforme al contrato. Rango inválido muestra error sin corrección silenciosa.
+- Limpiar reinicia criterios y cursor; cero coincidencias conserva búsqueda y ofrece limpiar. Distinguir vacío inicial, fallo de consulta y fin de paginación.
+- Autorizar al abrir/aplicar, cargar página, resolver enlace y reanudar. El bloqueo evita ejecutar consulta avanzada, además de controlar UI.
+- Caducidad o arranque sin continuidad confiable: «Reconecta para verificar tu acceso Premium». Continuar con texto/fecha/tipo, conservar selección avanzada como borrador y retirar resultados protegidos. Registro y edición/anulación estándar siguen disponibles en Free.
+- Cambio de propietario, criterios, revisión del conjunto o autorización invalida cursor; reiniciar primera página autorizada. No registrar filtros, notas ni datos financieros en logs.
