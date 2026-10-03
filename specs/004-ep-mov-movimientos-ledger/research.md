@@ -62,3 +62,40 @@ No se encontró `DESIGN.md` bajo el proyecto ni sus carpetas hermanas. Se reutil
 En todos los hallazgos donde se usó informalmente “espacio”, la frontera técnica definitiva es `user_id`; no existe un tenant `workspace_id` en este sprint.
 
 Hay suficiente información para diseñar y descomponer HU18, HU19 y HU23. Las decisiones aprobadas y su historial de conversación quedan en [team-questions.md](./team-questions.md).
+
+## Incremento S4 — T058: decisiones y evidencia (2026-10-02)
+
+El contenido anterior registra S2. La fuente funcional S4 es spec.md y las decisiones P1–P5 aprobadas por producto; el código es evidencia de baseline, no autorización para redefinirlas.
+
+| Decisión | Fundamento | Alternativa descartada |
+|---|---|---|
+| Main `c80ea0ddea80dfe5332971f12418758ea1bc9923` / Room v16 es baseline aceptada (P4) | Aceptación explícita de producto tras auditoría DB S3 | Reabrir aceptación S3 o atribuir a esta fase pruebas de proveedor no ejecutadas |
+| S4 entrega HU-20/21/22 (15 puntos MOV) junto a HU-58/59 (16 PLA); HU-25 sigue S7 (P1) | Capacidad aprobada de 31 puntos | Implementar devolución parcial para cumplir el guion antiguo |
+| Mantenimiento genérico solo STANDARD, con G/I/T y sin relaciones especializadas (P2) | P14 exige proteger cuotas, deuda y referencias; tipo TRANSFER no convierte CARD_PAYMENT en estándar | Corregir por separado un pago o compra en cuotas |
+| Premium offline válido solo antes del menor límite conocido; igualdad caduca, reinicio sin continuidad confiable exige revalidación (P3/B1) | HU-59, P31 y constitución II; Free y registro manual permanecen operativos | Usar reloj civil, reiniciar 72 h tras boot o convertir la app en solo lectura |
+| Rechazo de efectos locales confirmados usa VOIDED y compensación auditable, sin DELETE (P5) | P14 y constitución I/VI | Eliminar ledger/cuotas/asignaciones para rehacer un saldo |
+| Consumo base por periodo usa payload vigente, una vez por transacción (U1) | HU-20 exige recalcular periodo anterior/nuevo; no existen módulos presupuestarios que puedan darse por integrados | Sumar snapshots/reversals como nuevos gastos o declarar éxito por solo invalidar caché |
+| Comandos Spec Kit fijan FEATURE_DIR; T074 se ejecuta después de T071 (I1/I2) | El selector almacenado era EP-NOT; ambas tareas comparten prueba Room | Confiar en el nombre de rama o escribir en paralelo el mismo archivo |
+
+### Evidencia local consultada (no pruebas nuevas)
+
+- `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt`: versión 16; las entidades de movimiento carecen de historial de revisiones S4.
+- `feature/movements/data/local/MovementDao.kt`: lectura por propietario y ledger sumable; elimina ledger para rechazo desde EP-CTA. El diseño S4 reemplaza esa ruta, sin usarla para nuevas correcciones.
+- `feature/movements/data/sync/SyncMovementsWorker.kt`: una transacción ya existente se reconcilia comparando el conjunto previo de ledger; no sustituye el payload completo por revisión nueva. Los IDs locales/servidor del baseline pueden diferir.
+- `feature/movements/domain/TransactionRequestHasher.kt`: representación S2 delimitada; S4 usa un contrato separado con bytes inequívocos sin cambiar hashes de outbox S2 pendiente.
+- `supabase/migrations/20260920000000_financial_core_baseline.sql`: existen `transactions.revision`, `transaction_revisions`, `internal.ledger_entries`, recibos y sync_changes. Sync admite UPSERT/DELETE; VOIDED se transmite como UPSERT, no DELETE.
+- `specs/012-ep-pla-planes-monetizacion/contracts/feature-access-policy.md`: contrato histórico S1 sin concesión offline S4; debe evolucionar en EP-PLA antes del cierre T084. Definir el consumidor no demuestra entrega del productor.
+
+### Fuentes de intención
+
+- Obsidian Mind: `work/active/kipu/Procesos/14-corregir-o-anular-movimiento.md` §§3–5; `15-consultar-y-filtrar-historial.md` §§3–5; `31-aplicar-cupos-accesos-y-vigencia-offline.md` §§4.11–4.14.
+- `work/active/kipu/Kipu md/02_Kipu_V4.2_Product_Backlog.md`: HU-20/21/22/58/59.
+- `work/active/kipu/Spec Kit in Kipu.md`, `reference/Spec Kit — Referencia Global.md`, `.specify/memory/constitution.md` v2.0.0.
+- P1 corrige el guion local. El cronograma del vault aún debe actualizarse por su responsable; no se escribió en el vault ni se enviaron mensajes externos.
+
+### Diseño derivado
+
+T059 concreta el modelo y consumo base; T060 concreta comando/reconciliación; T061 define la frontera de acceso para EP-PLA; T062 define UI/validación. Son decisiones técnicas revisables bajo las reglas aprobadas, sin migraciones aplicadas ni compatibilidad real declarada. T063 exige revisión del diseño y analyze antes de Foundation.
+
+
+**Propagated**: 2026-10-02 — T093: altas estándar nuevas usan contracts/register-transaction-v2.md (hash de array compacto, validación remota y dispatch por versión); comandos S2 ya encolados permanecen en v1 con bytes/hash originales. No modifica identidad histórica, modelo de ledger ni alcance S4.
