@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.Json
@@ -193,7 +194,8 @@ class MovementLocalDataSourceTest {
         }
 
         try {
-            withTimeout(5_000L) { initialEmission.await() }
+            // Room executes on real IO threads, outside runTest's virtual clock.
+            withContext(Dispatchers.IO) { withTimeout(5_000L) { initialEmission.await() } }
             dao.insertTransaction(
                 TransactionEntity(
                     id = transactionId,
@@ -212,7 +214,7 @@ class MovementLocalDataSourceTest {
                     installmentCount = 1,
                 ),
             )
-            val mapped = withTimeout(5_000L) { mappedPurchase.await() }
+            val mapped = withContext(Dispatchers.IO) { withTimeout(5_000L) { mappedPurchase.await() } }
             dao.insertLedgerEntries(
                 listOf(
                     LedgerEntryEntity(
