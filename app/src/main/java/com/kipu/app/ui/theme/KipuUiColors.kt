@@ -49,69 +49,49 @@ data class KipuUiColors(
     val warningContainer: Color,
     val onWarningContainer: Color,
     val dragHandle: Color,
+    val outline: Color = border,
+    val onSurfaceVariant: Color = inkSecondary,
+    val surfaceContainer: Color = surfaceVariant,
 )
 
 /**
- * Resolves Kipu's semantic UI palette from the active Material theme. The original light tokens
- * remain unchanged, while dark mode uses deep tinted containers and accessible foreground pairs.
+ * Resolves Kipu's semantic UI palette from the active Material theme color scheme.
+ * General roles map directly to MaterialTheme.colorScheme, while keeping semantic
+ * financial extensions (positive, debt, warning) and card visual tokens.
  */
 @Composable
 fun rememberKipuColors(): KipuUiColors {
-    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    return remember(isDark) {
-        if (isDark) {
-            KipuUiColors(
-                isDark = true,
-                background = Color(0xFF0B1220),
-                surface = Color(0xFF131B2E),
-                surfaceSubtle = Color(0xFF131B2E),
-                surfaceVariant = Color(0xFF1A263B),
-                cardVisualBackground = Color(0xFF1E3A8A),
-                selectedSurface = Color(0xFF123B38),
-                border = Color(0xFF334155),
-                inkPrimary = Color(0xFFF8FAFC),
-                inkSecondary = Color(0xFF94A3B8),
-                primary = Color(0xFF0D6E64),
-                primaryText = Color(0xFF5EEAD4),
-                onPrimary = Color(0xFFFFFFFF),
-                primaryContainer = Color(0xFF14532D),
-                onPrimaryContainer = Color(0xFF86EFAC),
-                positive = Color(0xFF86EFAC),
-                positiveContainer = Color(0xFF14532D),
-                onPositiveContainer = Color(0xFF86EFAC),
-                debt = Color(0xFFFCA5A5),
-                warning = Color(0xFFFCD34D),
-                warningContainer = Color(0xFF422006),
-                onWarningContainer = Color(0xFFFCD34D),
-                dragHandle = Color(0xFF64748B),
-            )
-        } else {
-            KipuUiColors(
-                isDark = false,
-                background = Color(0xFFF8FAFC),
-                surface = Color(0xFFFFFFFF),
-                surfaceSubtle = Color(0xFFF8FAFC),
-                surfaceVariant = Color(0xFFF1F5F9),
-                cardVisualBackground = Color(0xFF0F172A),
-                selectedSurface = Color(0xFFF0FDF4),
-                border = Color(0xFFE2E8F0),
-                inkPrimary = Color(0xFF0F172A),
-                inkSecondary = Color(0xFF64748B),
-                primary = Color(0xFF0D6E64),
-                primaryText = Color(0xFF0D6E64),
-                onPrimary = Color(0xFFFFFFFF),
-                primaryContainer = Color(0xFFDCFCE7),
-                onPrimaryContainer = Color(0xFF14532D),
-                positive = Color(0xFF15803D),
-                positiveContainer = Color(0xFFDCFCE7),
-                onPositiveContainer = Color(0xFF14532D),
-                debt = Color(0xFFB91C1C),
-                warning = Color(0xFF92400E),
-                warningContainer = Color(0xFFFEF3C7),
-                onWarningContainer = Color(0xFF78350F),
-                dragHandle = Color(0xFFCBD5E1),
-            )
-        }
+    val scheme = MaterialTheme.colorScheme
+    return remember(scheme) {
+        val isDark = scheme.background.luminance() < 0.5f
+        KipuUiColors(
+            isDark = isDark,
+            background = scheme.background,
+            surface = scheme.surface,
+            surfaceSubtle = if (isDark) scheme.surfaceContainerLow else scheme.surfaceContainerLowest,
+            surfaceVariant = scheme.surfaceVariant,
+            cardVisualBackground = if (isDark) Color(0xFF1E3A8A) else Color(0xFF0F172A),
+            selectedSurface = if (isDark) Color(0xFF123B38) else Color(0xFFF0FDF4),
+            border = scheme.outlineVariant,
+            inkPrimary = scheme.onSurface,
+            inkSecondary = scheme.onSurfaceVariant,
+            primary = scheme.primary,
+            primaryText = scheme.primary,
+            onPrimary = scheme.onPrimary,
+            primaryContainer = scheme.primaryContainer,
+            onPrimaryContainer = scheme.onPrimaryContainer,
+            positive = if (isDark) Color(0xFF86EFAC) else Color(0xFF15803D),
+            positiveContainer = if (isDark) Color(0xFF14532D) else Color(0xFFDCFCE7),
+            onPositiveContainer = if (isDark) Color(0xFF86EFAC) else Color(0xFF14532D),
+            debt = if (isDark) Color(0xFFFCA5A5) else Color(0xFFB91C1C),
+            warning = if (isDark) Color(0xFFFCD34D) else Color(0xFF92400E),
+            warningContainer = if (isDark) Color(0xFF422006) else Color(0xFFFEF3C7),
+            onWarningContainer = if (isDark) Color(0xFFFCD34D) else Color(0xFF78350F),
+            dragHandle = if (isDark) scheme.outline else scheme.outlineVariant,
+            outline = scheme.outline,
+            onSurfaceVariant = scheme.onSurfaceVariant,
+            surfaceContainer = scheme.surfaceContainer,
+        )
     }
 }
 

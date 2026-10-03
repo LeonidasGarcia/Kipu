@@ -29,13 +29,20 @@ val KipuTypography = Typography(
         lineHeight = 32.sp,
         letterSpacing = (-0.24).sp,
     ),
+    titleLarge = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = (-0.2).sp,
+    ),
     titleMedium = TextStyle(
         fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 18.sp,
         lineHeight = 26.sp,
     ),
-    titleLarge = TextStyle(
+    titleSmall = TextStyle(
         fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 16.sp,
@@ -55,7 +62,21 @@ val KipuTypography = Typography(
         lineHeight = 20.sp,
         letterSpacing = 0.14.sp,
     ),
+    bodySmall = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.2.sp,
+    ),
     labelLarge = TextStyle(
+        fontFamily = Inter,
+        fontWeight = FontWeight.Medium,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
+    ),
+    labelMedium = TextStyle(
         fontFamily = Inter,
         fontWeight = FontWeight.Medium,
         fontSize = 12.sp,
