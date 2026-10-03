@@ -850,3 +850,94 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
     }
 }
 
+
+
+/** S4: additive snapshots/identities. Financial rows and queued bytes are untouched. */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""ALTER TABLE `transactions` ADD COLUMN `revision` INTEGER NOT NULL DEFAULT 1""")
+        db.execSQL("""ALTER TABLE `transactions` ADD COLUMN `acknowledged_revision` INTEGER""")
+        db.execSQL("""ALTER TABLE `transactions` ADD COLUMN `current_revision_id` TEXT""")
+        db.execSQL("""ALTER TABLE `transactions` ADD COLUMN `source` TEXT""")
+        db.execSQL("""ALTER TABLE `local_command_receipts` ADD COLUMN `contract_version` INTEGER NOT NULL DEFAULT 1""")
+        db.execSQL("""ALTER TABLE `local_command_receipts` ADD COLUMN `command_type` TEXT NOT NULL DEFAULT 'REGISTER'""")
+        db.execSQL("""ALTER TABLE `local_command_receipts` ADD COLUMN `expected_revision` INTEGER""")
+        db.execSQL("""ALTER TABLE `local_command_receipts` ADD COLUMN `resulting_revision` INTEGER""")
+        db.execSQL("""ALTER TABLE `movement_outbox` ADD COLUMN `contract_version` INTEGER NOT NULL DEFAULT 1""")
+        db.execSQL("""ALTER TABLE `movement_outbox` ADD COLUMN `command_type` TEXT NOT NULL DEFAULT 'REGISTER'""")
+        db.execSQL("""ALTER TABLE `movement_outbox` ADD COLUMN `expected_revision` INTEGER""")
+        db.execSQL("""ALTER TABLE `movement_outbox` ADD COLUMN `depends_on_command_id` TEXT""")
+        db.execSQL("""ALTER TABLE `movement_outbox` ADD COLUMN `revision_id` TEXT""")
+        db.execSQL("""CREATE TABLE `transaction_revisions` (`user_id` TEXT NOT NULL,`revision_id` TEXT NOT NULL,`transaction_id` TEXT NOT NULL,`command_id` TEXT,`command_type` TEXT NOT NULL,`base_revision` INTEGER NOT NULL,`local_revision` INTEGER NOT NULL,`previous_payload` TEXT,`new_payload` TEXT NOT NULL,`change_reason` TEXT,`provenance` TEXT NOT NULL,`created_at` INTEGER NOT NULL,PRIMARY KEY (`user_id`,`revision_id`),FOREIGN KEY (`user_id`,`transaction_id`) REFERENCES `transactions` (`user_id`,`id`) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+        db.execSQL("""CREATE INDEX `index_transaction_revisions_user_id_transaction_id_local_revision` ON `transaction_revisions` (`user_id`,`transaction_id`,`local_revision`)""")
+        db.execSQL("""CREATE UNIQUE INDEX `index_transaction_revisions_user_id_transaction_id_revision_id` ON `transaction_revisions` (`user_id`,`transaction_id`,`revision_id`)""")
+        db.execSQL("""CREATE TABLE `movement_official_revisions` (`user_id` TEXT NOT NULL,`transaction_id` TEXT NOT NULL,`official_revision` INTEGER NOT NULL,`revision_id` TEXT NOT NULL,`official_revision_id` TEXT NOT NULL,`assigned_at` INTEGER NOT NULL,PRIMARY KEY (`user_id`,`transaction_id`,`official_revision`),FOREIGN KEY (`user_id`,`transaction_id`,`revision_id`) REFERENCES `transaction_revisions` (`user_id`,`transaction_id`,`revision_id`) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+        db.execSQL("""CREATE UNIQUE INDEX `index_movement_official_revisions_user_id_official_revision_id` ON `movement_official_revisions` (`user_id`,`official_revision_id`)""")
+        db.execSQL("""CREATE INDEX `index_movement_official_revisions_user_id_transaction_id_revision_id` ON `movement_official_revisions` (`user_id`,`transaction_id`,`revision_id`)""")
+        db.execSQL("""CREATE TABLE `movement_ledger_effects` (`user_id` TEXT NOT NULL,`command_id` TEXT NOT NULL,`effect_ordinal` INTEGER NOT NULL,`transaction_id` TEXT NOT NULL,`revision_id` TEXT NOT NULL,`ledger_entry_id` TEXT NOT NULL,`reverses_command_id` TEXT,`reverses_effect_ordinal` INTEGER,PRIMARY KEY (`user_id`,`command_id`,`effect_ordinal`),FOREIGN KEY (`user_id`,`transaction_id`,`revision_id`) REFERENCES `transaction_revisions` (`user_id`,`transaction_id`,`revision_id`) ON UPDATE NO ACTION ON DELETE RESTRICT,FOREIGN KEY (`user_id`,`ledger_entry_id`) REFERENCES `ledger_entries` (`user_id`,`id`) ON UPDATE NO ACTION ON DELETE RESTRICT,FOREIGN KEY (`user_id`,`reverses_command_id`,`reverses_effect_ordinal`) REFERENCES `movement_ledger_effects` (`user_id`,`command_id`,`effect_ordinal`) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+        db.execSQL("""CREATE INDEX `index_movement_ledger_effects_user_id_transaction_id_revision_id` ON `movement_ledger_effects` (`user_id`,`transaction_id`,`revision_id`)""")
+        db.execSQL("""CREATE UNIQUE INDEX `index_movement_ledger_effects_user_id_ledger_entry_id` ON `movement_ledger_effects` (`user_id`,`ledger_entry_id`)""")
+        db.execSQL("""CREATE UNIQUE INDEX `index_movement_ledger_effects_user_id_reverses_command_id_reverses_effect_ordinal` ON `movement_ledger_effects` (`user_id`,`reverses_command_id`,`reverses_effect_ordinal`)""")
+        db.execSQL("""CREATE TABLE `movement_ledger_aliases` (`user_id` TEXT NOT NULL,`physical_entry_id` TEXT NOT NULL,`command_id` TEXT NOT NULL,`effect_ordinal` INTEGER NOT NULL,PRIMARY KEY (`user_id`,`physical_entry_id`),FOREIGN KEY (`user_id`,`command_id`,`effect_ordinal`) REFERENCES `movement_ledger_effects` (`user_id`,`command_id`,`effect_ordinal`) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+        db.execSQL("""CREATE INDEX `index_movement_ledger_aliases_user_id_command_id_effect_ordinal` ON `movement_ledger_aliases` (`user_id`,`command_id`,`effect_ordinal`)""")
+        db.execSQL("""CREATE TABLE `movement_conflict_proposals` (`user_id` TEXT NOT NULL,`proposal_id` TEXT NOT NULL,`transaction_id` TEXT NOT NULL,`command_id` TEXT NOT NULL,`base_revision` INTEGER NOT NULL,`proposed_revision_id` TEXT NOT NULL,`proposed_snapshot` TEXT NOT NULL,`local_revision_ids` TEXT NOT NULL,`remote_revision_id` TEXT,`resolution` TEXT NOT NULL,`created_at` INTEGER NOT NULL,`updated_at` INTEGER NOT NULL,PRIMARY KEY (`user_id`,`proposal_id`),FOREIGN KEY (`user_id`,`transaction_id`,`proposed_revision_id`) REFERENCES `transaction_revisions` (`user_id`,`transaction_id`,`revision_id`) ON UPDATE NO ACTION ON DELETE RESTRICT)""")
+        db.execSQL("""CREATE UNIQUE INDEX `index_movement_conflict_proposals_user_id_command_id` ON `movement_conflict_proposals` (`user_id`,`command_id`)""")
+        db.execSQL("""CREATE INDEX `index_movement_conflict_proposals_user_id_transaction_id_proposed_revision_id` ON `movement_conflict_proposals` (`user_id`,`transaction_id`,`proposed_revision_id`)""")
+
+        // Migration records what exists, not a fictitious remote acknowledgement or compensation.
+        val migrationTime = System.currentTimeMillis()
+        db.query("SELECT *, hex(user_id) AS owner_hex, hex(id) AS transaction_hex FROM transactions").use { cursor ->
+            while (cursor.moveToNext()) {
+                val owner = cursor.getString(cursor.getColumnIndexOrThrow("user_id"))
+                val transactionId = cursor.getString(cursor.getColumnIndexOrThrow("id"))
+                val snapshotId = "migration:" + cursor.getString(cursor.getColumnIndexOrThrow("owner_hex")) +
+                    ":" + cursor.getString(cursor.getColumnIndexOrThrow("transaction_hex"))
+                val payload = kotlinx.serialization.json.buildJsonObject {
+                    for (index in 0 until cursor.columnCount) {
+                        val name = cursor.getColumnName(index)
+                        if (name == "owner_hex" || name == "transaction_hex") continue
+                        put(name, when (cursor.getType(index)) {
+                            android.database.Cursor.FIELD_TYPE_NULL -> kotlinx.serialization.json.JsonNull
+                            android.database.Cursor.FIELD_TYPE_INTEGER -> kotlinx.serialization.json.JsonPrimitive(cursor.getLong(index))
+                            android.database.Cursor.FIELD_TYPE_STRING -> kotlinx.serialization.json.JsonPrimitive(cursor.getString(index))
+                            else -> error("Unsupported transaction storage type")
+                        })
+                    }
+                }
+                val values = ContentValues().apply {
+                    put("user_id",owner); put("revision_id",snapshotId); put("transaction_id",transactionId)
+                    putNull("command_id"); put("command_type","MIGRATION_BASELINE")
+                    put("base_revision",0L); put("local_revision",1L)
+                    putNull("previous_payload"); put("new_payload",payload.toString())
+                    putNull("change_reason"); put("provenance","MIGRATION_BASELINE"); put("created_at",migrationTime)
+                }
+                db.insert("transaction_revisions",android.database.sqlite.SQLiteDatabase.CONFLICT_ABORT,values)
+                db.execSQL("UPDATE transactions SET current_revision_id=? WHERE user_id=? AND id=?",
+                    arrayOf(snapshotId,owner,transactionId))
+            }
+        }
+        ensureMovementEvidenceGuards(db)
+    }
+}
+
+/** Used by both upgrades and fresh production databases. */
+fun ensureMovementEvidenceGuards(db: SupportSQLiteDatabase) {
+    for (table in listOf("transaction_revisions","movement_official_revisions","movement_ledger_effects","movement_ledger_aliases")) {
+        for (operation in listOf("UPDATE","DELETE")) {
+            db.execSQL("CREATE TRIGGER IF NOT EXISTS immutable_${table}_${operation.lowercase()} BEFORE $operation ON $table " +
+                "BEGIN SELECT RAISE(ABORT,'Immutable movement evidence'); END")
+        }
+    }
+    for (operation in listOf("INSERT","UPDATE OF current_revision_id")) {
+        val suffix = if (operation == "INSERT") "insert" else "update"
+        db.execSQL("""CREATE TRIGGER IF NOT EXISTS movement_head_owner_$suffix BEFORE $operation ON transactions
+            WHEN NEW.current_revision_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM transaction_revisions r WHERE r.user_id=NEW.user_id AND
+                    r.transaction_id=NEW.id AND r.revision_id=NEW.current_revision_id)
+            BEGIN SELECT RAISE(ABORT,'Movement snapshot owner mismatch'); END""")
+    }
+}
+
+class MovementSchemaCallback : androidx.room.RoomDatabase.Callback() {
+    override fun onCreate(db: SupportSQLiteDatabase) { ensureMovementEvidenceGuards(db) }
+}
