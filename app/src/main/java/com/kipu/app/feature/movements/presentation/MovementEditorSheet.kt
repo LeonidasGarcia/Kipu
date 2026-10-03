@@ -1,6 +1,11 @@
 package com.kipu.app.feature.movements.presentation
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import com.kipu.app.ui.component.LocalBalanceMasked
+import com.kipu.app.ui.component.MoneyText
+import com.kipu.app.ui.theme.rememberKipuColors
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -256,8 +261,8 @@ fun MovementEditorContent(
         // Specialized Warning Card
         if (uiState.isSpecialized) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
-                border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                colors = CardDefaults.cardColors(containerColor = rememberKipuColors().warningContainer),
+                border = BorderStroke(1.dp, rememberKipuColors().warning),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -271,7 +276,7 @@ fun MovementEditorContent(
                     Icon(
                         imageVector = Icons.Default.Warning,
                         contentDescription = null,
-                        tint = Color(0xFFD97706),
+                        tint = rememberKipuColors().onWarningContainer,
                         modifier = Modifier.size(28.dp),
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -279,7 +284,7 @@ fun MovementEditorContent(
                         text = uiState.specializedMessage
                             ?: stringResource(R.string.movement_edit_specialized_warning),
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                        color = Color(0xFF92400E),
+                        color = rememberKipuColors().onWarningContainer,
                     )
                 }
             }
@@ -312,17 +317,14 @@ fun MovementEditorContent(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Versión oficial actual: ${uiState.currency} ${formatMinorUnits(uiState.initialAmountMinor)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.onSurfaceVariant,
-                    )
-                    if (uiState.conflictProposedAmountMinor != null) {
-                        Text(
-                            text = "Propuesta en conflicto: ${uiState.currency} ${formatMinorUnits(uiState.conflictProposedAmountMinor)}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = colorScheme.onSurfaceVariant,
-                        )
+                    Text("Versión oficial actual", style = MaterialTheme.typography.labelLarge)
+                    MoneyText(formatMinorUnits(uiState.initialAmountMinor), currencySymbol = uiState.currency,
+                        style = MaterialTheme.typography.bodyLarge)
+                    uiState.conflictProposedAmountMinor?.let { amount ->
+                        Spacer(Modifier.height(8.dp))
+                        Text("Propuesta en conflicto", style = MaterialTheme.typography.labelLarge)
+                        MoneyText(formatMinorUnits(amount), currencySymbol = uiState.currency,
+                            style = MaterialTheme.typography.bodyLarge)
                     }
 
                     if (uiState.isOfficialVoided) {
@@ -336,14 +338,14 @@ fun MovementEditorContent(
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         OutlinedButton(
                             onClick = onDiscardConflict,
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .testTag("btn_conflict_discard"),
                         ) {
@@ -354,7 +356,7 @@ fun MovementEditorContent(
                                 onClick = onRedoConflict,
                                 colors = ButtonDefaults.buttonColors(containerColor = colorScheme.primary),
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .fillMaxWidth()
                                     .heightIn(min = 48.dp)
                                     .testTag("btn_conflict_redo"),
                             ) {
@@ -415,6 +417,7 @@ fun MovementEditorContent(
         OutlinedTextField(
             value = uiState.amountText,
             onValueChange = onAmountChanged,
+            visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
             label = { Text(stringResource(R.string.movement_amount_label)) },
             singleLine = true,
             isError = uiState.amountError != null,
@@ -430,7 +433,8 @@ fun MovementEditorContent(
             enabled = !uiState.isSpecialized && !uiState.hasConflict,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("editor_amount_input"),
+                .testTag("editor_amount_input")
+                .privateAmount(LocalBalanceMasked.current, !uiState.isSpecialized && !uiState.hasConflict, onChange = onAmountChanged),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -552,53 +556,7 @@ fun MovementEditorContent(
                 .testTag("editor_note_input"),
         )
 
-        // Summary of changes ("Resumen de cambios")
-        if (uiState.hasUnsavedChanges) {
-            Spacer(modifier = Modifier.height(16.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = colorScheme.surfaceContainerLow),
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("editor_change_summary"),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = stringResource(R.string.movement_edit_summary_title),
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colorScheme.onSurface,
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    if (uiState.isOnlyNoteChanged) {
-                        Text(
-                            text = stringResource(R.string.movement_edit_summary_only_note),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.primary,
-                            modifier = Modifier.testTag("summary_only_note"),
-                        )
-                    } else {
-                        val parsedAmount = MoneyInputParser.parseMinorUnits(uiState.amountText)
-                        if (parsedAmount != null && parsedAmount != uiState.initialAmountMinor) {
-                            Text(
-                                text = "Monto: Anterior ${uiState.currency} ${formatMinorUnits(uiState.initialAmountMinor)} → Nuevo ${uiState.currency} ${formatMinorUnits(parsedAmount)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colorScheme.onSurfaceVariant,
-                                modifier = Modifier.testTag("summary_amount"),
-                            )
-                        }
-                        if (uiState.occurredAt != uiState.initialOccurredAt) {
-                            Text(
-                                text = stringResource(R.string.movement_edit_summary_date_period),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colorScheme.onSurfaceVariant,
-                                modifier = Modifier.testTag("summary_date"),
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        MovementChangeSummary(uiState)
 
         Spacer(modifier = Modifier.height(24.dp))
 

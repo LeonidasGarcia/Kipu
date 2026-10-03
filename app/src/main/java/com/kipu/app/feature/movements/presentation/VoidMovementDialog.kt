@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import com.kipu.app.ui.component.MoneyText
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -76,7 +77,6 @@ fun VoidMovementDialog(
     }
 
     val currencySymbol = if (tx.currency == "PEN") "S/" else "$"
-    val formattedAmount = "$currencySymbol ${formatMinorUnits(tx.amountMinor)}"
 
     AlertDialog(
         onDismissRequest = {
@@ -124,8 +124,9 @@ fun VoidMovementDialog(
                                 )
                             }
                         }
-                        Text(
-                            text = formattedAmount,
+                        MoneyText(
+                            amount = formatMinorUnits(tx.amountMinor),
+                            currencySymbol = currencySymbol,
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = colorScheme.onSurface,
                         )

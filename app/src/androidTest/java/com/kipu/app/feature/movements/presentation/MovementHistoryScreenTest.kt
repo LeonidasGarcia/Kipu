@@ -1,6 +1,8 @@
 package com.kipu.app.feature.movements.presentation
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -11,6 +13,16 @@ import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionItem
 import com.kipu.app.feature.movements.domain.model.TransactionStatus
 import com.kipu.app.ui.theme.KipuTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -20,6 +32,16 @@ import org.junit.Test
 class MovementHistoryScreenTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Composable
+    private fun TestViewport(content: @Composable () -> Unit) {
+        KipuTheme { Box(Modifier.fillMaxSize().systemBarsPadding()) { content() } }
+    }
+
+    private fun saveEvidence(name: String) {
+        val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "sprint4-ux").apply { mkdirs() }
+        File(directory, name).outputStream().use { compose.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+    }
 
     @Test
     fun cardPaymentHistoryUsesExplicitTitleAndAccountToCardSubtitle() {
@@ -40,7 +62,7 @@ class MovementHistoryScreenTest {
         )
 
         compose.setContent {
-            KipuTheme { TransactionRow(item) }
+            TestViewport { TransactionRow(item) }
         }
 
         compose.onNodeWithText("Pago de tarjeta").assertIsDisplayed()
@@ -59,6 +81,7 @@ class MovementHistoryScreenTest {
                 sourceAccountId = "account-1",
                 occurredAt = 1_758_000_000_000L,
                 status = TransactionStatus.ACTIVE,
+                categoryId = "ux-category",
             ),
             sourceAccountAlias = "Efectivo",
             categoryName = "Alimentación",
@@ -68,7 +91,7 @@ class MovementHistoryScreenTest {
         var voidClicked = false
 
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 TransactionRow(
                     item = item,
                     onClick = { editClicked = true },
@@ -94,7 +117,7 @@ class MovementHistoryScreenTest {
     }
 
     @Test
-    fun voidedTransactionDisplaysVoidedBadgeAndDisablesEditClick() {
+    fun voidedTransactionDisplaysVoidedBadgeAndOpensReadOnlyDetail() {
         val item = TransactionItem(
             transaction = Transaction(
                 id = "tx-voided-1",
@@ -105,6 +128,7 @@ class MovementHistoryScreenTest {
                 sourceAccountId = "account-1",
                 occurredAt = 1_758_000_000_000L,
                 status = TransactionStatus.VOIDED,
+                categoryId = "ux-category",
             ),
             sourceAccountAlias = "Efectivo",
             categoryName = "Farmacia",
@@ -113,7 +137,7 @@ class MovementHistoryScreenTest {
         var rowClicked = false
 
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 TransactionRow(
                     item = item,
                     onClick = { rowClicked = true },
@@ -122,16 +146,17 @@ class MovementHistoryScreenTest {
             }
         }
 
+        saveEvidence("voided-row.png")
         // Must display "Anulado" badge
-        compose.onNodeWithTag("tx_voided_badge_tx-voided-1").assertIsDisplayed()
+        compose.onNodeWithTag("tx_voided_badge_tx-voided-1", useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("Anulado").assertIsDisplayed()
 
         // Options menu should not be available for voided transaction
         compose.onNodeWithTag("tx_menu_tx-voided-1").assertDoesNotExist()
 
-        // Clicking the row must not trigger edit
+        // Clicking the row opens a read-only detail; no editor action is available.
         compose.onNodeWithTag("tx_row_tx-voided-1").performClick()
-        assertFalse(rowClicked)
+        assertTrue(rowClicked)
     }
 
     @Test
@@ -145,6 +170,7 @@ class MovementHistoryScreenTest {
                 currency = "PEN",
                 sourceAccountId = "account-1",
                 occurredAt = 1_758_000_000_000L,
+                categoryId = "ux-category",
             ),
             sourceAccountAlias = "Sueldo BCP",
             merchantName = "Restaurante Central",
@@ -154,7 +180,7 @@ class MovementHistoryScreenTest {
         var dismissed = false
 
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 VoidMovementDialog(
                     item = item,
                     onDismissRequest = { dismissed = true },
@@ -198,7 +224,7 @@ class MovementHistoryScreenTest {
         var dismissed = false
 
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 VoidMovementDialog(
                     item = item,
                     onDismissRequest = { dismissed = true },
@@ -224,11 +250,12 @@ class MovementHistoryScreenTest {
                 type = MovementType.EXPENSE,
                 amountMinor = 50_000L,
                 currency = "PEN",
-                sourceAccountId = "acc-1",
+                sourceAccountId = null,
                 cardId = "card-visa",
                 operationKind = "CARD_PURCHASE",
                 installmentCount = 3,
                 occurredAt = 1_758_000_000_000L,
+                categoryId = "ux-category",
             ),
             cardAlias = "Visa Signature",
         )
@@ -236,7 +263,7 @@ class MovementHistoryScreenTest {
         var dismissed = false
 
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 VoidMovementDialog(
                     item = item,
                     onDismissRequest = { dismissed = true },
@@ -262,7 +289,7 @@ class MovementHistoryScreenTest {
         var clearClicked = false
 
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 EmptyMovementsState(
                     hasActiveFilters = true,
                     onClearFilters = { clearClicked = true },
@@ -279,7 +306,7 @@ class MovementHistoryScreenTest {
     @Test
     fun emptyMovementsStateWithoutFiltersShowsDefaultEmptyAndNoClearButton() {
         compose.setContent {
-            KipuTheme {
+            TestViewport {
                 EmptyMovementsState(
                     hasActiveFilters = false,
                     onClearFilters = null,
@@ -287,62 +314,22 @@ class MovementHistoryScreenTest {
             }
         }
 
-        compose.onNodeWithText("Aún no tienes movimientos").assertIsDisplayed()
+        saveEvidence("empty-history.png")
+        compose.onNodeWithText("Sin movimientos registrados").assertIsDisplayed()
         compose.onNodeWithTag("btn_empty_clear_filters").assertDoesNotExist()
     }
 
     @Test
-    fun advancedFiltersBottomSheetInteractionsAndDismiss() {
-        var resetClicked = false
-        var dismissed = false
-        var toggledVoided = false
-        var updatedMin: Long? = null
-        var updatedMax: Long? = null
-
-        val state = MovementHistoryUiState(
-            showAdvancedFilterPanel = true,
-            selectedFinancialStates = setOf(com.kipu.app.feature.movements.domain.model.MovementFinancialState.VOIDED),
-            minAmountMinor = 1_000L,
-            maxAmountMinor = 5_000L,
-        )
-
-        compose.setContent {
-            KipuTheme {
-                AdvancedFiltersBottomSheet(
-                    uiState = state,
-                    onDismissRequest = { dismissed = true },
-                    onAccountFilterToggled = {},
-                    onCategoryFilterToggled = {},
-                    onAmountRangeChanged = { min, max ->
-                        updatedMin = min
-                        updatedMax = max
-                    },
-                    onDateRangeSelected = { _, _ -> },
-                    onFinancialStateToggled = { state ->
-                        if (state == com.kipu.app.feature.movements.domain.model.MovementFinancialState.VOIDED) {
-                            toggledVoided = true
-                        }
-                    },
-                    onResetAdvancedFilters = { resetClicked = true },
-                )
-            }
-        }
-
-        compose.onNodeWithTag("panel_advanced_filters").assertIsDisplayed()
-        compose.onNodeWithTag("chip_filter_voided").assertIsDisplayed()
-        compose.onNodeWithTag("input_filter_min_amount").assertIsDisplayed()
-        compose.onNodeWithTag("input_filter_max_amount").assertIsDisplayed()
-
-        // Toggle financial state
-        compose.onNodeWithTag("chip_filter_voided").performClick()
-        assertTrue(toggledVoided)
-
-        // Reset advanced filters
-        compose.onNodeWithTag("btn_reset_advanced_filters").performClick()
-        assertTrue(resetClicked)
-
-        // Apply filters
-        compose.onNodeWithTag("btn_apply_filters").performClick()
-        assertTrue(dismissed)
+    fun filterSheetResetOnlyChangesDraftUntilApply() {
+        var applied: MovementFilterDraft? = null
+        compose.setContent { KipuTheme { MovementFiltersSheet(
+            MovementHistoryUiState(accessStatus = com.kipu.app.feature.movements.domain.model.MovementHistoryAccessDecision.Allowed,
+                appliedFilters = AdvancedFiltersState(financialStates = setOf(com.kipu.app.feature.movements.domain.model.MovementFinancialState.VOIDED))),
+            onDismiss = {}, onApply = { applied = it; it.validate() }) } }
+        compose.onNodeWithTag("chip_filter_voided").performScrollTo().assertIsSelected()
+        compose.onNodeWithTag("btn_reset_advanced_filters").performScrollTo().performClick()
+        assertEquals(null, applied)
+        compose.onNodeWithTag("btn_apply_filters").performScrollTo().performClick()
+        assertTrue(applied!!.financialStates.isEmpty())
     }
 }

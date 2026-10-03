@@ -1,6 +1,5 @@
 package com.kipu.app.feature.movements.presentation
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,7 +25,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -42,7 +40,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -52,7 +49,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import com.kipu.app.feature.movements.domain.model.MovementFinancialState
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -64,6 +60,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -89,13 +87,21 @@ import com.kipu.app.ui.theme.KipuIncome
 fun MovementHistoryRoute(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToNewAccount: () -> Unit = {},
+    onNavigateToPlans: () -> Unit = {},
     onNavigateToEditor: (String) -> Unit = {},
     viewModel: MovementHistoryViewModel = hiltViewModel(),
     modifier: Modifier = Modifier,
+    savedMessage: Boolean = false,
+    onSavedMessageConsumed: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val savedText = stringResource(R.string.history_saved_pending)
+    val voidedText = stringResource(R.string.history_voided_pending)
+    LaunchedEffect(savedMessage) {
+        if (savedMessage) { onSavedMessageConsumed(); snackbarHostState.showSnackbar(savedText) }
+    }
     val colorScheme = MaterialTheme.colorScheme
     val mostUsedAccountId = remember(uiState.allTransactions) {
         uiState.allTransactions.asSequence()
@@ -158,6 +164,7 @@ fun MovementHistoryRoute(
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = null,
+                    tint = colorScheme.onPrimaryContainer,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -165,231 +172,172 @@ fun MovementHistoryRoute(
         containerColor = colorScheme.background,
         modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).testTag("list_movements"),
         ) {
-            // Search Bar
-            OutlinedTextField(
-                value = uiState.searchQuery,
-                onValueChange = viewModel::onSearchQueryChanged,
-                placeholder = {
-                    Text(
-                        stringResource(R.string.movements_search_placeholder),
-                        color = colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        tint = colorScheme.onSurfaceVariant,
-                    )
-                },
-                singleLine = true,
-                shape = MaterialTheme.shapes.medium,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = colorScheme.surfaceContainerLowest,
-                    unfocusedContainerColor = colorScheme.surfaceContainerLowest,
-                    focusedBorderColor = colorScheme.primary,
-                    unfocusedBorderColor = colorScheme.outlineVariant,
-                    cursorColor = colorScheme.primary,
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .semantics { contentDescription = searchDescription }
-                    .testTag("input_search_movements"),
-            )
-
-            // Filter Chips (Todos, Gasto, Ingreso, Transferencia)
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-            ) {
-                item {
-                    FilterChip(
-                        selected = uiState.selectedFilterType == null,
-                        onClick = { viewModel.onFilterTypeSelected(null) },
-                        label = { Text("Todos") },
-                        colors = filterChipColors,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("chip_filter_all"),
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = uiState.selectedFilterType == MovementType.EXPENSE,
-                        onClick = { viewModel.onFilterTypeSelected(MovementType.EXPENSE) },
-                        label = { Text(stringResource(R.string.movement_type_expense)) },
-                        colors = filterChipColors,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("chip_filter_expense"),
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = uiState.selectedFilterType == MovementType.INCOME,
-                        onClick = { viewModel.onFilterTypeSelected(MovementType.INCOME) },
-                        label = { Text(stringResource(R.string.movement_type_income)) },
-                        colors = filterChipColors,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("chip_filter_income"),
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = uiState.selectedFilterType == MovementType.TRANSFER,
-                        onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
-                        label = { Text(stringResource(R.string.movement_type_transfer)) },
-                        colors = filterChipColors,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("chip_filter_transfer"),
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = uiState.hasActiveAdvancedFilters || uiState.showAdvancedFilterPanel,
-                        onClick = { viewModel.onToggleAdvancedFilterPanel(true) },
-                        label = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.FilterList,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    if (uiState.hasActiveAdvancedFilters) {
-                                        stringResource(R.string.movements_filter_active)
-                                    } else {
-                                        stringResource(R.string.movements_filter_button)
-                                    }
-                                )
+            item(key = "history_controls") {
+                Column {
+                    // Search Bar
+                    OutlinedTextField(
+                        value = uiState.searchQuery,
+                        onValueChange = viewModel::onSearchQueryChanged,
+                        placeholder = {
+                            Text(
+                                stringResource(R.string.movements_search_placeholder),
+                                color = colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(onClick = { viewModel.onToggleAdvancedFilterPanel(true) },
+                                modifier = Modifier.size(48.dp).testTag("btn_open_filters")
+                                    .semantics { contentDescription = "Abrir filtros" }) {
+                                Icon(Icons.Default.FilterList, contentDescription = null,
+                                    tint = if (uiState.hasActiveAdvancedFilters) colorScheme.primary else colorScheme.onSurfaceVariant)
                             }
                         },
-                        colors = filterChipColors,
-                        shape = CircleShape,
+                        singleLine = true,
+                        shape = MaterialTheme.shapes.medium,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = colorScheme.surfaceContainerLowest,
+                            unfocusedContainerColor = colorScheme.surfaceContainerLowest,
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outlineVariant,
+                            cursorColor = colorScheme.primary,
+                        ),
                         modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("btn_open_filters")
-                            .semantics { contentDescription = "Abrir filtros avanzados" },
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .semantics { contentDescription = searchDescription }
+                            .testTag("input_search_movements"),
                     )
-                }
-                if (uiState.hasActiveAdvancedFilters || uiState.selectedFilterType != null || uiState.searchQuery.isNotBlank()) {
-                    item {
-                        FilterChip(
-                            selected = false,
-                            onClick = viewModel::onClearFilters,
-                            label = { Text(stringResource(R.string.movements_filter_clear)) },
-                            colors = filterChipColors,
-                            shape = CircleShape,
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_clear_filters")
-                                .semantics { contentDescription = "Limpiar todos los filtros" },
-                        )
-                    }
-                }
-            }
 
-            if (uiState.fallbackUsed) {
-                Surface(
-                    color = colorScheme.errorContainer.copy(alpha = 0.8f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .testTag("banner_fallback_used"),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(12.dp)
+                    // Filter Chips (Todos, Gasto, Ingreso, Transferencia)
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.movements_filter_fallback_notice),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.onErrorContainer,
-                        )
+                        item {
+                            FilterChip(
+                                selected = uiState.selectedFilterType == null,
+                                onClick = { viewModel.onFilterTypeSelected(null) },
+                                label = { Text("Todos", color = if (uiState.selectedFilterType == null) colorScheme.onPrimaryContainer else colorScheme.onSurfaceVariant) },
+                                colors = filterChipColors,
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("chip_filter_all"),
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = uiState.selectedFilterType == MovementType.EXPENSE,
+                                onClick = { viewModel.onFilterTypeSelected(MovementType.EXPENSE) },
+                                label = { Text(stringResource(R.string.movement_type_expense)) },
+                                colors = filterChipColors,
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("chip_filter_expense"),
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = uiState.selectedFilterType == MovementType.INCOME,
+                                onClick = { viewModel.onFilterTypeSelected(MovementType.INCOME) },
+                                label = { Text(stringResource(R.string.movement_type_income)) },
+                                colors = filterChipColors,
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("chip_filter_income"),
+                            )
+                        }
+                        item {
+                            FilterChip(
+                                selected = uiState.selectedFilterType == MovementType.TRANSFER,
+                                onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
+                                label = { Text(stringResource(R.string.movement_type_transfer)) },
+                                colors = filterChipColors,
+                                shape = CircleShape,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .testTag("chip_filter_transfer"),
+                            )
+                        }
+                        if (uiState.hasActiveAdvancedFilters || uiState.selectedFilterType != null || uiState.searchQuery.isNotBlank()) {
+                            item {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = viewModel::onClearFilters,
+                                    label = { Text(stringResource(R.string.movements_filter_clear)) },
+                                    colors = filterChipColors,
+                                    shape = CircleShape,
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_clear_filters")
+                                        .semantics { contentDescription = "Limpiar todos los filtros" },
+                                )
+                            }
+                        }
+                    }
+
+                    MovementAccessCard(uiState, onNavigateToPlans, viewModel::onRevalidateAccess,
+                        viewModel::onDismissRecovery, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+                    MovementAppliedFilters(uiState, viewModel::onRemoveFilter,
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                }
+            }
+            when {
+                uiState.isLoading -> item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = colorScheme.primary)
+                    }
+                }
+                uiState.queryError -> item(key = "read_error") {
+                    Column(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                        Text(stringResource(R.string.history_query_error), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.history_query_error_body), style = MaterialTheme.typography.bodyMedium)
+                        OutlinedButton(onClick = viewModel::onRetryHistory, modifier = Modifier.heightIn(min = 48.dp)) {
+                            Text(stringResource(R.string.history_retry))
+                        }
+                    }
+                }
+                uiState.filteredTransactions.isEmpty() -> item(key = "empty") {
+                    EmptyMovementsState(hasActiveFilters = uiState.hasActiveAdvancedFilters ||
+                        uiState.selectedFilterType != null || uiState.searchQuery.isNotBlank(),
+                        onClearFilters = viewModel::onClearFilters, onRegister = viewModel::onOpenRegisterSheet,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp).padding(horizontal = 32.dp))
+                }
+                else -> uiState.filteredTransactions.forEach { (dateHeader, rows) ->
+                    item(key = "header_$dateHeader") {
+                        Text(dateHeader, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp))
+                    }
+                    items(rows, key = { it.transaction.id }) { item ->
+                        TransactionRow(item, onClick = { viewModel.onOpenDetail(item) },
+                            onEditClick = { onNavigateToEditor(item.transaction.id) },
+                            onVoidClick = { viewModel.onSelectTransactionForVoid(item) },
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Transaction List or Empty State
-            if (uiState.isLoading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = colorScheme.primary)
-                }
-            } else if (uiState.filteredTransactions.isEmpty()) {
-                val hasActiveFilters = uiState.hasActiveAdvancedFilters ||
-                    uiState.selectedFilterType != null ||
-                    uiState.searchQuery.isNotBlank()
-                EmptyMovementsState(
-                    hasActiveFilters = hasActiveFilters,
-                    onClearFilters = viewModel::onClearFilters,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 32.dp)
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .testTag("list_movements")
-                ) {
-                    uiState.filteredTransactions.forEach { (dateHeader, items) ->
-                        item(key = "header_$dateHeader") {
-                            Text(
-                                text = dateHeader,
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = colorScheme.onSurfaceVariant,
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(colorScheme.background)
-                                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                            )
-                        }
-
-                        items(items, key = { it.transaction.id }) { item ->
-                            TransactionRow(
-                                item = item,
-                                onClick = { onNavigateToEditor(item.transaction.id) },
-                                onVoidClick = { viewModel.onSelectTransactionForVoid(item) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(80.dp)) // FAB spacing
-                    }
-                }
-            }
+            item(key = "fab_space") { Spacer(Modifier.height(88.dp)) }
         }
     }
 
@@ -407,6 +355,13 @@ fun MovementHistoryRoute(
         )
     }
 
+    uiState.selectedDetail?.let { item ->
+        MovementDetailSheet(item, uiState.detailRevisions, uiState.detailLoading, uiState.detailError,
+            onDismiss = viewModel::onCloseDetail,
+            onEdit = { viewModel.onCloseDetail(); onNavigateToEditor(item.transaction.id) },
+            onVoid = { viewModel.onCloseDetail(); viewModel.onSelectTransactionForVoid(item) })
+    }
+
     if (uiState.selectedTransactionForVoid != null) {
         VoidMovementDialog(
             item = uiState.selectedTransactionForVoid!!,
@@ -414,7 +369,7 @@ fun MovementHistoryRoute(
             onConfirmVoid = { reason ->
                 viewModel.onConfirmVoid(reason) { success, errorMsg ->
                     if (success) {
-                        val msg = errorMsg ?: "Movimiento anulado correctamente"
+                        val msg = errorMsg ?: voidedText
                         scope.launch { snackbarHostState.showSnackbar(msg) }
                     } else if (errorMsg != null) {
                         scope.launch { snackbarHostState.showSnackbar(errorMsg) }
@@ -427,16 +382,11 @@ fun MovementHistoryRoute(
     }
 
     if (uiState.showAdvancedFilterPanel) {
-        AdvancedFiltersBottomSheet(
-            uiState = uiState,
-            onDismissRequest = { viewModel.onToggleAdvancedFilterPanel(false) },
-            onAccountFilterToggled = viewModel::onAccountFilterToggled,
-            onCategoryFilterToggled = viewModel::onCategoryFilterToggled,
-            onAmountRangeChanged = viewModel::onAmountRangeChanged,
-            onDateRangeSelected = viewModel::onDateRangeSelected,
-            onFinancialStateToggled = viewModel::onFinancialStateToggled,
-            onResetAdvancedFilters = viewModel::onResetAdvancedFilters,
-        )
+        MovementFiltersSheet(uiState,
+            onDismiss = { viewModel.onToggleAdvancedFilterPanel(false) },
+            onApply = viewModel::onApplyFilterDraft, onVerify = viewModel::onRevalidateAccess,
+            onViewPlans = onNavigateToPlans, onDismissRecovery = viewModel::onDismissRecovery)
+
     }
 }
 
@@ -446,10 +396,12 @@ fun TransactionRow(
     onClick: () -> Unit = {},
     onVoidClick: () -> Unit = {},
     modifier: Modifier = Modifier,
+    onEditClick: () -> Unit = onClick,
 ) {
     val tx = item.transaction
     val colorScheme = MaterialTheme.colorScheme
     val isVoided = tx.status == TransactionStatus.VOIDED
+    val stackedAmount = LocalDensity.current.fontScale > 1.3f
     var showMenu by remember { mutableStateOf(false) }
 
     val legacyTitle = when (tx.legacyKind) {
@@ -480,7 +432,7 @@ fun TransactionRow(
     }
 
     val amountColor = if (isVoided) {
-        colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+        colorScheme.onSurfaceVariant
     } else when (tx.type) {
         MovementType.INCOME -> KipuIncome
         MovementType.EXPENSE -> colorScheme.onSurface
@@ -498,10 +450,10 @@ fun TransactionRow(
     Surface(
         shape = MaterialTheme.shapes.large,
         color = colorScheme.surface,
-        border = BorderStroke(1.dp, colorScheme.outlineVariant),
+
         modifier = modifier
             .testTag("tx_row_${tx.id}")
-            .clickable(enabled = !isVoided, onClick = onClick),
+            .clickable(onClick = onClick),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -547,10 +499,10 @@ fun TransactionRow(
                         text = title,
                         style = MaterialTheme.typography.bodyLarge.copy(
                             fontWeight = FontWeight.SemiBold,
-                            textDecoration = if (isVoided) TextDecoration.LineThrough else TextDecoration.None,
+                            textDecoration = TextDecoration.None,
                         ),
                         color = if (isVoided) colorScheme.onSurfaceVariant else colorScheme.onSurface,
-                        maxLines = 1,
+                        maxLines = 2,
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     if (isVoided) {
@@ -575,18 +527,25 @@ fun TransactionRow(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.onSurfaceVariant,
-                        maxLines = 1,
+                        maxLines = 2,
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     // Sync badge
                     SyncStatusIcon(status = tx.syncStatus)
                 }
+                Text(tx.syncStatus.uiLabel(), style = MaterialTheme.typography.labelMedium,
+                    color = colorScheme.onSurfaceVariant)
+                if (tx.status == TransactionStatus.REVISED) Text("Corregido", style = MaterialTheme.typography.labelMedium,
+                    color = colorScheme.primary)
+                if (stackedAmount) MoneyText("$amountPrefix${formatMinorUnits(tx.amountMinor)}", currencySymbol = currencySymbol,
+                    color = amountColor, style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.testTag("tx_amount_${tx.id}"))
             }
 
             Spacer(modifier = Modifier.width(8.dp))
 
             // Amount with tnum
-            Column(horizontalAlignment = Alignment.End) {
+            if (!stackedAmount) Column(horizontalAlignment = Alignment.End) {
                 val formattedAmount = formatMinorUnits(tx.amountMinor)
                 MoneyText(
                     amount = "$amountPrefix$formattedAmount",
@@ -595,7 +554,7 @@ fun TransactionRow(
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold,
                         fontFeatureSettings = "tnum",
-                        textDecoration = if (isVoided) TextDecoration.LineThrough else TextDecoration.None,
+                        textDecoration = TextDecoration.None,
                     ),
                     modifier = Modifier.testTag("tx_amount_${tx.id}"),
                 )
@@ -628,7 +587,7 @@ fun TransactionRow(
                             text = { Text(stringResource(R.string.movement_action_edit)) },
                             onClick = {
                                 showMenu = false
-                                onClick()
+                                onEditClick()
                             },
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
@@ -692,6 +651,7 @@ fun SyncStatusIcon(
 fun EmptyMovementsState(
     hasActiveFilters: Boolean = false,
     onClearFilters: (() -> Unit)? = null,
+    onRegister: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -735,6 +695,11 @@ fun EmptyMovementsState(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
+        if (!hasActiveFilters && onRegister != null) {
+            Button(onClick = onRegister, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.history_register))
+            }
+        }
         if (hasActiveFilters && onClearFilters != null) {
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedButton(
@@ -746,159 +711,6 @@ fun EmptyMovementsState(
             ) {
                 Text(stringResource(R.string.movements_filter_clear))
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun AdvancedFiltersBottomSheet(
-    uiState: MovementHistoryUiState,
-    onDismissRequest: () -> Unit,
-    onAccountFilterToggled: (String) -> Unit,
-    onCategoryFilterToggled: (String) -> Unit,
-    onAmountRangeChanged: (Long?, Long?) -> Unit,
-    onDateRangeSelected: (Long?, Long?) -> Unit,
-    onFinancialStateToggled: (MovementFinancialState) -> Unit,
-    onResetAdvancedFilters: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        modifier = modifier.testTag("panel_advanced_filters"),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = stringResource(R.string.movements_filter_title),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                IconButton(
-                    onClick = onDismissRequest,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("btn_close_filters")
-                        .semantics { contentDescription = "Cerrar filtros avanzados" }
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = null)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Financial State (e.g. VOIDED)
-            Text(
-                text = stringResource(R.string.movements_filter_financial_state),
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = MovementFinancialState.VOIDED in uiState.selectedFinancialStates,
-                    onClick = { onFinancialStateToggled(MovementFinancialState.VOIDED) },
-                    label = { Text(stringResource(R.string.movements_filter_voided_only)) },
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag("chip_filter_voided")
-                        .semantics { contentDescription = "Filtrar solo movimientos anulados" },
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Amount Range Inputs
-            Text(
-                text = stringResource(R.string.movements_filter_amount_range),
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                var minText by remember(uiState.minAmountMinor) {
-                    mutableStateOf(uiState.minAmountMinor?.toString().orEmpty())
-                }
-                var maxText by remember(uiState.maxAmountMinor) {
-                    mutableStateOf(uiState.maxAmountMinor?.toString().orEmpty())
-                }
-
-                OutlinedTextField(
-                    value = minText,
-                    onValueChange = { input ->
-                        minText = input
-                        val min = input.toLongOrNull()
-                        val max = maxText.toLongOrNull()
-                        onAmountRangeChanged(min, max)
-                    },
-                    label = { Text(stringResource(R.string.movements_filter_min_amount)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("input_filter_min_amount")
-                        .semantics { contentDescription = "Importe mínimo" },
-                )
-
-                OutlinedTextField(
-                    value = maxText,
-                    onValueChange = { input ->
-                        maxText = input
-                        val min = minText.toLongOrNull()
-                        val max = input.toLongOrNull()
-                        onAmountRangeChanged(min, max)
-                    },
-                    label = { Text(stringResource(R.string.movements_filter_max_amount)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("input_filter_max_amount")
-                        .semantics { contentDescription = "Importe máximo" },
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Actions
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                OutlinedButton(
-                    onClick = onResetAdvancedFilters,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("btn_reset_advanced_filters")
-                        .semantics { contentDescription = "Limpiar criterios avanzados" },
-                ) {
-                    Text(stringResource(R.string.movements_filter_reset))
-                }
-
-                Button(
-                    onClick = onDismissRequest,
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("btn_apply_filters")
-                        .semantics { contentDescription = "Aplicar filtros" },
-                ) {
-                    Text(stringResource(R.string.movements_filter_apply))
-                }
-            }
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

@@ -5,11 +5,24 @@ import com.kipu.app.core.session.LocalOwner
 import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.movements.domain.MovementRepository
+import com.kipu.app.feature.movements.domain.MovementEntitlementEvidence
+import com.kipu.app.feature.movements.domain.MovementEntitlementProvider
+import com.kipu.app.feature.movements.domain.MovementHistoryQueryRepository
+import com.kipu.app.feature.movements.domain.QueryMovementHistory
+import com.kipu.app.feature.movements.domain.model.MovementHistoryAccessDecision
+import com.kipu.app.feature.movements.domain.model.MovementHistoryPage
+import com.kipu.app.feature.movements.domain.model.MovementHistoryQuery
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
 import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionItem
+import io.mockk.*
+import org.junit.Assert.assertFalse
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.test.runCurrent
+import com.kipu.app.feature.plans.purchase.BillingPurchaseRepository
+import com.kipu.app.feature.plans.domain.model.BillingVerificationResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -213,6 +226,68 @@ class MovementHistoryViewModelTest {
     }
 
     @Test
+    fun premiumRequiredFallsBackToFreeFiltersAndShowsPlanAction() = runTest {
+        val tx = createTransactionItem(
+            id = "tx-food",
+            type = MovementType.EXPENSE,
+            amountMinor = 1_500L,
+            sourceAccountId = "acc-wallet",
+            categoryId = "cat-food",
+        )
+        val viewModel = MovementHistoryViewModel(
+            movementRepository = RecordingMovementRepository(listOf(tx)),
+            sessionCoordinator = TestSessionCoordinator(LocalAccess.Available("user-alice", RemoteSession.Absent)),
+            queryMovementHistoryUseCase = accessUseCase(revalidationRequired = false),
+        )
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("cat-food")
+        viewModel.onAccountFilterToggled("acc-not-matching")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.accessStatus is MovementHistoryAccessDecision.PremiumRequired)
+        assertTrue(state.fallbackUsed)
+        assertEquals("PREMIUM_REQUIRED", state.accessMessage)
+        assertEquals(listOf("tx-food"), state.filteredTransactions.values.flatten().map { it.transaction.id })
+    }
+
+    @Test
+    fun expiredLeaseKeepsDateAndTextFiltersButDropsAdvancedAmountFilter() = runTest {
+        val tx = createTransactionItem(
+            id = "tx-food",
+            type = MovementType.EXPENSE,
+            amountMinor = 1_500L,
+            sourceAccountId = "acc-wallet",
+            categoryId = "cat-food",
+            occurredAt = 1_000_000L,
+        )
+        val viewModel = MovementHistoryViewModel(
+            movementRepository = RecordingMovementRepository(listOf(tx)),
+            sessionCoordinator = TestSessionCoordinator(LocalAccess.Available("user-alice", RemoteSession.Absent)),
+            queryMovementHistoryUseCase = accessUseCase(revalidationRequired = true),
+        )
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect()
+        }
+        advanceUntilIdle()
+
+        viewModel.onSearchQueryChanged("cat-food")
+        viewModel.onDateRangeSelected(from = 900_000L, to = 1_100_000L)
+        viewModel.onAmountRangeChanged(min = 2_000L, max = null)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state.accessStatus is MovementHistoryAccessDecision.RevalidationRequired)
+        assertTrue(state.fallbackUsed)
+        assertEquals("REVALIDATION_REQUIRED", state.accessMessage)
+        assertEquals(listOf("tx-food"), state.filteredTransactions.values.flatten().map { it.transaction.id })
+    }
+
+    @Test
     fun authenticatedSessionDerivesOwnerFromCoordinator() = runTest {
         val coordinator = TestSessionCoordinator(LocalAccess.Available("owner-42", RemoteSession.Absent))
         val viewModel = MovementHistoryViewModel(
@@ -225,6 +300,79 @@ class MovementHistoryViewModelTest {
         state.await()
 
         assertEquals(listOf("owner-42"), repository.observedOwners)
+    }
+
+    @Test
+    fun validatedDraftAppliesOnceAndIndividualRemovalKeepsOtherSelections() = runTest {
+        val viewModel = MovementHistoryViewModel(RecordingMovementRepository(),
+            TestSessionCoordinator(LocalAccess.Available("user-alice", RemoteSession.Absent)))
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
+        advanceUntilIdle()
+        assertTrue(viewModel.onApplyFilterDraft(MovementFilterDraft(accountIds = setOf("cash", "bank"),
+            currency = "PEN", minAmount = "15,50")).errors.isEmpty())
+        advanceUntilIdle()
+        assertEquals(1550L, viewModel.uiState.value.minAmountMinor)
+        viewModel.onRemoveFilter("account:cash")
+        advanceUntilIdle()
+        assertEquals(setOf("bank"), viewModel.uiState.value.selectedAccountIds)
+        assertEquals(1550L, viewModel.uiState.value.minAmountMinor)
+        assertFalse(viewModel.onApplyFilterDraft(MovementFilterDraft(minAmount = "abc")).errors.isEmpty())
+        advanceUntilIdle()
+        assertEquals(1550L, viewModel.uiState.value.minAmountMinor)
+    }
+
+    @Test
+    fun ownerChangeClearsFiltersSearchAndDetail() = runTest {
+        val tx = createTransactionItem("one", MovementType.EXPENSE, 1000, "cash")
+        val coordinator = TestSessionCoordinator(LocalAccess.Available("user-alice", RemoteSession.Absent))
+        val viewModel = MovementHistoryViewModel(RecordingMovementRepository(listOf(tx)), coordinator)
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
+        advanceUntilIdle()
+        viewModel.onOpenDetail(tx)
+        viewModel.onSearchQueryChanged("cash")
+        viewModel.onApplyFilterDraft(MovementFilterDraft(accountIds = setOf("cash")))
+        advanceUntilIdle()
+        coordinator.localAccess.value = LocalAccess.Available("user-bob", RemoteSession.Absent)
+        advanceUntilIdle()
+        assertEquals("", viewModel.uiState.value.searchQuery)
+        assertTrue(viewModel.uiState.value.selectedAccountIds.isEmpty())
+        assertEquals(null, viewModel.uiState.value.selectedDetail)
+        assertTrue(viewModel.uiState.value.allTransactions.isEmpty())
+    }
+
+    @Test
+    fun recoveryRejectsDuplicatePressesAndHasNoPurchaseTerminalState() = runTest {
+        val result = CompletableDeferred<BillingVerificationResult>()
+        val billing = mockk<BillingPurchaseRepository>()
+        coEvery { billing.restoreAndVerifyAccess() } coAnswers { result.await() }
+        val viewModel = MovementHistoryViewModel(RecordingMovementRepository(),
+            TestSessionCoordinator(LocalAccess.Available("user-alice", RemoteSession.Absent)), billingRepository = billing)
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
+        runCurrent()
+        viewModel.onRevalidateAccess()
+        viewModel.onRevalidateAccess()
+        runCurrent()
+        assertEquals(HistoryAccessRecovery.VERIFYING, viewModel.uiState.value.recovery)
+        result.complete(BillingVerificationResult.Retryable("NO_RECOVERABLE_PURCHASE"))
+        advanceUntilIdle()
+        assertEquals(HistoryAccessRecovery.NO_PURCHASE, viewModel.uiState.value.recovery)
+        coVerify(exactly = 1) { billing.restoreAndVerifyAccess() }
+    }
+
+    @Test
+    fun historyReadFailureIsDistinctFromEmptyAndCanBeRetried() = runTest {
+        val repository = RecordingMovementRepository()
+        repository.failRead = true
+        val viewModel = MovementHistoryViewModel(repository,
+            TestSessionCoordinator(LocalAccess.Available("user-alice", RemoteSession.Absent)))
+        backgroundScope.launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect() }
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.queryError)
+        repository.failRead = false
+        viewModel.onRetryHistory()
+        advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.queryError)
+        assertTrue(viewModel.uiState.value.allTransactions.isEmpty())
     }
 
     private fun createTransactionItem(
@@ -263,14 +411,30 @@ class MovementHistoryViewModelTest {
         override suspend fun updateLockState(isLocked: Boolean, reason: String) = Unit
     }
 
+    private fun accessUseCase(revalidationRequired: Boolean) = QueryMovementHistory(
+        repository = object : MovementHistoryQueryRepository {
+            override suspend fun queryHistory(userId: String, query: MovementHistoryQuery) =
+                MovementHistoryPage(emptyList(), null, false, MovementHistoryAccessDecision.Allowed)
+        },
+        entitlementProvider = object : MovementEntitlementProvider {
+            override suspend fun getEffectiveEntitlement(userId: String) = MovementEntitlementEvidence(
+                verified = false,
+                verifiedServerTimeMillis = 0L,
+                entitlementExpiresAtMillis = null,
+                revalidationRequired = revalidationRequired,
+            )
+        },
+    )
+
     private class RecordingMovementRepository(
         private val initialTransactions: List<TransactionItem> = emptyList(),
     ) : MovementRepository {
         val observedOwners = mutableListOf<String>()
+        var failRead = false
 
         override fun observeTransactions(userId: String): Flow<List<TransactionItem>> {
             observedOwners += userId
-            return flowOf(initialTransactions)
+            return kotlinx.coroutines.flow.flow { if (failRead) throw IllegalStateException("read failed"); emit(initialTransactions) }
         }
 
         override fun observeRecentTransactions(userId: String, limit: Int): Flow<List<TransactionItem>> = emptyFlow()

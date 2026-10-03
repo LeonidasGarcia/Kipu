@@ -1,5 +1,7 @@
 package com.kipu.app.navigation
 
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
@@ -51,10 +53,14 @@ fun NavGraphBuilder.movementsDestinations(
         deepLinks = listOf(
             navDeepLink { uriPattern = "kipu://movements/history?accountId={accountId}&categoryId={categoryId}&query={query}" }
         )
-    ) {
+    ) { historyEntry ->
+        val saved by historyEntry.savedStateHandle.getStateFlow("movement_saved", false).collectAsStateWithLifecycle()
         MovementHistoryRoute(
+            savedMessage = saved,
+            onSavedMessageConsumed = { historyEntry.savedStateHandle["movement_saved"] = false },
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
             onNavigateToNewAccount = { navController.navigateToAccountForm() },
+            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
             onNavigateToEditor = { transactionId ->
                 navController.navigateToMovementEditor(transactionId)
             },
@@ -70,7 +76,7 @@ fun NavGraphBuilder.movementsDestinations(
         MovementEditorRoute(
             transactionId = transactionId,
             onDismiss = { navController.popBackStack() },
-            onSaved = { navController.popBackStack() },
+            onSaved = { navController.previousBackStackEntry?.savedStateHandle?.set("movement_saved", true); navController.popBackStack() },
         )
     }
 }
