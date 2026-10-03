@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -69,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -276,69 +278,107 @@ fun ProfileSettingsScreen(
                     title = "Tema de la aplicación",
                     subtitle = "Preferencia visual de interfaz",
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        FilterChip(
-                            selected = state.themeMode == ThemeMode.LIGHT,
-                            onClick = {
-                                viewModel.onThemeModeChanged(ThemeMode.LIGHT)
-                                viewModel.savePreferences()
-                            },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.LightMode, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Claro", fontSize = 12.sp)
-                                }
-                            },
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                selectedLabelColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
+                    val fontScale = LocalDensity.current.fontScale
+                    val isLargeFont = fontScale > 1.15f
 
-                        FilterChip(
-                            selected = state.themeMode == ThemeMode.DARK,
-                            onClick = {
-                                viewModel.onThemeModeChanged(ThemeMode.DARK)
-                                viewModel.savePreferences()
-                            },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Oscuro", fontSize = 12.sp)
-                                }
-                            },
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                selectedLabelColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
+                    if (isLargeFont) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ThemeOptionChip(
+                                selected = state.themeMode == ThemeMode.LIGHT,
+                                onClick = {
+                                    viewModel.onThemeModeChanged(ThemeMode.LIGHT)
+                                    viewModel.savePreferences()
+                                },
+                                icon = Icons.Default.LightMode,
+                                label = "Claro",
+                                isLargeFont = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
+                            )
 
-                        FilterChip(
-                            selected = state.themeMode == ThemeMode.SYSTEM,
-                            onClick = {
-                                viewModel.onThemeModeChanged(ThemeMode.SYSTEM)
-                                viewModel.savePreferences()
-                            },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Smartphone, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Sistema", fontSize = 12.sp)
-                                }
-                            },
-                            modifier = Modifier.weight(1f).height(40.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                selectedLabelColor = MaterialTheme.colorScheme.primary,
-                            ),
-                        )
+                            ThemeOptionChip(
+                                selected = state.themeMode == ThemeMode.DARK,
+                                onClick = {
+                                    viewModel.onThemeModeChanged(ThemeMode.DARK)
+                                    viewModel.savePreferences()
+                                },
+                                icon = Icons.Default.DarkMode,
+                                label = "Oscuro",
+                                isLargeFont = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
+                            )
+
+                            ThemeOptionChip(
+                                selected = state.themeMode == ThemeMode.SYSTEM,
+                                onClick = {
+                                    viewModel.onThemeModeChanged(ThemeMode.SYSTEM)
+                                    viewModel.savePreferences()
+                                },
+                                icon = Icons.Default.Smartphone,
+                                label = "Sistema",
+                                isLargeFont = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ThemeOptionChip(
+                                selected = state.themeMode == ThemeMode.LIGHT,
+                                onClick = {
+                                    viewModel.onThemeModeChanged(ThemeMode.LIGHT)
+                                    viewModel.savePreferences()
+                                },
+                                icon = Icons.Default.LightMode,
+                                label = "Claro",
+                                isLargeFont = false,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                            )
+
+                            ThemeOptionChip(
+                                selected = state.themeMode == ThemeMode.DARK,
+                                onClick = {
+                                    viewModel.onThemeModeChanged(ThemeMode.DARK)
+                                    viewModel.savePreferences()
+                                },
+                                icon = Icons.Default.DarkMode,
+                                label = "Oscuro",
+                                isLargeFont = false,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                            )
+
+                            ThemeOptionChip(
+                                selected = state.themeMode == ThemeMode.SYSTEM,
+                                onClick = {
+                                    viewModel.onThemeModeChanged(ThemeMode.SYSTEM)
+                                    viewModel.savePreferences()
+                                },
+                                icon = Icons.Default.Smartphone,
+                                label = "Sistema",
+                                isLargeFont = false,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                            )
+                        }
                     }
                 }
 
@@ -608,4 +648,35 @@ private fun SyncStateBanner(syncState: SyncState) {
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }
+}
+
+@Composable
+private fun ThemeOptionChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    isLargeFont: Boolean = false,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = {
+            Row(
+                modifier = if (isLargeFont) Modifier.fillMaxWidth() else Modifier,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = if (isLargeFont) Arrangement.Center else Arrangement.Start,
+            ) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(label, fontSize = 12.sp)
+            }
+        },
+        modifier = modifier,
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            selectedLabelColor = MaterialTheme.colorScheme.primary,
+        ),
+    )
 }
