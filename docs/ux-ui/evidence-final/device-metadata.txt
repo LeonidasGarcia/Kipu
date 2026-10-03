@@ -1,0 +1,24 @@
+Kipu UI/UX implementation verification — final
+Verification date: 2026-10-03 (America/Lima)
+Branch: fix/kipu-ui-ux-phases-a-e
+Final APK: app/build/outputs/apk/debug/app-debug.apk
+Final APK timestamp: 2026-10-03 15:12:23 (local)
+Build/install: .\gradlew.bat installDebug — BUILD SUCCESSFUL; installed on RFGL70J9E2T
+Device: Samsung SM-A165M, Android 16 / API 36
+Display: 1080x2340 px; physical density 450 dpi; override density 420 dpi
+Package: com.kipu.app
+
+Final dashboard recapture: 2026-10-03 15:20 (local), after installDebug.
+Restored device/app settings, confirmed after the verification pass:
+font_scale=0.9
+window_animation_scale=1.0
+transition_animation_scale=1.0
+animator_duration_scale=null (unset/default)
+Kipu theme=dark
+hideBalances=false (balance displayed in the dashboard)
+
+Temporary verification settings were restored: font_scale 1.3, Light theme, privacy masking enabled, and reduced animation scales. The final dashboard was left visible in the authenticated app.
+
+Data safety: no transaction, account, or card was created, edited, voided, deleted, or purchased; no app data was cleared. The app displayed “Cambios pendientes de sincronizar”; no manual sync was triggered.
+
+Hierarchy XML in this directory has content-desc attributes removed. XML files were parsed successfully. Login/onboarding and TalkBack were excluded by scope.
