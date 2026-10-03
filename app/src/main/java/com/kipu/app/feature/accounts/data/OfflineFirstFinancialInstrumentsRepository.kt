@@ -52,6 +52,10 @@ import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
 import com.kipu.app.feature.accounts.domain.model.DebitCard
 import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
+import com.kipu.app.feature.plans.data.entitlement.DenyUnverifiedEntitlementEvaluator
+import com.kipu.app.feature.plans.data.entitlement.EffectiveEntitlementEvaluator
+import com.kipu.app.feature.plans.data.entitlement.offlineEntitlementRefreshTicker
+import com.kipu.app.feature.plans.domain.model.OfflineEntitlementLeaseDecision
 import com.kipu.app.feature.plans.domain.model.FreePlanLimits
 import com.kipu.app.feature.plans.domain.model.QuotaGroup
 import java.security.MessageDigest
@@ -86,6 +90,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
     private val syncScheduler: InstrumentSyncScheduler,
     private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
     private val planQuotaSyncScheduler: com.kipu.app.feature.plans.data.sync.PlanQuotaSyncScheduler? = null,
+    private val entitlementEvaluator: EffectiveEntitlementEvaluator = DenyUnverifiedEntitlementEvaluator,
 ) : FinancialInstrumentsRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -1502,10 +1507,10 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         cardDao.observeActive(userId),
         database.planQuotaSelectionDao().observeSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name),
         database.featureAccessCacheDao().observe(UUID.fromString(userId)),
-    ) { accounts, cards, selected, cache ->
+        offlineEntitlementRefreshTicker(),
+    ) { accounts, cards, selected, cache, _ ->
         val activeIds = accounts.filter { it.type !in NON_COMPUTABLE_ACCOUNT_TYPES }.map { it.id } + cards.map { it.id }
-        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
-            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
         quotaPolicy.evaluate(
             group = QuotaGroup.INSTRUMENTS,
             activeResourceIds = activeIds,
@@ -1520,8 +1525,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         val selected = database.planQuotaSelectionDao()
             .getSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name)
         val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
-        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
-            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
         return quotaPolicy.evaluate(
             group = QuotaGroup.INSTRUMENTS,
             activeResourceIds = activeIds,
@@ -1542,8 +1546,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         val selected = database.planQuotaSelectionDao()
             .getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
         val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
-        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
-            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(Instant.now()))
+        val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
         val rootsOfType = activeRoots.filter { it.categoryType == root.categoryType }
         val quota = quotaPolicy.evaluate(
             group = QuotaGroup.CUSTOM_CATEGORIES,

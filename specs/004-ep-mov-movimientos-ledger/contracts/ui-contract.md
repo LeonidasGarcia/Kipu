@@ -107,3 +107,8 @@ Prevalece para HU-20/21/22; conserva tokens, navegación y accesibilidad S2. Con
 - Autorizar al abrir/aplicar, cargar página, resolver enlace y reanudar. El bloqueo evita ejecutar consulta avanzada, además de controlar UI.
 - Caducidad o arranque sin continuidad confiable: «Reconecta para verificar tu acceso Premium». Continuar con texto/fecha/tipo, conservar selección avanzada como borrador y retirar resultados protegidos. Registro y edición/anulación estándar siguen disponibles en Free.
 - Cambio de propietario, criterios, revisión del conjunto o autorización invalida cursor; reiniciar primera página autorizada. No registrar filtros, notas ni datos financieros en logs.
+# UX aprobado 2026-10-03 (prevalece sobre interacción S4 anterior)
+
+Tocar una fila abre detalle de lectura, también para VOIDED; las acciones explícitas siguen sujetas a elegibilidad y no resucitan movimientos. Filtros editan un borrador: aplicar valida montos en unidades mayores/moneda y fechas; cerrar/cancelar no modifica criterios aplicados. Referencias históricas se presentan por nombre. Estado financiero, sincronización, criterios efectivos y criterios retenidos sin acceso tienen etiquetas distintas. Todo importe respeta el enmascaramiento visual y semántico global.
+
+Edición compara cada cambio Antes/Después y confirma persistencia local/pending sync; anulación conserva consecuencias por cuenta y no ofrece undo. Avisos, resúmenes y feedback usan tokens/reduced motion; no animar resultados protegidos de salida tras caducidad. Vacío inicial ofrece registrar, cero resultados ofrece retirar/limpiar, fallo ofrece reintentar. Targets 48 dp, layout adaptable, tonos semánticos y anuncios discretos.

@@ -169,6 +169,10 @@
     <string name="movements_filter_reset">Limpiar criterios</string>
     <string name="movements_filter_apply">Listo</string>
     <string name="movements_filter_fallback_notice">Filtros avanzados requieren Kipu Premium o revalidación de acceso.</string>
+    <string name="movements_filter_premium_fallback">Los filtros avanzados requieren Kipu Premium. Se muestran los filtros básicos hasta que habilites Premium.</string>
+    <string name="movements_filter_revalidation_fallback">La concesión Premium venció o perdió continuidad. Reconéctate para revalidarla; mientras tanto se muestran los filtros básicos.</string>
+    <string name="movements_filter_view_plans">Revisar Premium</string>
+    <string name="movements_filter_reconnect">Conectar y revalidar</string>
     <string name="movements_filter_empty_title">Sin resultados para los filtros</string>
     <string name="movements_filter_empty_desc">Prueba a cambiar o limpiar los filtros seleccionados</string>
 

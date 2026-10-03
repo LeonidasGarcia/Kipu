@@ -13,7 +13,6 @@ class QueryMovementHistory @Inject constructor(
     suspend operator fun invoke(
         userId: String?,
         query: MovementHistoryQuery,
-        trustedNowMillis: Long = System.currentTimeMillis(),
     ): MovementHistoryPage {
         if (userId.isNullOrBlank()) {
             return MovementHistoryPage(
@@ -24,8 +23,7 @@ class QueryMovementHistory @Inject constructor(
             )
         }
 
-        val evidence = entitlementProvider?.getEffectiveEntitlement(userId)
-        val decision = accessPolicy.evaluate(userId, query, evidence, trustedNowMillis)
+        val decision = evaluateAccess(userId, query)
 
         return when (decision) {
             is MovementHistoryAccessDecision.Allowed -> {
@@ -49,5 +47,16 @@ class QueryMovementHistory @Inject constructor(
                 )
             }
         }
+    }
+
+    /** Evaluates the capability gate without querying or paging movement data. */
+    suspend fun evaluateAccess(
+        userId: String?,
+        query: MovementHistoryQuery,
+        requiresAdvancedAccess: Boolean = query.requiresAdvancedAccess,
+    ): MovementHistoryAccessDecision {
+        if (userId.isNullOrBlank()) return MovementHistoryAccessDecision.NotAuthorized
+        val evidence = entitlementProvider?.getEffectiveEntitlement(userId)
+        return accessPolicy.evaluate(userId, query, evidence, requiresAdvancedAccess)
     }
 }

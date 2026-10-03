@@ -11,4 +11,7 @@ interface BillingPurchaseRepository {
     suspend fun loadOffers(): List<LocalizedBillingOffer>
     suspend fun startPurchase(activity: Activity, offer: LocalizedBillingOffer)
     suspend fun refreshPurchases()
+    /** Explicit recovery completes even when Play has no purchase; no catalog is required. */
+    suspend fun restoreAndVerifyAccess(): BillingVerificationResult =
+        BillingVerificationResult.Retryable("RESTORE_UNAVAILABLE")
 }

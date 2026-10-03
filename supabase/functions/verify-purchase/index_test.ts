@@ -54,6 +54,7 @@ function harness(options: {
   provider?: ProviderPurchase;
   providerError?: Error;
   existingOwner?: string;
+  issueOfflineGrant?: Dependencies["issueOfflineGrant"];
 } = {}) {
   const rows = new Map<string, { owner: string; id: string; state: string }>();
   const eventPayloads: Record<string, unknown>[] = [];
@@ -144,6 +145,7 @@ function harness(options: {
         acknowledgementState = "PENDING";
       }
     },
+    issueOfflineGrant: options.issueOfflineGrant,
   };
   return {
     handler: createVerifyPurchaseHandler(dependencies),
@@ -263,7 +265,50 @@ Deno.test("PENDING is persisted without entitlement and is never acknowledged", 
     result.entitlementState === null && result.effectivePremium === false,
     "pending grants no Premium",
   );
+  assert(result.offlineEntitlementGrant === null, "pending must not receive an offline grant");
   assert(h.calls.acknowledge === 0, "pending must not be acknowledged");
+});
+
+Deno.test("issues a device-bound offline grant only after effective verified Premium", async () => {
+  const issued: Record<string, unknown>[] = [];
+  const h = harness({
+    issueOfflineGrant: async (input) => {
+      issued.push(input);
+      return { payload: "signed-payload", signature: "signature", keyId: "test-key" };
+    },
+  });
+  const response = await h.handler(request({
+    productId: monthly.storeProductId,
+    purchaseToken: "verified-token",
+    installationPublicKey: "cHVibGljLWtleQ==",
+  }));
+  const result = await body(response);
+
+  assert(response.status === 200 && result.outcome === "VERIFIED", "purchase is verified");
+  assert(issued.length === 1, "effective Premium triggers grant issuance");
+  assert(issued[0].userId === ownerA, "grant owner comes from authenticated session");
+  assert(issued[0].installationPublicKey === "cHVibGljLWtleQ==", "grant binds the submitted public key");
+  assert(issued[0].effectivePremium === true, "only effective Premium is passed to signer");
+  assert(result.offlineEntitlementGrant !== null, "signed grant is included in response");
+});
+
+Deno.test("legacy clients without an installation key remain verifiable without a grant", async () => {
+  let issuerCalls = 0;
+  const h = harness({
+    issueOfflineGrant: async () => {
+      issuerCalls++;
+      return { payload: "payload", signature: "signature", keyId: "test-key" };
+    },
+  });
+  const response = await h.handler(request({
+    productId: monthly.storeProductId,
+    purchaseToken: "legacy-client-token",
+  }));
+  const result = await body(response);
+
+  assert(response.status === 200 && result.outcome === "VERIFIED", "legacy verification remains compatible");
+  assert(issuerCalls === 0, "the handler does not request a grant without the install key");
+  assert(result.offlineEntitlementGrant === null, "legacy clients cannot receive a device-bound grant");
 });
 
 Deno.test("provider outage has a distinct retryable response and no grant", async () => {

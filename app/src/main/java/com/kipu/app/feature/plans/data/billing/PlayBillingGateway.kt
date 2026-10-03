@@ -80,6 +80,14 @@ class PlayBillingGateway @Inject constructor(@ApplicationContext context: Contex
         }
     }
 
+    suspend fun recoverPurchaseUpdates(): List<StorePurchaseUpdate> {
+        ensureConnected()
+        return listOf(BillingClient.ProductType.SUBS, BillingClient.ProductType.INAPP)
+            .flatMap { queryPurchases(it) }
+            .distinctBy { it.purchaseToken }
+            .flatMap(::purchaseUpdatesFor)
+    }
+
     private fun onPurchasesUpdated(result: BillingResult, purchases: List<Purchase>?) {
         when (result.responseCode) {
             BillingClient.BillingResponseCode.OK -> purchases.orEmpty().forEach(::publishPurchase)
@@ -91,19 +99,21 @@ class PlayBillingGateway @Inject constructor(@ApplicationContext context: Contex
     }
 
     private fun publishPurchase(purchase: Purchase) {
+        purchaseUpdatesFor(purchase).forEach { updates.tryEmit(it) }
+    }
+
+    private fun purchaseUpdatesFor(purchase: Purchase): List<StorePurchaseUpdate> {
         val state = when (purchase.purchaseState) {
             Purchase.PurchaseState.PURCHASED -> StorePurchaseState.PURCHASED
             Purchase.PurchaseState.PENDING -> StorePurchaseState.PENDING
-            else -> return
+            else -> return emptyList()
         }
-        purchase.products.forEach { productId ->
-            updates.tryEmit(
-                StorePurchaseUpdate(
+        return purchase.products.map { productId ->
+            StorePurchaseUpdate(
                     productId = productId,
                     purchaseToken = EphemeralPurchaseToken(purchase.purchaseToken),
                     state = state,
-                ),
-            )
+                )
         }
     }
 

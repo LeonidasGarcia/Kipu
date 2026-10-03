@@ -1,5 +1,7 @@
 > **Reviewed**: 2026-09-16. The Pantalla 1B refinement changes presentation/default visual state only; persisted selections, eligibility and entitlement boundaries remain unchanged.
 
+**Propagated**: 2026-10-02 — Added HU-58/HU-59 signed offline-grant fields, trusted monotonic evaluation and Room v17→v18 migration rules.
+
 # Data Model: EP-PLA - Planes, Límites y Monetización Freemium
 
 **Date**: 2026-09-15  
@@ -410,3 +412,48 @@ The table is in a non-exposed schema, has forced RLS, no client grants and appen
 The Android client sends only productId and the ephemeral purchaseToken to the authenticated POST /billing/verify operation. The function derives user_id from the validated Supabase JWT, looks up the active Kipu product, and verifies the token with Google Play before it calls the server-only persistence routine. It returns a normalized outcome and effective entitlement; it never accepts an owner ID, price, entitlement state, or acknowledgement decision from the client. PENDING is an explicit non-entitling outcome. A verified PURCHASED row is persisted before an eligible acknowledgement request; acknowledgement retries are idempotent, and Lifetime is never consumed.
 
 Google subscription states map as follows: active → ACTIVE; grace period → IN_GRACE_PERIOD; on hold → ACCOUNT_HOLD; canceled with future expiry → CANCELED_ACTIVE; expired or canceled after expiry → EXPIRED; paused → PAUSED (no access). Provider revocation maps to REVOKED. Effective access is separately aggregated from verified purchases; a valid Lifetime purchase takes precedence over expired/revoked subscriptions. No future HU-55 RTDN webhook is implemented by this increment.
+
+## Sprint 4 — Signed offline entitlement lease (HU-58/HU-59)
+
+### Room `feature_access_cache` extension
+
+The S4 migration is additive (database version 17 → 18) and preserves every existing row. Add nullable columns:
+
+| Column | Room type | Meaning |
+|---|---|---|
+| `offline_grant_payload` | `TEXT?` | Base64url UTF-8 payload bytes signed by the server. |
+| `offline_grant_signature` | `TEXT?` | Base64url ES256 signature over the decoded payload bytes. |
+| `offline_grant_key_id` | `TEXT?` | Key identifier, also required to match the signed payload. |
+| `offline_anchor_elapsed_ms` | `INTEGER?` | `SystemClock.elapsedRealtime()` captured when the response was accepted. |
+| `offline_anchor_boot_count` | `INTEGER?` | `Settings.Global.BOOT_COUNT` captured with the monotonic anchor. |
+
+The existing `effective_tier`, `verified_at`, and `entitlement_expires_at` remain for compatibility and diagnostics only. They do not authorize Premium without a complete, valid signed grant. Rows upgraded from v17 have null grant/anchor fields and evaluate as Free. The server grant payload has `version`, `keyId`, `grantId`, `userId`, `installationKeyThumbprint`, `policyVersion`, `tier`, `serverVerifiedAt`, `entitlementEndsAt` (nullable for Lifetime), and `notAfter`.
+
+Android generates an installation P-256 signing key in Android Keystore and sends only the DER SubjectPublicKeyInfo to the authenticated verifier. The cache contains neither a private key nor a purchase token. The database, DataStore, shared preferences and installation private key are excluded from cloud backup and device transfer. Losing the Keystore key, missing a boot count, or changing installations requires online revalidation.
+
+### Trusted offline evaluation
+
+1. Verify the server ES256 signature over the exact decoded payload bytes using a configured, key-id-indexed public key.
+2. Require matching current authenticated `userId`, local installation-key thumbprint, supported grant/policy versions, `tier = PREMIUM`, and `serverVerifiedAt <= notAfter`.
+3. Require the stored boot count to equal the current boot count and current elapsed realtime to be no earlier than the stored anchor. Compute trusted current time as `serverVerifiedAt + (currentElapsedRealtime - anchorElapsedRealtime)`; never use `System.currentTimeMillis()` to extend a lease.
+4. Require `trustedNow < notAfter`, with `notAfter = min(serverVerifiedAt + 72 hours, entitlementEndsAt)` when a commercial end exists. For Lifetime, the 72-hour bound still applies.
+5. On failure, deny Premium and keep Free/manual/local/outbox operations available. A rejected but correctly authenticated online response writes a Free cache. A transport failure preserves a prior grant only while this same validation still proves it is valid.
+
+### Server grant issuance
+
+`verify-purchase` emits a grant only after authenticating the caller, validating the purchase with Google Play, persisting the provider result, and aggregating a currently effective entitlement. A pending purchase never emits one. The service derives owner ID from Auth and derives the installation thumbprint from the submitted public key; it does not accept a thumbprint or expiration as client authority. ES256 private material and signing key ID exist only as Edge Function secrets; absence or invalidity of the secret fails closed. Only the public verification key is supplied to Android. The existing PostgreSQL `public.get_feature_access()` legacy response is not a grant issuer and must not return a rolling `now() + 72 hours` concession.
+
+### State transitions
+
+| Event | Cache/result |
+|---|---|
+| Valid effective Premium response with grant | Replace the account cache and capture a new monotonic/boot anchor atomically. |
+| Verified response says no effective Premium | Replace with Free and clear all grant/anchor fields. |
+| `PENDING`, rejected, malformed, unknown key or invalid signature | No new grant; do not turn the result into Premium. |
+| Offline, valid grant before `notAfter`, same boot/user/install | Premium capabilities remain available. |
+| Exact `notAfter`, changed boot, missing key/boot count, or continuity regression | Require reconnection for Premium; retain Kipu Free and local records. |
+
+**Propagated**: 2026-10-03 — UX refinement adds presentation-only draft/detail/recovery state; no persisted entities, schema or ledger changes. Draft filters carry currency, decimal-input errors and exclusive date bounds; recovery is typed and owner-bound.
+
+
+UI drafts use an owner-scoped Compose saved-state saver. Authorization decisions and signed leases are never restored from this saver; effective capabilities are reevaluated by the existing domain boundary.

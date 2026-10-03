@@ -12,6 +12,10 @@ import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
 import com.kipu.app.feature.plans.data.local.FeatureAccessCacheDao
+import com.kipu.app.feature.plans.data.entitlement.DenyUnverifiedEntitlementEvaluator
+import com.kipu.app.feature.plans.data.entitlement.EffectiveEntitlementEvaluator
+import com.kipu.app.feature.plans.data.entitlement.offlineEntitlementRefreshTicker
+import com.kipu.app.feature.plans.domain.model.OfflineEntitlementLeaseDecision
 import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
@@ -67,6 +71,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     private val featureAccessCacheDao: FeatureAccessCacheDao,
     private val quotaPolicy: PlanQuotaPolicy,
     private val planQuotaSyncScheduler: com.kipu.app.feature.plans.data.sync.PlanQuotaSyncScheduler? = null,
+    private val entitlementEvaluator: EffectiveEntitlementEvaluator = DenyUnverifiedEntitlementEvaluator,
 ) : CategoriesRepository {
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -84,7 +89,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     override fun observeCategories(userId: UserId): Flow<List<Category>> {
         val selectedIds = quotaSelectionDao.observeSelectedResourceIds(userId.value, QuotaGroup.CUSTOM_CATEGORIES.name)
         val access = featureAccessCacheDao.observe(UUID.fromString(userId.value))
-        return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access) { entities, selected, cache ->
+        return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access, offlineEntitlementRefreshTicker()) { entities, selected, cache, _ ->
             val activeRoots = entities.filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
             val groupedRoots = activeRoots.groupBy { it.categoryType }
             val lockedRoots = groupedRoots.flatMap { (_, roots) ->
@@ -93,7 +98,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     activeResourceIds = roots.map { it.id },
                     selectedResourceIds = selected,
                     limits = FreePlanLimits(customCategories = 5),
-                    premiumVerified = cache.isPremiumVerified(),
+                    premiumVerified = entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed,
                 )
                 quota.planLockedResourceIds
             }.toSet()
@@ -214,7 +219,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
                     freeLimits = FreePlanLimits(customCategories = limit),
-                    effectiveEntitlement = featureAccessCacheDao.get(UUID.fromString(userId)).toEffectiveEntitlement(),
+                    effectiveEntitlement = effectiveEntitlement(userId),
                 )
             )
             if (decision is FeatureAccessDecision.Denied) {
@@ -305,7 +310,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
                     freeLimits = FreePlanLimits(customCategories = limit),
-                    effectiveEntitlement = featureAccessCacheDao.get(UUID.fromString(userId)).toEffectiveEntitlement(),
+                    effectiveEntitlement = effectiveEntitlement(userId),
                 )
             )
             if (decision is FeatureAccessDecision.Denied) {
@@ -593,7 +598,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive
         }
         val selected = quotaSelectionDao.getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
-        val premiumVerified = featureAccessCacheDao.get(UUID.fromString(userId)).isPremiumVerified()
+        val premiumVerified = entitlementEvaluator.evaluate(userId, featureAccessCacheDao.get(UUID.fromString(userId))) is OfflineEntitlementLeaseDecision.Allowed
         return roots.groupBy { it.categoryType }.values.flatMap { rootsByType ->
             quotaPolicy.evaluate(
                 group = QuotaGroup.CUSTOM_CATEGORIES,
@@ -604,18 +609,10 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             ).planLockedResourceIds
         }.toSet()
     }
-}
 
-private fun com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity?.isPremiumVerified(): Boolean {
-    if (this == null || effectiveTier != "PREMIUM" || verifiedAt == null) return false
-    return entitlementExpiresAt == null || entitlementExpiresAt.isAfter(java.time.Instant.now())
-}
-
-private fun com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity?.toEffectiveEntitlement(): EffectiveEntitlement? {
-    val cache = this ?: return null
-    if (!cache.isPremiumVerified()) return null
-    return EffectiveEntitlement(
-        verified = true,
-        expiresAtEpochMillis = cache.entitlementExpiresAt?.toEpochMilli(),
-    )
+    private suspend fun effectiveEntitlement(userId: String): EffectiveEntitlement? {
+        val cache = featureAccessCacheDao.get(UUID.fromString(userId))
+        if (entitlementEvaluator.evaluate(userId, cache) !is OfflineEntitlementLeaseDecision.Allowed) return null
+        return EffectiveEntitlement(verified = true, expiresAtEpochMillis = cache?.entitlementExpiresAt?.toEpochMilli())
+    }
 }

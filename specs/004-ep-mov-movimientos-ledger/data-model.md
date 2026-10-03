@@ -199,3 +199,8 @@ Fixture: A=[2026-09-01T00:00:00-05:00,2026-10-01T00:00:00-05:00), B=[2026-10-01T
 
 
 **Propagated**: 2026-10-02 — T093: altas estándar nuevas usan contracts/register-transaction-v2.md (hash de array compacto, validación remota y dispatch por versión); comandos S2 ya encolados permanecen en v1 con bytes/hash originales. No modifica identidad histórica, modelo de ledger ni alcance S4.
+
+**Propagated**: 2026-10-03 — UX refinement adds presentation-only draft/detail/recovery state; no persisted entities, schema or ledger changes. Draft filters carry currency, decimal-input errors and exclusive date bounds; recovery is typed and owner-bound.
+
+
+**Propagated**: 2026-10-03 — The current Kotlin/Room history projection lacks a persisted capture-source field; source in FR-017 remains an explicit baseline gap tracked by T110. Sync status and source/destination accounts must not be interpreted as capture provenance. No source migration/backfill is included in the approved UI refinement.

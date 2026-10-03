@@ -99,3 +99,14 @@ T059 concreta el modelo y consumo base; T060 concreta comando/reconciliación; T
 
 
 **Propagated**: 2026-10-02 — T093: altas estándar nuevas usan contracts/register-transaction-v2.md (hash de array compacto, validación remota y dispatch por versión); comandos S2 ya encolados permanecen en v1 con bytes/hash originales. No modifica identidad histórica, modelo de ledger ni alcance S4.
+
+## S4 UI/UX approved research — 2026-10-03
+
+User approved the broadened UI/UX Pro Max and Compose Animations plan. Recommendations prioritize readable minimal finance surfaces, explicit filter application/recovery, privacy and semantic state labels. Sources: existing Stitch design system; Obsidian Mind `work/active/kipu/Procesos/15-consultar-y-filtrar-historial.md`, `work/active/kipu/Procesos/14-corregir-o-anular-movimiento.md`, and HU-58/HU-59 in the product backlog. Motion uses existing shared tokens/reduced-motion adapter. No new financial operation, undo of VOIDED, remote deployment or database migration is introduced.
+
+
+## Evidencia de cierre del refinamiento — 2026-10-03
+
+**Audit evidence**: 2026-10-03 — Se preserva FR-017. La auditoría detectó un pendiente heredado: el filtro por **fuente** exigido por HU-22 no tiene un campo de procedencia en `Transaction`/`AdvancedHistoryCriteria`/la proyección Room consumida por esta UI. Sincronización y cuenta de origen son conceptos distintos. Este refinamiento implementa los controles respaldados por los contratos actuales; no fabrica procedencia histórica ni modifica el ledger para inferirla. T110 conserva explícitamente el trabajo restante de contrato y filtro por fuente antes de aceptar HU-22 íntegramente.
+
+Evidencia de autoridad: consulta MCP Obsidian Mind `"HU-22" "fuente" filtros avanzados historial manual SMS notificación`, contrastada con la sección completa de `work/active/kipu/Kipu md/02_Kipu_V4.2_Product_Backlog.md` (HU-22, reglas 1–3). El requerimiento original continúa vigente.

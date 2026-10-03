@@ -134,3 +134,4 @@ data class MovementLedgerEffectIdentity(val userId: String, val commandId: Strin
     init { require(userId.isNotBlank() && commandId.isNotBlank() && ordinal >= 0) }
 }
 data class MovementLedgerAlias(val physicalEntryId: String, val logicalIdentity: MovementLedgerEffectIdentity)
+data class MovementRevisionAudit(val revision: Long, val operation: String, val createdAt: Long, val reason: String?)

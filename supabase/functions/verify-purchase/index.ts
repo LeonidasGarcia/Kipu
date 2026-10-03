@@ -8,6 +8,10 @@ import {
   createPurchaseStore,
   PersistenceUnavailableError,
 } from "./purchase-store.ts";
+import {
+  createOfflineEntitlementGrantIssuer,
+  type OfflineEntitlementGrant,
+} from "./offline-entitlement-grant.ts";
 
 export { ProviderRejectedError, ProviderUnavailableError };
 
@@ -64,6 +68,12 @@ export type Dependencies = {
   ) => Promise<void>;
   completeAcknowledgement: (purchaseTokenHash: string) => Promise<void>;
   releaseAcknowledgement: (purchaseTokenHash: string) => Promise<void>;
+  issueOfflineGrant?: (input: {
+    userId: string;
+    installationPublicKey?: string;
+    effectivePremium: boolean;
+    entitlementEndsAt: string | null;
+  }) => Promise<OfflineEntitlementGrant | null>;
 };
 
 const MAX_BODY_BYTES = 8_192;
@@ -141,6 +151,7 @@ function effectiveResponse(
   provider: ProviderPurchase,
   persisted: PersistResult,
   outcome: "VERIFIED" | "PENDING",
+  offlineEntitlementGrant: OfflineEntitlementGrant | null = null,
 ) {
   return {
     outcome,
@@ -156,6 +167,7 @@ function effectiveResponse(
     orderId: provider.orderId,
     effectivePremium: persisted.effectivePremium,
     effectiveExpiresAt: persisted.effectiveExpiresAt,
+    offlineEntitlementGrant,
     acknowledgementState: provider.acknowledgementState,
   };
 }
@@ -206,18 +218,21 @@ export function createVerifyPurchaseHandler(dependencies: Dependencies) {
     if (
       !isRecord(payload) ||
       Object.keys(payload).some((key) =>
-        !["productId", "purchaseToken"].includes(key)
+        !["productId", "purchaseToken", "installationPublicKey"].includes(key)
       )
     ) {
       return json({ code: "INVALID_REQUEST", retryable: false }, 400);
     }
     const productId = payload.productId;
     const purchaseToken = payload.purchaseToken;
+    const installationPublicKey = payload.installationPublicKey;
     if (
       typeof productId !== "string" || productId.length < 1 ||
       productId.length > 200 ||
       typeof purchaseToken !== "string" || purchaseToken.length < 1 ||
-      purchaseToken.length > 4096
+      purchaseToken.length > 4096 ||
+      (installationPublicKey !== undefined &&
+        (typeof installationPublicKey !== "string" || installationPublicKey.length > 512))
     ) {
       return json({ code: "INVALID_REQUEST", retryable: false }, 400);
     }
@@ -312,7 +327,24 @@ export function createVerifyPurchaseHandler(dependencies: Dependencies) {
         }
       }
 
-      return json(effectiveResponse(product, provider, persisted, "VERIFIED"));
+      const offlineEntitlementGrant = provider.purchaseState === "PURCHASED" &&
+          persisted.effectivePremium && typeof installationPublicKey === "string" &&
+          dependencies.issueOfflineGrant
+        ? await dependencies.issueOfflineGrant({
+          userId,
+          installationPublicKey,
+          effectivePremium: true,
+          entitlementEndsAt: persisted.effectiveExpiresAt,
+        }).catch(() => null)
+        : null;
+
+      return json(effectiveResponse(
+        product,
+        provider,
+        persisted,
+        "VERIFIED",
+        offlineEntitlementGrant,
+      ));
     } catch (error) {
       if (error instanceof ProviderRejectedError) {
         return errorResponse("PURCHASE_REJECTED", false, 400);
@@ -331,6 +363,7 @@ export function createVerifyPurchaseHandler(dependencies: Dependencies) {
 if (import.meta.main) {
   const store = createPurchaseStore(Deno.env);
   const google = createGooglePlayApi(Deno.env);
-  const handler = createVerifyPurchaseHandler({ ...store, ...google });
+  const issueOfflineGrant = createOfflineEntitlementGrantIssuer(Deno.env);
+  const handler = createVerifyPurchaseHandler({ ...store, ...google, issueOfflineGrant });
   Deno.serve(handler);
 }

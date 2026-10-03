@@ -3,8 +3,13 @@ package com.kipu.app.core.database
 import android.database.Cursor
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
+import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kipu.app.feature.plans.data.local.FeatureAccessCacheEntity
+import java.time.Instant
+import java.util.UUID
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -161,6 +166,73 @@ class MovementRoomMigrationTest {
             }
             assertWriteRejected { db.execSQL("UPDATE transaction_revisions SET new_payload='{}'") }
             assertWriteRejected { db.execSQL("DELETE FROM transaction_revisions") }
+        }
+    }
+
+    @Test
+    fun upgradesSeventeenPreservingEntitlementCacheAndAddingEmptySignedGrantFields() {
+        val name = "plans-v17-offline-grant"
+        val userId = "10000000-0000-0000-0000-000000000001"
+        helper.createDatabase(name, 17).use { db ->
+            db.execSQL("""INSERT INTO accounts (id,user_id,creation_operation_id,alias,type,currency,
+                initial_balance_minor_units,opened_at,is_archived,remote_revision,created_at,updated_at)
+                VALUES ('account','$userId','opening','Cash','CASH','PEN',0,1,0,0,1,1)""")
+            db.execSQL("""INSERT INTO transactions (id,user_id,type,amount_minor,currency_code,source_account_id,
+                occurred_at,status,sync_status,created_at,updated_at)
+                VALUES ('income','$userId','INCOME',800,'PEN','account',1000,'ACTIVE','PENDING',1,1)""")
+            db.execSQL("""INSERT INTO ledger_entries(id,user_id,transaction_id,account_id,role,signed_amount_minor,currency_code,created_at)
+                VALUES ('original-entry','$userId','income','account','DESTINATION',800,'PEN',1000)""")
+            db.execSQL("""INSERT INTO balance_projections(user_id,account_id,balance_minor,currency_code,updated_at)
+                VALUES ('$userId','account',800,'PEN',1)""")
+            db.execSQL("""INSERT INTO movement_outbox(id,user_id,idempotency_key,aggregate_id,payload,state,attempt_count,created_at,updated_at)
+                VALUES ('command','$userId','original-key','income','{"request_hash":"old-hash"}','IN_FLIGHT',3,1,1)""")
+            db.execSQL(
+                """INSERT INTO feature_access_cache
+                   (user_id,policy_version,effective_tier,entitlement_expires_at,verified_at,source)
+                   VALUES (?,?,?,?,?,?)""",
+                arrayOf<Any?>(userId, 1, "PREMIUM", 1_800_000_000_000L, 1_799_000_000_000L, "VERIFIED_SERVER"),
+            )
+        }
+
+        helper.runMigrationsAndValidate(name, 18, true, MIGRATION_17_18).use { db ->
+            assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM transactions WHERE id='income'"))
+            assertEquals(800L, db.scalarLong("SELECT SUM(signed_amount_minor) FROM ledger_entries WHERE transaction_id='income'"))
+            assertEquals(800L, db.scalarLong("SELECT balance_minor FROM balance_projections WHERE account_id='account'"))
+            assertEquals("IN_FLIGHT", db.scalarString("SELECT state FROM movement_outbox WHERE id='command'"))
+            assertEquals(3L, db.scalarLong("SELECT attempt_count FROM movement_outbox WHERE id='command'"))
+            assertEquals("PREMIUM", db.scalarString("SELECT effective_tier FROM feature_access_cache WHERE user_id='$userId'"))
+            assertEquals("VERIFIED_SERVER", db.scalarString("SELECT source FROM feature_access_cache WHERE user_id='$userId'"))
+            assertEquals(1_799_000_000_000L, db.scalarLong("SELECT verified_at FROM feature_access_cache WHERE user_id='$userId'"))
+            assertEquals(0L, db.scalarLong("""SELECT COUNT(*) FROM feature_access_cache
+                WHERE user_id='$userId' AND (offline_grant_payload IS NOT NULL OR offline_grant_signature IS NOT NULL
+                    OR offline_grant_key_id IS NOT NULL OR offline_anchor_elapsed_ms IS NOT NULL
+                    OR offline_anchor_boot_count IS NOT NULL)"""))
+        }
+    }
+
+    @Test
+    fun signedGrantAndMonotonicAnchorPersistTogetherInRoomCache() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val database = Room.inMemoryDatabaseBuilder(context, KipuDatabase::class.java).build()
+        val userId = UUID.fromString("10000000-0000-0000-0000-000000000001")
+        val cache = FeatureAccessCacheEntity(
+            userId = userId,
+            policyVersion = 1,
+            effectiveTier = "PREMIUM",
+            entitlementExpiresAt = Instant.ofEpochMilli(1_800_000_000_000L),
+            verifiedAt = Instant.ofEpochMilli(1_799_000_000_000L),
+            source = "SIGNED_SERVER_GRANT",
+            offlineGrantPayload = "signed-payload",
+            offlineGrantSignature = "signed-signature",
+            offlineGrantKeyId = "release-key-v1",
+            offlineAnchorElapsedRealtimeMillis = 45_000L,
+            offlineAnchorBootCount = 12,
+        )
+        try {
+            database.featureAccessCacheDao().putVerified(cache)
+            assertEquals(cache, database.featureAccessCacheDao().get(userId))
+        } finally {
+            database.close()
         }
     }
 

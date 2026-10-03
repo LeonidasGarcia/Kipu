@@ -10,6 +10,8 @@
 
 **Refined**: 2026-09-26 — Incorporación del alcance S3 HU-53/HU-54/HU-56, verificación remota, estados de ciclo de compra y tratamiento explícito de discrepancias del esquema; distinción entre el Trial informativo de HU-52 y las ofertas reales consultadas en Play para HU-53; HU-52 y el addendum S2 se conservan como historial.
 
+**Refined**: 2026-10-02 — Incorporación del alcance S4 de HU-58/HU-59: autorización de capacidades Premium y concesión offline firmada, ligada a usuario/instalación, limitada a 72 horas y a la vigencia comercial verificada; Free local continúa disponible al vencer.
+
 **Refined**: 2026-09-15 — Adopción del design system Stitch "Kipu Andean Modernist" como única fuente de verdad visual de la Pantalla 1B; actualización de tokens de UI y lista de artefactos derivados; sin cambios funcionales (FR/RN/SC y user stories intactos).
 
 **Refined**: 2026-09-15 — Eliminación de las referencias residuales al sistema de diseño previo a Stitch; todas las referencias de diseño apuntan a `docs/stitch-design-system.md` (cleanup post-adopción del design system Stitch; sin cambios funcionales).
@@ -630,6 +632,65 @@ Lifetime verificado se representa como acceso `ACTIVE` con `expires_at = NULL`. 
 
 **Trazabilidad de fuente y discrepancias**: criterios y dependencias proceden de `KipuApp/Kipu md/02_Kipu_V4.2_Product_Backlog.md` (secciones HU-53/HU-54/HU-56); entidades de `KipuApp/Kipu md/03_Kipu_V4.2_Arquitectura_y_Datos.md` §13 y `KipuApp/Entidades/V4.2_Entidades.md` §11.1–11.3; pantallas de los documentos de Prototipo y `Stich Prompts.md`. AGY confirmó que S3 verifica bajo demanda en `/billing/verify`, que RTDN pertenece a HU-55 y que el constraint de producto actual omite Lifetime. La Edge Function física se denomina `verify-purchase`; la ruta lógica conserva `/billing/verify` para mantener la convención documentada.
 
+## Requisitos funcionales y criterios de éxito S4 — HU-58 / HU-59
+
+### Historias de usuario
+
+#### HU-58 — Aplicar capacidades Free y Premium
+
+Como persona usuaria de Kipu, quiero que cada capacidad respete mi derecho efectivo y verificado para conservar Kipu Free y saber cuándo una función requiere Premium.
+
+**Prioridad**: Alta · **Estimación**: 8 puntos · **Dependencias**: HU-52, HU-57 y verificación HU-54.
+
+**Criterios de aceptación**
+
+1. La operación manual, el registro local, la sincronización y las consultas básicas de historial siguen disponibles en Free.
+2. La automatización de captura/OCR/categorización, el análisis histórico y los filtros avanzados solo se autorizan con un entitlement Premium efectivo y verificado.
+3. Para historial, búsqueda por texto, rango de fechas y tipo (Gasto, Ingreso o Transferencia) es básica; los criterios por cuenta, tarjeta, categoría, comercio, monto, fuente o estado son avanzados. Una consulta con cualquier criterio avanzado requiere Premium.
+4. La decisión se aplica en dominio antes de acceder a datos o ejecutar una operación protegida; la UI no es autoridad de acceso.
+5. Una consulta avanzada sin permiso conserva los criterios básicos compatibles, ofrece el resultado básico y comunica que Premium requiere verificación o reconexión según corresponda. No pierde ni oculta movimientos.
+6. Preferencias comerciales, callback de compra, estado pendiente o cache no autenticado no conceden capacidades Premium.
+
+#### HU-59 — Usar temporalmente capacidades Premium sin conexión
+
+Como persona usuaria con Premium verificado, quiero seguir usando capacidades Premium sin conexión durante una concesión acotada y resistente a cambios del reloj del dispositivo.
+
+**Prioridad**: Alta · **Estimación**: 8 puntos · **Dependencias**: HU-54 y HU-58.
+
+**Criterios de aceptación**
+
+1. Solo una verificación autenticada de servidor que confirme un entitlement efectivo puede emitir una concesión offline verificable criptográficamente.
+2. La concesión identifica al usuario y a la instalación, incluye versión de política, instante de verificación del servidor y vigencia comercial conocida, y no puede renovarse editando el reloj civil, restaurando una copia de seguridad o copiando el cache a otra instalación.
+3. Su límite estricto es `notAfter = min(serverVerifiedAt + 72 horas, knownEntitlementEnd)`; Lifetime no elimina el límite de 72 horas.
+4. La app calcula el tiempo transcurrido usando continuidad monotónica del mismo arranque. Si reinicia y no puede probar continuidad, requiere reconexión para revalidar antes de permitir Premium offline.
+5. Al llegar a `notAfter`, o al detectar una concesión inválida, Kipu suspende temporalmente solo las capacidades Premium y solicita reconexión; Free manual, historial básico, persistencia local y outbox siguen operativos.
+6. Una verificación fallida no extiende la concesión. Mientras el plazo previo siga siendo demostrablemente válido, una falla de red por sí sola no revoca esa concesión; una denegación/revocación autenticada de servidor sí la reemplaza por Free inmediatamente.
+7. La pérdida de concesión nunca elimina, modifica ni excluye datos financieros ya registrados.
+
+### Requisitos funcionales
+
+- **FR-048**: La política de dominio distingue capacidades Free, Free limitadas y Premium-only. HU-58 mantiene en Free operación manual, registro local, sincronización y filtros básicos, y protege las capacidades avanzadas definidas en sus criterios.
+- **FR-049**: El entitlement efectivo se deriva de compras verificadas y vigentes según HU-54/HU-56. Intenciones de plan, respuesta local de Billing, estado `PENDING` y cache sin concesión válida no autorizan Premium.
+- **FR-050**: Tras verificación autenticada satisfactoria, el backend puede emitir una concesión firmada que contiene usuario, huella de clave de instalación, política, `serverVerifiedAt`, `knownEntitlementEnd` nullable, `notAfter`, identificador de concesión y `keyId`; `notAfter` usa el mínimo de 72 horas y el fin comercial conocido.
+- **FR-051**: Android valida la firma y las claims, compara el usuario con la sesión actual y la huella con una clave no exportable de Android Keystore. Un grant ausente, alterado, de otra cuenta/instalación, de política incompatible o con firma desconocida se trata como Free y requiere reconexión para restaurar Premium.
+- **FR-052**: La vigencia offline se evalúa con `elapsedRealtime` desde el ancla del mismo arranque; la hora civil del dispositivo no crea, extiende ni renueva acceso. Una regresión del contador monotónico/reinicio sin continuidad exige revalidación.
+- **FR-053**: El cache de concesión y las claves de instalación no se incluyen en backup o transferencia de dispositivo. No se persisten purchase tokens ni secretos de firma en Android.
+- **FR-054**: Al vencer la concesión, la app niega capacidades Premium, conserva Kipu Free, registros locales, consultas básicas y outbox. Reintentos de red no alteran datos contables ni la concesión previa sin respuesta autenticada.
+- **FR-055**: Una verificación online que confirma revocación, expiración u otro estado no-entitling sustituye el cache con Free; una falla transitoria no crea un nuevo límite temporal ni extiende `notAfter`.
+
+### Criterios de éxito
+
+- **SC-020**: Pruebas de política demuestran que las capacidades básicas/manuales permanecen permitidas en Free y toda capacidad avanzada requiere entitlement efectivo verificable.
+- **SC-021**: Vectores de firma válidos verifican; firma o claims alteradas, propietario distinto, clave de instalación distinta, versión/política incompatible y key ID desconocido deniegan Premium.
+- **SC-022**: Con tiempo monotónico controlado, se permite justo antes de `notAfter` y se exige reconexión exactamente en `notAfter`; cambios hacia adelante/atrás del reloj civil no cambian el resultado.
+- **SC-023**: La concesión se limita a 72 horas desde el instante firmado por servidor, y una suscripción con fin anterior se limita a ese fin; Lifetime también vence la concesión a las 72 horas.
+- **SC-024**: Reinicio/regresión monotónica sin continuidad, cache restaurado/copiado, error de red y revocación autenticada producen los estados especificados; ninguna ruta bloquea Free, outbox o consulta básica.
+- **SC-025**: Migración Room preserva todas las filas existentes y niega Premium a caches legacy sin grant firmado; migración Supabase local valida permisos/RLS y la API no expone secretos ni emite grants para pagos pendientes.
+
+**Decisiones S4 aprobadas**: tras más de 72 horas sin ancla confiable, se exige reconexión y se mantienen Kipu Free/registro local; no se usa `DELETE` en movimientos ni se altera historia financiera; el estado de entitlement y las concesiones no son fuente de verdad contable. Para cuentas con cuotas/deudas, la política de movimiento permanece fuera de esta épica.
+
+**Trazabilidad S4**: HU-58/HU-59 y reglas de dependencia/capacidades se contrastan con Obsidian Mind `Kipu md/02_Kipu_V4.2_Product_Backlog.md` y `Procesos/31-aplicar-cupos-accesos-y-vigencia-offline.md`; los filtros y la concesión consumidora con `specs/004-ep-mov-movimientos-ledger/contracts/history-query-access.md`. Los gates se rigen por Obsidian Mind `Spec Kit in Kipu.md` y `Spec Kit — Referencia Global.md`.
+
 ## Artefactos Derivados
 
 - `plan.md`
@@ -639,3 +700,12 @@ Lifetime verificado se representa como acceso `ACTIVE` con `expires_at = NULL`. 
 - ~~El documento de diseño de marca previo~~ *(Sustituido por `docs/stitch-design-system.md` — design system Stitch `Kipu Andean Modernist` como autoridad.)*
 - `stitch-design-system.md`
 - `Stich Prompts.md`
+# Refinamiento UI/UX aprobado — 2026-10-03
+
+**Refined**: 2026-10-03 — Aprobados aviso contextual Free/Premium, revalidación explícita con estados terminales, feedback accesible y movimiento reducido. Integra el refinamiento consumidor de EP-MOV sin alterar concesión/contabilidad.
+
+- **FR-056**: El historial diferencia Premium requerido, revalidación requerida, verificando, éxito, fallo temporal y ausencia de compra recuperable. Ver Premium navega a las ofertas; Verificar acceso invoca la restauración/verificación autenticada existente sin depender de cargar catálogo. Se impiden envíos simultáneos y se ofrece reintento; un resultado local de Billing nunca autoriza por sí solo.
+- **FR-057**: La tarjeta contextual emplea copy comprensible, color informativo/advertencia según la situación, conserva la operación Free y distingue los filtros efectivos de los borradores protegidos.
+- **FR-058**: Avisos anuncian cambios relevantes discretamente a TalkBack; feedback respeta tokens, texto ampliado, targets 48 dp y movimiento reducido. Ni animación ni error de transporte renuevan concesiones o retrasan la denegación.
+- **SC-026**: Restauración directa tiene resultados verificables para éxito autenticado, sin compras, compra pendiente, fallo y timeout; pulsaciones repetidas no duplican solicitudes.
+- **SC-027**: Pruebas y previews cubren estados del aviso, enmascaramiento y reducción de movimiento; la ejecución en dispositivo se registra aparte.

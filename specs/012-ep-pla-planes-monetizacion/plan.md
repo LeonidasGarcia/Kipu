@@ -1,5 +1,7 @@
 # Implementation Plan: EP-PLA - Planes, Límites y Monetización Freemium
 
+**Propagated**: 2026-10-02 — Added the approved S4 HU-58/HU-59 capability and signed offline lease design; preserved the S1/S2/S3 plan.
+
 **Propagated**: 2026-09-26 — Clarified the distinct meanings of Billing `PENDING`, verification `RETRYABLE`, and the HU-52 selection-sync outbox `PENDING`.
 
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (adopción de tokens del design system Stitch "Kipu Andean Modernist" como única fuente de verdad visual).
@@ -406,3 +408,65 @@ supabase/tests/database/billing_purchase_lifecycle_test.sql
 - La migración es aditiva, compatible con datos representativos, y `billing_purchases` permanece de solo lectura para cliente.
 - UI mantiene tokens Stitch, 48dp, contraste AA, estados verificables, fecha del primer cobro, gestión de Play y movimiento reducido.
 - Revisión cruzada y evidencia del test track quedan registradas antes de declarar completo Sprint 3.
+
+## Sprint 4 Technical Approach — HU-58/HU-59 (16 pts)
+
+### Goal and boundaries
+
+Apply Premium capabilities only from a validated effective entitlement and provide a bounded offline concession. HU-58 movement filter semantics remain defined by the EP-MOV history contract; this EP-PLA increment supplies the trusted entitlement evidence and applies the same policy to existing Premium quota gates. Free manual/local operations, basic history, and the outbox remain usable after concession expiry. Financial data and movement lifecycle are not modified by entitlement transitions.
+
+### Architecture decisions
+
+- The existing HU-54 Google Play verifier remains the sole issuer path. It returns a signed grant only after successful owner authentication, provider verification, persistence, and effective-entitlement aggregation. `PENDING`, `REJECTED`, and `RETRYABLE` never mint or refresh a grant.
+- Extend `POST /billing/verify` compatibly with optional `installationPublicKey`. Older clients continue verification but receive no offline grant; the current client sends a P-256 Android Keystore public key. The owner always comes from Supabase Auth.
+- The Edge Function signs exact UTF-8 grant payload bytes with ES256. Claims bind user, installation public-key thumbprint, grant/policy version, effective tier, server verification time, known commercial end, strict `notAfter`, grant ID and key ID. The signing private key stays in Edge Function secrets; Android contains configured public verification keys only.
+- Room v17→v18 adds nullable grant and monotonic-anchor columns without altering/deleting existing rows. A v17 cache row has no signed grant and therefore remains Free until a real authenticated re-verification.
+- Android validates signature, claims, session owner, local Keystore thumbprint, current boot count and elapsed-realtime anchor before exposing entitlement evidence. It computes trusted time from server-signed time plus monotonic elapsed delta; `System.currentTimeMillis()` is not a lease clock. Missing key/configuration, unknown `kid`, invalid claims, changed boot count or elapsed regression fails closed for Premium.
+- `notAfter = min(serverVerifiedAt + 72h, knownEntitlementEnd)`; Lifetime still uses the 72h cap. A transport failure does not extend a previously valid grant. A verified Free/revoked response clears it.
+- Update the legacy `public.get_feature_access()` output so `offline_valid_until` is null and can no longer be mistaken for a rolling entitlement grant. This migration is local and versioned; no remote schema or secret is changed by this implementation.
+- Continue excluding Room/DataStore/preferences and related local session state from Android backup and device transfer. Do not persist purchase tokens or private keys.
+
+### Delivery phases
+
+1. **Contract and schema**: refine OpenAPI, policy and data-model artifacts; define signed grant payload, key rotation identifier and fail-closed behavior; add Room v18 and an additive local Supabase migration.
+2. **Tests first**: cover domain capability classes, signature/claim tampering, owner/install mismatch, unknown key, exact 72h boundary, commercial-expiry boundary, Lifetime, reboot/clock changes, network failure and Free fallback.
+3. **Server grant issuance**: accept and validate installation public key, calculate the public-key thumbprint, sign claims using server-only ES256 JWK configuration, return no grant for non-entitling outcomes, and avoid logging or persisting secrets.
+4. **Android lease**: create/load the installation key, verify grant bytes with configured public keys, persist the server grant and same-boot elapsed anchor atomically, evaluate trusted time, and remove use of client `Instant.now()` as verification evidence.
+5. **Capability integration**: provide validated entitlement evidence to EP-MOV history access and existing instrument/category quota gates; preserve basic/free fallback and present reconnection state on invalid/expired lease.
+6. **Acceptance and DoD**: validate Room upgrade/data preservation, local migration/function grants, Edge API fakes, history/basic fallback, feature-policy gates, clock simulation, backups, secrets, and release-key configuration; record constraints in S4 validation artifacts.
+
+### S4 scope-specific files
+
+| Area | Main files |
+|---|---|
+| Domain policy and grant claims | `app/src/main/java/com/kipu/app/feature/plans/domain/FeatureAccessPolicy.kt`, `.../domain/model/EffectiveEntitlement.kt`, new offline lease models/policy |
+| Local persistence and device trust | `.../data/local/FeatureAccessCacheEntity.kt`, `.../data/local/FeatureAccessCacheDao.kt`, `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt`, Room migration registration, Android Keystore/clock adapters |
+| Server verifier | `app/src/main/java/com/kipu/app/feature/plans/data/remote/VerifyPurchaseApi.kt`, `.../data/billing/BillingRepository.kt`, `supabase/functions/verify-purchase/index.ts`, grant signer module and tests |
+| Consumers | `app/src/main/java/com/kipu/app/feature/movements/data/PlansMovementEntitlementProvider.kt`, `.../movements/domain/QueryMovementHistory.kt`, and existing category/instrument quota decision points |
+| Database | New local migration disabling the legacy rolling offline timestamp; preserve authenticated owner checks and existing privileges/RLS |
+| Evidence | `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md`, `validation/security-release-audit.md`, and Room schema upgrade tests |
+
+### Risks and operational requirements
+
+- The signed format is fail-closed. Production must configure the Edge Function signing JWK/key ID and matching Android verification public key through the approved release configuration. Never add the signing private key or service-role credentials to the repository or Android artifacts.
+- ES256 WebCrypto signatures use the fixed-width `r||s` encoding; Android verification must convert/validate this encoding correctly before using the JCA verifier.
+- Room migrations preserve old data but intentionally do not grandfather old unsigned Premium cache rows. A real server revalidation is needed to establish the device-bound grant.
+- A reboot, device restore, app reinstall, or unavailable boot counter forces online Premium revalidation. Free local registration, basic queries and queued sync remain available.
+
+### S4 Definition of Done
+
+- FR-048–FR-055 and SC-020–SC-025 map to tasks and pass their applicable unit, instrumentation, Edge Function and local database checks.
+- Server grants are only issued for verified effective Premium; Android rejects signature, owner, installation, policy, boot and expiry mismatches.
+- `notAfter` is strictly exclusive and bounded by both 72h and commercial expiry, including Lifetime.
+- Free/manual/local/outbox/history-basic remain available during outage and after lease expiry; no financial history changes because access changed.
+- Room upgrade from v17 preserves existing records and unsigned legacy cache cannot grant Premium; the database migration does not alter remote state.
+- Key material, billing tokens and service credentials do not leak into logs, Android artifacts or committed env files; release key configuration requirements are documented.
+- Cross-review and S4 validation evidence are recorded before completion.
+
+## S4 UI/UX refinement — 2026-10-03
+
+**Propagated**: 2026-10-03 — FR-056–FR-058 / SC-026–SC-027; preserve signed lease, schema and all S1–S3 artifacts.
+
+Provide explicit restore-and-verify through BillingPurchaseRepository, reusing authenticated verification and signed-cache persistence. This command returns completion rather than depending on offers or an unbounded event stream; it handles no recoverable purchase, pending, transient failure and timeout without manufacturing Premium. History tracks typed feedback, guards concurrent requests and current owner, and recomputes access after completion. Ver Premium continues to open existing offers.
+
+Render an access card with concise title/body/action and semantic informational/warning theme tokens. Announce meaningful state changes politely, keep minimum 48 dp targets and adaptive layout. AnimatedVisibility owns card lifecycle, AnimatedContent renders its lambda target, and reduced motion disables custom transitions. Commercial and monotonic authorization remain independent of presentation. Coordinate with EP-MOV T103–T109; T112/T113 retain their device/release gates and wait for the UI refinement evidence.

@@ -10,6 +10,9 @@ import com.kipu.app.feature.movements.domain.model.*
 import com.kipu.app.feature.plans.domain.PlanQuotaPolicy
 import com.kipu.app.feature.plans.domain.model.FreePlanLimits
 import com.kipu.app.feature.plans.domain.model.QuotaGroup
+import com.kipu.app.feature.plans.data.entitlement.DenyUnverifiedEntitlementEvaluator
+import com.kipu.app.feature.plans.data.entitlement.EffectiveEntitlementEvaluator
+import com.kipu.app.feature.plans.domain.model.OfflineEntitlementLeaseDecision
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 import javax.inject.Inject
@@ -22,6 +25,7 @@ class MovementLocalDataSource @Inject constructor(
     private val balanceProjectionStore: BalanceProjectionStore,
     private val quotaPolicy: PlanQuotaPolicy = PlanQuotaPolicy(),
     private val revisionPlanner: MovementRevisionPlanner = MovementRevisionPlanner(),
+    private val entitlementEvaluator: EffectiveEntitlementEvaluator = DenyUnverifiedEntitlementEvaluator,
 ) {
     fun observeTransactions(userId: String): Flow<List<TransactionEntity>> {
         return movementDao.observeTransactions(userId)
@@ -377,6 +381,11 @@ class MovementLocalDataSource @Inject constructor(
         val pendingOutbox = movementDao.getPendingOutboxForTransaction(userId, txEntity.id)
         return buildRevisionHead(txEntity, hasPendingOutbox = pendingOutbox.isNotEmpty())
     }
+
+    suspend fun getRevisionAudit(userId: String, transactionId: String): List<MovementRevisionAudit> =
+        movementDao.getRevisions(userId, transactionId).sortedByDescending { it.localRevision }.map {
+            MovementRevisionAudit(it.localRevision, it.commandType, it.createdAt, it.changeReason)
+        }
 
     private suspend fun collectReferences(
         userId: String,
@@ -956,8 +965,7 @@ class MovementLocalDataSource @Inject constructor(
         val selected = database.planQuotaSelectionDao()
             .getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
         val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
-        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
-            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
         val rootsOfType = activeRoots.filter { it.categoryType == root.categoryType }
         val quota = quotaPolicy.evaluate(
             group = QuotaGroup.CUSTOM_CATEGORIES,
@@ -977,8 +985,7 @@ class MovementLocalDataSource @Inject constructor(
         val selected = database.planQuotaSelectionDao()
             .getSelectedResourceIds(userId, QuotaGroup.INSTRUMENTS.name)
         val cache = database.featureAccessCacheDao().get(UUID.fromString(userId))
-        val premiumVerified = cache != null && cache.effectiveTier == "PREMIUM" && cache.verifiedAt != null &&
-            (cache.entitlementExpiresAt == null || cache.entitlementExpiresAt.isAfter(java.time.Instant.now()))
+        val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
         return accountId in quotaPolicy.evaluate(
             group = QuotaGroup.INSTRUMENTS,
             activeResourceIds = activeIds,

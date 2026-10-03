@@ -32,6 +32,7 @@ interface MovementRepository {
 
 // Separate ports preserve the existing registration API and its S2 clients.
 interface MovementMaintenanceRepository {
+    suspend fun getRevisionAudit(userId: String, transactionId: String): List<com.kipu.app.feature.movements.domain.model.MovementRevisionAudit> = emptyList()
     suspend fun getRevisionHead(userId: String, transactionId: String): com.kipu.app.feature.movements.domain.model.MovementRevisionHead?
     suspend fun revise(userId: String, command: com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Revise): com.kipu.app.feature.movements.domain.model.MovementMutationResult
     suspend fun void(userId: String, command: com.kipu.app.feature.movements.domain.model.MovementRevisionCommand.Void): com.kipu.app.feature.movements.domain.model.MovementMutationResult

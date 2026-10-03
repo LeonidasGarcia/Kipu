@@ -54,3 +54,52 @@ The feature must not be declared Sprint Review ready until these scenarios are e
 - **T088**: no Google Play license-test account or Android Publisher service-account configuration is available, so no real Google lookup or acknowledgement was attempted.
 - **T080/T093 device execution**: Compose tests compile but cannot run on this host without an emulator/device.
 - **T095** remains unchecked because its required T081/T088 provider acceptance evidence and instrumented device evidence are still unavailable; this file records local regression evidence and all remaining limitations.
+
+## Sprint 4 EP-PLA Execution — 2026-10-02
+
+**Readiness**: Implementation and local automated checks are ready for review. Production offline Premium grants and Android instrumented acceptance remain blocked on release configuration and a device.
+
+### Completed locally
+
+- Refined HU-58/HU-59 requirements were implemented with a server-signed, owner/install/policy-bound ES256 grant, monotonic 72-hour lease evaluation, a Room v17→18 migration, shared capability checks, and the EP-MOV filter fallback/revalidation UI.
+- `:app:testDebugUnitTest` passed: 371 tests, 0 failures. `:app:compileDebugAndroidTestKotlin` passed for the Room migration, movement access, and existing Android test sources.
+- `deno test supabase/functions/verify-purchase/index_test.ts supabase/functions/verify-purchase/offline-entitlement-grant_test.ts` passed: 17 tests, 0 failures.
+- The additive SQL migration ran against the local Docker Postgres and was recorded in local migration history. The new entitlement lease pgTAP file passed 8 assertions for ACL, owner check, pinned search path, null legacy lease, and no rolling timestamp. A transaction-scoped smoke test also observed `offline_valid_until = null` and rolled back its fixtures.
+- `app/schemas/com.kipu.app.core.database.KipuDatabase/18.json` was generated. Both backup and device-transfer rules still exclude `kipu.db`, WAL, and SHM files.
+- No remote deployment or signing material was changed.
+
+### Acceptance traceability
+
+| Sprint 4 criterion | Implementation and evidence | Status |
+|---|---|---|
+| SC-020 — Free core/basic filters and Free quotas remain available | FeatureAccessPolicy and MovementHistoryViewModel JVM tests | Automated PASS |
+| SC-021 — Grant is signed and bound to verified purchase, owner, and installation | Edge signer and Android exact-byte signature/verifier tests | Automated PASS |
+| SC-022 — 72-hour, commercial-end, Lifetime, boot-count, and monotonic boundaries | OfflineEntitlementLeasePolicy and evaluator integration tests | Automated PASS |
+| SC-023 — Pending/legacy clients/missing secrets cannot obtain a grant | 17 verify-purchase Deno tests | Automated PASS |
+| SC-024 — Premium expiry falls back to basic history and Free remains usable | Movement query/provider/ViewModel tests; category/account capability consumers use shared evaluator | JVM PASS; device run pending |
+| SC-025 — Additive Room and Postgres migrations preserve data and remove rolling lease | Room migration test source compiles; local Postgres migration/ACL/function smoke checks pass | Source/SQL PASS; Room device execution pending |
+
+### Remaining gates
+
+- Provide `ENTITLEMENT_GRANT_PRIVATE_JWK` and `ENTITLEMENT_GRANT_KEY_ID` as Supabase Edge secrets and matching public-key values through release build configuration. No secrets should be committed.
+- Execute the Room v17→18 migration and movement access instrumentation tests on an emulator or Android device.
+- Resolve the local baseline omission of `public.v_feature_access` and `public.user_devices` before claiming an end-to-end local baseline replay; the Sprint 4 migration leaves those pre-existing objects untouched.
+- Deploy and validate the Edge function and migration through the approved release process, then complete the independent release review.
+
+
+## UI/UX S4 refinement — validation 2026-10-03
+
+- Skills applied: `ui-ux-pro-max`, `compose-animations`, Android Kotlin and Spec Kit refine/update/propagate/implement. Focused UX/Compose skill searches informed decimal keyboards, persistent labels, 48 dp targets, theme semantics and reduced motion.
+- Full JVM regression: **383 tests, 0 failures, 0 errors** (`:app:testDebugUnitTest`). Draft tests cover decimal/currency parsing, invalid ranges and DST-inclusive dates; history tests cover apply/removal, owner reset, query retry and duplicate restore requests. Billing recovery tests cover no purchases, pending, failure and bounded timeout.
+- Debug application and AndroidTest APKs assemble successfully. Android deprecation warnings remain for existing test-rule/Hilt APIs; no compilation errors.
+- Instrumentation: **39 distinct checks passed** on the booted `Pixel_10` emulator: 38 in the combined UI/editor/history-access/Room run plus the integrated history route check, including light/dark rendering. The final UI refinement suite is rerun against the latest APK; command and summaries are retained in the local `.backups/` validation logs. These are selected instrumentation suites, not the entire AndroidTest catalog.
+- Privacy assertions inspect unmerged semantics for detail, editor/conflict, Before/After and void amounts. Reduced motion and outgoing/incoming AnimatedContent identities are exercised; a draft survives UI saved-state restoration without applying or granting access.
+- The history route opens VOIDED read-only detail, blocks financial actions there, retains parked filters and renders contextual recovery. Search/filter controls and results share one scroll container so enlarged text does not permanently displace history. Filter access is visible beside search; applied chips remove individual selections. Audit reads are owner-scoped and sorted by revision.
+- Visual evidence uses synthetic fixture data only: `validation/ui/history-route-light.png`, `history-route-dark.png`, `history-large-font.png` in EP-MOV. Light, dark and 1.6× text captures were inspected. This is visual inspection plus automated semantic coverage; it does not certify a complete manual TalkBack traversal on a physical device.
+- The first physical Samsung attempt encountered a locked/dozing screen; its failures are not acceptance evidence. Canonical-category/UUID/setup fixtures were corrected without relaxing production invariants; old assertions were updated to current copy and the unmerged badge semantics tree.
+- Database evidence here is local Room instrumentation. This UI refinement adds no ledger/Postgres migration and performs no remote deployment or real purchase.
+- Gates: approved visual/refined FR-033–FR-039 and EP-PLA FR-056–FR-058 are implemented and checked. **Full Sprint 4 is still open**: EP-MOV T110 preserves the required source filter whose current data contract is absent; EP-PLA T112/T113 preserve PostgreSQL baseline and production signing/provider/release acceptance. Historical performance/SQL claims were not rerun or re-certified by this UI audit.
+
+### Refine status and semantic cross-check
+
+Both feature directories contain spec, plan, tasks, research, data-model and contracts. Refinement/propagation entries are current and no artifact-warning **STALE** marker remains. Requirement IDs and existing financial contracts are preserved. Source provenance is explicitly mapped to open T110; all new visual requirements have implementation tasks and evidence. Marker synchronization does not mean whole-sprint functional acceptance. The remaining high-priority finding is the pre-existing FR-017 source contract gap, with explicit task coverage and no inferred replacement.

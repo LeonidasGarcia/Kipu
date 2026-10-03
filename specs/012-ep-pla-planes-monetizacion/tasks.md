@@ -5,6 +5,8 @@ description: "Implementation tasks for EP-PLA S1/S2 historical work and S3 purch
 
 # Tasks: EP-PLA - Planes, Limites y Monetizacion Freemium
 
+**Propagated**: 2026-10-02 — Added dependency-ordered Sprint 4 tasks for HU-58/HU-59 while retaining completed S1/S2/S3 history.
+
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (tokens del design system Stitch adoptados como normativos; T042 actualizada y T056 añadida).
 
 **Propagated**: 2026-09-15 — Updated from spec.md refinement (cleanup sin cambios funcionales: eliminadas las referencias residuales al sistema de diseño previo; ninguna tarea afectada, T042/T056 ya apuntan a `docs/stitch-design-system.md`).
@@ -341,3 +343,59 @@ Las tareas S1/S2 anteriores se conservan como registro histórico. En este bloqu
 ### S3 MVP and Incremental Strategy
 
 The smallest safe integrated slice is one recurring test purchase through HU-53 and the real HU-54 verifier, with a verified-only entitlement and a `PENDING` denial. Annual and Lifetime catalog/purchase behavior, all HU-56 lifecycle outcomes, accessibility/motion states, and the combined test-track matrix are required before marking the 21-point S3 increment complete. No partial slice is a substitute for the acceptance criteria of the three stories.
+
+## Sprint 4 extension — HU-58 Capacidades y HU-59 Concesión offline (16 pts)
+
+### Phase S4.1: Contracts and test vectors
+
+- [X] T096 [S4] Propagate HU-58/HU-59 into the EP-PLA plan, tasks, data model and policy; define the ES256 grant claims and backward-compatible verify-purchase request/response in `specs/012-ep-pla-planes-monetizacion/plan.md`, `data-model.md`, `contracts/feature-access-policy.md`, `contracts/verify-purchase.openapi.yaml` and `contracts/offline-entitlement-grant.md`
+- [X] T097 [P] [HU-58] Add failing domain tests for Free core/basic capabilities, limited Free quotas, Premium-only decisions and verified-entitlement-only authorization in `app/src/test/java/com/kipu/app/feature/plans/domain/FeatureAccessPolicyTest.kt` and `app/src/test/java/com/kipu/app/feature/plans/domain/OfflineEntitlementLeasePolicyTest.kt` (FR-048/FR-049; SC-020)
+- [X] T098 [P] [HU-59] Add failing grant-verifier and trusted-clock tests for valid ES256 vectors, altered payload/signature, unknown key/policy, owner/install mismatch, missing/changed boot count, elapsed regression, exact 72h boundary, commercial end, Lifetime and wall-clock jumps in `app/src/test/java/com/kipu/app/feature/plans/data/OfflineEntitlementGrantVerifierTest.kt` and `app/src/test/java/com/kipu/app/feature/plans/domain/OfflineEntitlementLeasePolicyTest.kt` (FR-050–FR-053; SC-021–SC-024)
+- [X] T099 [P] [HU-59] Add failing Edge Function tests for signing exact payload bytes, 72h/commercial minimum, Lifetime cap, omitted/invalid installation key, pending/rejected/retryable no-grant behavior, authenticated Free clearing behavior and no secret/token logging in `supabase/functions/verify-purchase/offline-entitlement-grant_test.ts` and `index_test.ts` (FR-050/FR-055; SC-021/SC-023)
+- [X] T100 [P] [HU-59] Add Room migration/schema tests proving v17 rows and financial/outbox data are preserved, migrated unsigned caches deny Premium, and v18 grant/anchor persistence is atomic in `app/src/androidTest/java/com/kipu/app/core/database/MovementRoomMigrationTest.kt` (FR-053; SC-025)
+
+### Phase S4.2: Server grant and local data boundary
+
+- [X] T101 [HU-59] Implement the per-install P-256 Android Keystore key provider and DER public-key/thumbprint contract; fail closed when key creation/loading is unavailable in `app/src/main/java/com/kipu/app/feature/plans/data/entitlement/InstallationSigningKeyProvider.kt` (FR-051/FR-053; SC-021/SC-025)
+- [X] T102 [HU-59] Implement Edge Function ES256 grant signing with server-only `ENTITLEMENT_GRANT_PRIVATE_JWK` and `ENTITLEMENT_GRANT_KEY_ID`; issue a grant only after persisted provider verification and effective Premium aggregation in `supabase/functions/verify-purchase/offline-entitlement-grant.ts` and `index.ts` (FR-050/FR-055; SC-021–SC-023)
+- [X] T103 [HU-59] Extend the verify-purchase client/server DTOs compatibly with optional `installationPublicKey` and nullable signed `offlineEntitlementGrant`; keep old clients able to verify but unable to receive a grant in `app/src/main/java/com/kipu/app/feature/plans/data/remote/VerifyPurchaseApi.kt`, `BillingRepository.kt` and `supabase/functions/verify-purchase/index.ts` (FR-050/FR-055; SC-021/SC-023)
+- [X] T104 [HU-59] Add nullable signed-grant and same-boot monotonic-anchor columns to `FeatureAccessCacheEntity`, bump Room 17→18 with a preserving migration, register it, and confirm Room backup/device-transfer exclusions remain active in `app/src/main/java/com/kipu/app/feature/plans/data/local/FeatureAccessCacheEntity.kt`, `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt` and migration registration (FR-053; SC-025)
+- [X] T105 [HU-59] Verify ES256 signature and claims against configured public keys, active owner, Keystore thumbprint, policy version and effective Premium tier; atomically store valid grant or clear it after authenticated Free/revoked response in `app/src/main/java/com/kipu/app/feature/plans/data/entitlement/OfflineEntitlementGrantVerifier.kt` and `BillingRepository.kt` (FR-049/FR-051/FR-055; SC-021/SC-025)
+
+### Phase S4.3: Monotonic concession and capability enforcement
+
+- [X] T106 [HU-59] Implement a trusted lease clock from server-signed verification time, `SystemClock.elapsedRealtime()` and `Settings.Global.BOOT_COUNT`; deny Premium at `notAfter`, on reboot/continuity loss, and on expiry while preserving Free in `app/src/main/java/com/kipu/app/feature/plans/data/entitlement/OfflineEntitlementLeaseEvaluator.kt` (FR-052/FR-054; SC-022–SC-024)
+- [X] T107 [HU-58/HU-59] Replace the unconditional monotonic-valid flag in `PlansMovementEntitlementProvider`, and connect history queries to the validated lease, advanced-filter gate and basic fallback/revalidation decision in `app/src/main/java/com/kipu/app/feature/movements/data/PlansMovementEntitlementProvider.kt`, `app/src/main/java/com/kipu/app/feature/movements/domain/MovementHistoryAccessPolicy.kt` and `QueryMovementHistory.kt` (FR-048/FR-049/FR-052/FR-054; SC-020/SC-022/SC-024)
+- [X] T108 [HU-58/HU-59] Replace wall-clock/unsigned-cache Premium checks in existing instrument and custom-category quota paths with the shared validated lease result; keep over-limit data/history intact and Free selections/reads available in `app/src/main/java/com/kipu/app/feature/accounts/data/OfflineFirstFinancialInstrumentsRepository.kt`, `app/src/main/java/com/kipu/app/feature/categories/data/OfflineFirstCategoriesRepository.kt` and movement quota gates (FR-048/FR-049/FR-054; SC-020/SC-024)
+- [X] T109 [HU-59] Add an additive local Supabase migration that retains the legacy `get_feature_access()` response shape but sets `offline_valid_until` to null, so a rolling timestamp cannot be treated as a lease; preserve existing grants, owner checks and RLS in `supabase/migrations/` and a local database regression test (FR-055; SC-025)
+- [X] T110 [HU-58/HU-59] Connect denied/revalidation decisions to friendly Premium-required/reconnect UI states, preserve compatible basic filters, and ensure Premium expiry never disables manual local registration, history-basic or outbox in `app/src/main/java/com/kipu/app/feature/movements/presentation/MovementHistoryViewModel.kt` and the existing Compose history surface (FR-048/FR-054; SC-020/SC-024)
+
+### Phase S4.4: Integration, security and DoD
+
+- [X] T111 [HU-58/HU-59] Add integration coverage for verified purchase→signed grant→Room cache→capability decision, offline before/at/after expiry, clock manipulation, reboot/boot-count change, session owner change, restored cache, network retry, Free fallback and unchanged financial/outbox data in EP-PLA and EP-MOV JVM/instrumentation tests (FR-048–FR-055; SC-020–SC-024)
+- [ ] T112 [HU-59] Run and validate the additive Room migration and PostgreSQL migration against the local development databases; verify legacy cache denial, no rolling 72h RPC grant, function permissions/RLS, backup exclusion and no destructive financial-data changes; record evidence in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` (FR-053/FR-055; SC-025)
+- [ ] T113 [HU-58/HU-59] Run the S4 domain, Edge Function, Android integration and regression checks; map FR-048–FR-055 and SC-020–SC-025 to evidence, document the production signing-key configuration requirement, and update `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (FR-048–FR-055; SC-020–SC-025)
+
+### S4 Dependencies and execution order
+
+- T096 is complete and establishes the claims/schema contracts. T097–T100 are parallel test-first tasks. T101 and T102 may proceed independently after T098–T099; T103 follows both signing contract and key request design. T104 follows T100. T105 follows T101–T104. T106 follows T098/T104/T105. T107/T108 follow T106. T109 may proceed after review of the current function and local migration contract. T110 follows T107. T111 follows T105–T110; T112 follows T104/T109; T113 is the final gate after T111–T112.
+
+### S4 acceptance slice
+
+**Execution status (2026-10-02)**: T096–T111 are implemented. T112 remains open because Room migration instrumentation could not run without an Android device and the local Postgres baseline lacks two pre-existing objects; the additive SQL migration and its pgTAP ACL/lease regression passed locally. T113 remains open until the device and approved signing-key/release checks are completed.
+
+The smallest safe slice is a successful authenticated provider verification yielding a server-signed, account- and installation-bound grant, validated locally against monotonic time, and consumed by the Free/Premium capability policy. A fixture, client callback, `effectivePremium` boolean, legacy cache, rolling RPC timestamp or civil clock is never sufficient evidence. If signing keys are not configured, the safe result is Kipu Free with a documented reconnection/release-configuration requirement.
+
+## S4.5: Approved UI/UX refinement (2026-10-03)
+
+**Propagated**: 2026-10-03 — FR-056–FR-058 / SC-026–SC-027; historical tasks stay intact.
+
+- [X] T114 Refine and propagate approved recovery/access UI states and motion contract across EP-PLA/EP-MOV; retain existing signed grant, schema and financial contracts (FR-056–058).
+- [X] T115 Implement a bounded restore-and-verify result using the existing provider/server path, including no purchase, pending, network failure and owner changes; add JVM coverage in billing/history tests (FR-056; SC-026; depends on T114).
+- [X] T116 Implement typed history recovery feedback, contextual access card, progress/retry/success actions, polite semantics and reduced-motion transitions in `MovementHistoryViewModel.kt` and `MovementAccessCard.kt` (FR-057/058; SC-027; depends on T115).
+- [X] T117 Run targeted JVM and compile instrumentation coverage, document visual/release limitations and verify artifact consistency in `validation/automated-validation.md` (SC-026/027; depends on T116).
+
+Dependency DAG: T114 → T115 → T116 → T117. T113 final acceptance additionally waits for T117 and EP-MOV T109; T112 retains Room/device/baseline checks. Implementation of UI tasks does not close release acceptance without runtime evidence.
+
+
+**Execution evidence (2026-10-03)**: T114–T117 completed for UI/access recovery. Room and access instrumentation now execute on Pixel_10; the original T112/T113 remain open for the complete local PostgreSQL baseline and production signing/release/provider validation. Complete Sprint 4 acceptance also requires EP-MOV T110 (source-provenance baseline gap).

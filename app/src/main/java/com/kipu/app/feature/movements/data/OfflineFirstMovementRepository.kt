@@ -116,6 +116,9 @@ class OfflineFirstMovementRepository @Inject constructor(
         return localDataSource.getRevisionHead(userId, transactionId)
     }
 
+    override suspend fun getRevisionAudit(userId: String, transactionId: String): List<MovementRevisionAudit> =
+        localDataSource.getRevisionAudit(userId, transactionId)
+
     override suspend fun revise(userId: String, command: MovementRevisionCommand.Revise): MovementMutationResult {
         val requestHash = revisionHasher.computeHash(command)
         val result = localDataSource.commitRevisionAtomic(userId, command, requestHash)

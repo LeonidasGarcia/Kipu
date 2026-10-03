@@ -920,6 +920,16 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
     }
 }
 
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `feature_access_cache` ADD COLUMN `offline_grant_payload` TEXT")
+        db.execSQL("ALTER TABLE `feature_access_cache` ADD COLUMN `offline_grant_signature` TEXT")
+        db.execSQL("ALTER TABLE `feature_access_cache` ADD COLUMN `offline_grant_key_id` TEXT")
+        db.execSQL("ALTER TABLE `feature_access_cache` ADD COLUMN `offline_anchor_elapsed_ms` INTEGER")
+        db.execSQL("ALTER TABLE `feature_access_cache` ADD COLUMN `offline_anchor_boot_count` INTEGER")
+    }
+}
+
 /** Used by both upgrades and fresh production databases. */
 fun ensureMovementEvidenceGuards(db: SupportSQLiteDatabase) {
     for (table in listOf("transaction_revisions","movement_official_revisions","movement_ledger_effects","movement_ledger_aliases")) {
