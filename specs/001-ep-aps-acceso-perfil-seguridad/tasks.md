@@ -347,3 +347,17 @@ With US1 complete:
 - [X] T083 Apply account theme and balance masking to the protected runtime surfaces, including transition-safe private views, per FR-025--FR-027/FR-047 (partial)
 - [X] T084 Make the `profiles` migration idempotently establish the baseline and backfill existing Auth users without relying on absent legacy columns per plan: profile migration and Constitution IX (partial)
 - [X] T085 Execute and document device visual validation for both themes, enlarged text, PEN/USD, and month days 1--28 per plan: visual settings and tasks.md visual validation task (partial)
+**Propagated**: 2026-10-05 — VIS-APS-001 a VIS-APS-006; tareas T086–T091.
+
+## Phase 10: Acceso visual e introducción (2026-10-05)
+
+- [X] T086 [US1] Unificar componentes y login/registro, confirmación y reglas vigentes (VIS-APS-001/004/005).
+- [X] T087 [US2] Recuperación adaptable, error seguro, confirmación, reenvío y nueva contraseña (VIS-APS-001/004/005; depende de T086).
+- [X] T088 [US1] Pager introductorio de tres páginas y persistencia de página/finalización DataStore (VIS-APS-002/003/005; incluye tercera referencia corregida).
+- [X] T089 [US1] Integrar arranque, rutas, callbacks y selección de plan/biometría existentes (VIS-APS-003; depende de T088).
+- [X] T090 [US1] Actualizar tests de validación, estados, navegación, pager y persistencia; ejecutar build/lint/tests (VIS-APS-006; depende de T086–T089).
+- [X] T091 [US1] Auditar render contra cada PNG, teclado, escalado y motion, corregir y registrar evidencia (VIS-APS-006; incluye tercera referencia corregida).
+
+Evidencia T088/T091: las tres páginas y auditoría de acceso implementadas; la tercera usa `Omboarding 3 - Corregido.png`, proporcionada y aprobada por el usuario. Build/debug/lab, 53 pruebas unitarias y tests instrumentados documentados en `docs/ux-ui/audits/AUTH_ONBOARDING_IMPLEMENTATION.md`. Las acciones «Empezar» y «Ya tengo una cuenta» comparten la finalización persistente antes de abrir login. La validación remota mantiene pendiente el CAPTCHA real preexistente y configuración del proveedor.
+
+- [X] T092 [US1] Corregir registro adaptable a A16 sin scroll con teclado cerrado, recuperar transición en formulario compartido y validar frames intermedios, modo directo de registro, tamaños/IME/Reduce Motion (VIS-APS-005/006).

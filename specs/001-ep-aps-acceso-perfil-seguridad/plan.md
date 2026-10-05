@@ -1,5 +1,13 @@
 # Implementation Plan: EP-APS - Acceso, Perfil y Seguridad
 
+**Propagated**: 2026-10-05 — Refinamiento visual autorizado de acceso/onboarding (VIS-APS-001 a VIS-APS-006).
+
+## Diseño visual de acceso y onboarding — 2026-10-05
+
+Reutilizar KipuCard, Inter, CalmEmeraldColors, KipuMotionTokens y rememberReducedMotionEnabled. Un formulario compartido sirve a LoginScreen y RegisterScreen, con rutas existentes y contraseña/confirmación transitorias. Las pestañas alternan el modo dentro del mismo formulario/ViewModel para conservar el correo y permitir expansión/contracción de 250ms; login/register siguen disponibles como rutas de entrada. El perfil de espaciado compacto se elige por altura de ventana, reduce logo/paddings/gaps y mantiene los targets accesibles. Validar registro completo sin scroll a 384×832dp (A16 de referencia), configuración actual 411×891dp y tamaños grandes; conservar scroll con IME, errores y fuente ampliada. RecoveryScreen cambia entre formulario, error local y confirmación neutra; conservar auth-access y callbacks existentes. Introducción con HorizontalPager, retroceso y checkpoint DataStore por instalación (dependencia ya instalada), sin datos privados ni una migración Room. Auth/start espera restauración para elegir introducción, login o destino privado; callbacks evitan la introducción. MainActivity conserva selección de plan y biometría. No modificar reglas financieras ni RLS. Tercera página según `Omboarding 3 - Corregido.png`, recibida y aprobada por el usuario: privacidad, «Tus finanzas son tuyas», CTA «Empezar» y acceso «Ya tengo una cuenta». Las acciones comparten finalización persistente antes de navegar a login.
+
+Pruebas de validación, ViewModels, DataStore, navegación y pager; build/lint; evidencia visual instrumentada en tamaños compactos/estándar/grandes, IME, fuente ampliada y Reduce Motion. Los tests usan la variante lab aislada, sin tocar cuentas reales.
+
 **Branch**: `001-ep-aps-acceso-perfil-seguridad` | **Date**: 2026-09-20 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/001-ep-aps-acceso-perfil-seguridad/spec.md`
