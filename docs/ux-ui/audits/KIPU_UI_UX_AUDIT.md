@@ -82,36 +82,32 @@ No se presentan porcentajes de abandono, velocidades humanas, tasas de error o m
 
 El APK no expone una huella de commit; su equivalencia exacta con `9e63572` **no se puede certificar**. Se relacionan comportamientos observados con fuentes compatibles, manteniendo ambas evidencias separadas.
 
-Artefactos: [metadatos del dispositivo](evidence/device-metadata.txt), [manifiesto de 52 capturas con SHA-256](evidence/capture-manifest.csv), PNG y XML con el mismo nombre base. La fecha del manifiesto corresponde al archivo local de captura, no a un reloj de medición de tareas. Los XML ayudan a medir geometría y estado habilitado; no se evaluaron sus atributos de lectores de pantalla.
+Las capturas, jerarquías XML, metadatos de dispositivo y manifiesto SHA-256 usados en esta auditoría se retiraron posteriormente para limpiar los artefactos de QA. Las observaciones y limitaciones registradas abajo son resultados históricos de esa inspección.
 
-### Lectura visual rápida
+### Referencias visuales
 
-| Dashboard y barra del sistema | Filtros Free al abrir | Chip de comercios en Oscuro |
-| :--- | :--- | :--- |
-| <img src="evidence/accounts_dashboard_dark.png" width="240" alt="Dashboard: navegación inferior en la zona de botones del sistema"> | <img src="evidence/advanced_filters_free_top.png" width="240" alt="Panel de filtros: las acciones de aplicar no están visibles al abrir"> | <img src="evidence/quick_merchant_picker.png" width="240" alt="Selector de comercios: texto blanco sobre chip turquesa claro"> |
-
-Para repetir la captura se usó ADB del SDK local: `uiautomator dump /sdcard/kipu_audit.xml`, `screencap -p /sdcard/live.png` y `pull` de ambos hacia la carpeta de evidencia. Los taps y swipes se verificaron con una captura posterior; se descartaron intentos cuyo archivo no representaba la pantalla indicada. Las imágenes anteriores son capturas originales, no mockups.
+Las capturas de apoyo de esta auditoría se retiraron en la limpieza de artefactos; las observaciones por recorrido se mantienen como registro histórico.
 
 ### Journeys reproducidos
 
 | ID / pantalla | Condición y pasos | Resultado [OBSERVADO] | Evidencia / componente |
 | :--- | :--- | :--- | :--- |
-| E01 · Apertura | Sesión existente; detener y volver a iniciar el paquete sin limpiar datos. | Aterriza en Historial, sin barra inferior de la app. | [Captura](evidence/cold_launch_authenticated.png), [XML](evidence/cold_launch_authenticated.xml); `MainActivity` |
-| E02 · Acceso a dinero | Historial → engranaje → scroll en Ajustes → Mi Dinero Real. | El resumen financiero se presenta como pantalla secundaria con Volver y barra inferior propia. | [Ajustes](evidence/settings_navigation_bottom.png), [Dashboard](evidence/accounts_dashboard_dark.png); `AccountsNavigation`, `DashboardScreen` |
-| E03 · Barra inferior | Dashboard; pulsar Inicio y Análisis en la franja visible superior del área táctil. | Ambos mantienen Dashboard. Pulsar más abajo en la zona de Análisis devolvió a Ajustes en otro intento. | [Inicio](evidence/dashboard_home_noop.png), [Análisis](evidence/dashboard_analysis_noop.png), [toque inferior](evidence/dashboard_lower_tap_returned_settings.png) |
-| E04 · Filtros Free | Historial → icono de filtros; expandir sheet; dos desplazamientos largos hacia arriba por su contenido. | Aplicar/Cancelar aparecen al llegar al final; advertencia Premium y grupos bloqueados ocupan gran parte del recorrido. | [Apertura](evidence/advanced_filters_free_top.png), [expandido](evidence/advanced_filters_free_expanded.png), [final](evidence/advanced_filters_free_bottom.png); `MovementFiltersSheet` |
-| E05 · Gasto / teclado | FAB → Gasto → introducir 12,34 en borrador, sin guardar. | Teclado decimal; Guardar permanece visible; cuenta visible y resto de campos requieren scroll. | [Formulario](evidence/quick_movement_expense.png), [IME](evidence/quick_movement_keyboard.png); `QuickMovementScreen` |
-| E06 · Ingreso | FAB → Ingreso; esperar y volver a capturar. | Cuenta destino y categoría opcional; “Cargando categorías” permanece en dos capturas con lista vacía. | [Inicial](evidence/quick_movement_income.png), [posterior](evidence/quick_movement_income_settled.png); no demuestra una carga de red bloqueada |
-| E07 · Transferencia | Borrador → Transferencia → cuenta destino, teniendo una sola cuenta líquida elegible. | Cero destinos; la cuenta de origen se excluye correctamente. El vacío no explica esa restricción. | [Transferencia](evidence/quick_movement_transfer.png), [destinos](evidence/quick_transfer_destination.png) |
-| E08 · Selectores | Gasto → categorías y, por separado, comercio; cerrar sin guardar. | Categorías usa selección y confirmación; comercios lista catálogo bajo “frecuentes”; chip Todos blanco sobre turquesa claro en Oscuro. | [Categorías](evidence/quick_movement_categories.png), [comercio](evidence/quick_merchant_picker.png) |
-| E09 · Validación segura | Gasto con monto cero; dos pulsaciones de Guardar. | Sigue en formulario, muestra error de monto; no se confirmó ninguna operación. | [Antes](evidence/quick_validation_before.png), [después](evidence/quick_invalid_amount_double_tap.png); guardia `QuickMovementViewModel` |
-| E10 · Alta de instrumento | Dashboard → crear instrumento; recorrer débito; cambiar a crédito; no guardar. | Preview, banco/producto, datos y personalización alargan el recorrido. Línea de crédito muestra error sin interacción; Guardar está abajo. | [Entrada](evidence/instruments_create_type.png), [débito final](evidence/instrument_form_debit_bottom.png), [crédito medio](evidence/instrument_form_credit_middle.png), [crédito final](evidence/instrument_form_credit_bottom.png) |
-| E11 · Cuenta / tarjeta | Abrir instrumentos existentes solo en lectura; abrir tasas referenciales. | Crédito muestra deuda, disponible y utilización en detalle, pero no todos en lista; aparece garantía sobre score. Tasas referenciales están separadas de TEA personal. | [Cuenta](evidence/bank_account_detail.png), [crédito](evidence/credit_card_detail_dark.png), [catálogo de tasas](evidence/card_rates_catalog.png) |
-| E12 · Claro | Cambiar tema en Ajustes; volver a Historial, Dashboard y filtros. | Iconos del sistema blancos sobre fondo claro; fecha de corte tenue. | [Historial](evidence/history_light.png), [Dashboard](evidence/accounts_dashboard_light.png), [filtros](evidence/advanced_filters_light.png) |
-| E13 · Fuente 130% | Fuente 1,3; Historial y QuickMovement con teclado; restaurar a 1,0. | Filas de historial se alargan; chip Transferencia queda fuera del ancho inicial, en una fila desplazable. El formulario conserva CTA; Transferencia usa dos líneas. | [Historial](evidence/history_font_130_light.png), [formulario](evidence/quick_movement_font_130_light.png), [IME](evidence/quick_movement_font_130_keyboard.png) |
-| E14 · Búsqueda sin resultados | Introducir texto de prueba sin coincidencias; limpiar. | Vacío con acción Limpiar filtros; copy no diferencia con precisión búsqueda textual. | [Captura](evidence/history_search_empty.png) |
-| E15 · Detalle anulado | Abrir movimiento ya anulado; expandir; volver. | Conserva importe, revisiones y lectura; expone motivo técnico. Atrás colapsa inicialmente la sheet, no necesariamente la cierra en ese primer paso. | [Inicial](evidence/voided_movement_detail_light.png), [expandido](evidence/voided_movement_detail_expanded.png), [Atrás](evidence/detail_back_collapsed.png) |
-| E16 · Restauración | Cerrar borradores y restituir preferencias temporales. | Historial con los mismos tres movimientos visibles. | [Estado final](evidence/final_history_restored.png), [metadatos](evidence/device-metadata.txt) |
+| E01 · Apertura | Sesión existente; detener y volver a iniciar el paquete sin limpiar datos. | Aterriza en Historial, sin barra inferior de la app. | Captura, XML; `MainActivity` |
+| E02 · Acceso a dinero | Historial → engranaje → scroll en Ajustes → Mi Dinero Real. | El resumen financiero se presenta como pantalla secundaria con Volver y barra inferior propia. | Ajustes, Dashboard; `AccountsNavigation`, `DashboardScreen` |
+| E03 · Barra inferior | Dashboard; pulsar Inicio y Análisis en la franja visible superior del área táctil. | Ambos mantienen Dashboard. Pulsar más abajo en la zona de Análisis devolvió a Ajustes en otro intento. | Inicio, Análisis, toque inferior |
+| E04 · Filtros Free | Historial → icono de filtros; expandir sheet; dos desplazamientos largos hacia arriba por su contenido. | Aplicar/Cancelar aparecen al llegar al final; advertencia Premium y grupos bloqueados ocupan gran parte del recorrido. | Apertura, expandido, final; `MovementFiltersSheet` |
+| E05 · Gasto / teclado | FAB → Gasto → introducir 12,34 en borrador, sin guardar. | Teclado decimal; Guardar permanece visible; cuenta visible y resto de campos requieren scroll. | Formulario, IME; `QuickMovementScreen` |
+| E06 · Ingreso | FAB → Ingreso; esperar y volver a capturar. | Cuenta destino y categoría opcional; “Cargando categorías” permanece en dos capturas con lista vacía. | Inicial, posterior; no demuestra una carga de red bloqueada |
+| E07 · Transferencia | Borrador → Transferencia → cuenta destino, teniendo una sola cuenta líquida elegible. | Cero destinos; la cuenta de origen se excluye correctamente. El vacío no explica esa restricción. | Transferencia, destinos |
+| E08 · Selectores | Gasto → categorías y, por separado, comercio; cerrar sin guardar. | Categorías usa selección y confirmación; comercios lista catálogo bajo “frecuentes”; chip Todos blanco sobre turquesa claro en Oscuro. | Categorías, comercio |
+| E09 · Validación segura | Gasto con monto cero; dos pulsaciones de Guardar. | Sigue en formulario, muestra error de monto; no se confirmó ninguna operación. | Antes, después; guardia `QuickMovementViewModel` |
+| E10 · Alta de instrumento | Dashboard → crear instrumento; recorrer débito; cambiar a crédito; no guardar. | Preview, banco/producto, datos y personalización alargan el recorrido. Línea de crédito muestra error sin interacción; Guardar está abajo. | Entrada, débito final, crédito medio, crédito final |
+| E11 · Cuenta / tarjeta | Abrir instrumentos existentes solo en lectura; abrir tasas referenciales. | Crédito muestra deuda, disponible y utilización en detalle, pero no todos en lista; aparece garantía sobre score. Tasas referenciales están separadas de TEA personal. | Cuenta, crédito, catálogo de tasas |
+| E12 · Claro | Cambiar tema en Ajustes; volver a Historial, Dashboard y filtros. | Iconos del sistema blancos sobre fondo claro; fecha de corte tenue. | Historial, Dashboard, filtros |
+| E13 · Fuente 130% | Fuente 1,3; Historial y QuickMovement con teclado; restaurar a 1,0. | Filas de historial se alargan; chip Transferencia queda fuera del ancho inicial, en una fila desplazable. El formulario conserva CTA; Transferencia usa dos líneas. | Historial, formulario, IME |
+| E14 · Búsqueda sin resultados | Introducir texto de prueba sin coincidencias; limpiar. | Vacío con acción Limpiar filtros; copy no diferencia con precisión búsqueda textual. | Captura |
+| E15 · Detalle anulado | Abrir movimiento ya anulado; expandir; volver. | Conserva importe, revisiones y lectura; expone motivo técnico. Atrás colapsa inicialmente la sheet, no necesariamente la cierra en ese primer paso. | Inicial, expandido, Atrás |
+| E16 · Restauración | Cerrar borradores y restituir preferencias temporales. | Historial con los mismos tres movimientos visibles. | Estado final, metadatos |
 
 ### Geometría comprobada
 
@@ -253,7 +249,7 @@ Este orden no obliga a convertir el formulario en un wizard largo. Primero proba
 
 UI/UX Pro Max favorece validación inline tras interacción y jerarquías claras. Se ejecutó el script local solicitado; la consulta combinada `--domain ux --stack jetpack-compose` para fricción móvil no produjo resultados. En este script, elegir stack dirige la búsqueda al stack. Se completaron consultas de dominio por separado y una de stack para motion.
 
-Resultados conservados: [UX formularios](evidence/skill-ux-form.txt), [paletas financieras](evidence/skill-color-fintech.txt), [tipografía](evidence/skill-typography-finance.txt), [estilo dashboard](evidence/skill-style-dashboard.txt), [Compose motion](evidence/skill-compose-motion.txt). Consultas de insets/layout sin coincidencias y recomendaciones centradas en web no se usan como validación nativa.
+Las notas de consultas de skills se retiraron junto con las capturas; las conclusiones aplicadas se describen en este informe. Consultas de insets/layout sin coincidencias y recomendaciones centradas en web no se usan como validación nativa.
 
 Consultas útiles ejecutadas: `inline validation progressive disclosure` (ux), `fintech banking trust semantic` (color), `financial dashboard readable numbers` (typography), `financial dashboard minimal hierarchy` (style) y `animation` (stack jetpack-compose). El generador es una base de heurísticas; sus anotaciones de versión no certifican la versión Gradle del proyecto ni sustituyen documentación oficial de Android.
 
@@ -321,7 +317,7 @@ Autoridad: Obsidian Mind, `work/active/kipu/Procesos/15-consultar-y-filtrar-hist
 
 ### Método
 
-Se calcularon luminancias sRGB linealizadas y `(Lmayor + 0,05) / (Lmenor + 0,05)` sobre pares nominales opacos del código. En Claro, tres muestras del fondo de captura corroboran `#F7F9FB`. No se calibró el panel físico ni se midió cada píxel suavizado o gradiente. Archivo reproducible de resultados: [contrast-measurements.json](evidence/contrast-measurements.json).
+Se calcularon luminancias sRGB linealizadas y `(Lmayor + 0,05) / (Lmenor + 0,05)` sobre pares nominales opacos del código. En Claro, tres muestras del fondo de captura corroboran `#F7F9FB`. No se calibró el panel físico ni se midió cada píxel suavizado o gradiente. El archivo auxiliar con los cálculos se retiró; los valores resumidos se conservan en este informe.
 
 Para texto normal se usa 4,5:1; para texto grande, 3:1. Los controles inactivos tienen excepciones: una etiqueta deshabilitada no se reporta automáticamente como infracción. [Explicación oficial WCAG de contraste mínimo](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html). Para iconos/identificación de controles activos se considera el criterio de contraste no textual pertinente, sin convertir toda decoración en un control. [WCAG: contraste no textual](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html).
 
@@ -486,9 +482,9 @@ Se realizaron las tres consultas con la CLI `agy`, en modo plan y solicitando re
 
 | Consulta | Momento / objetivo | Registro completo |
 | :--- | :--- | :--- |
-| 1 | Tras inventario y pruebas: omisiones de UX, consistencia e interacción | [agy-review-01.txt](evidence/agy-review-01.txt) |
-| 2 | Tras primera propuesta: riesgos de diseño y Compose | [agy-review-02.txt](evidence/agy-review-02.txt) |
-| 3 | Tras ajustar propuestas: valor operativo vs cosmético | [agy-review-03.txt](evidence/agy-review-03.txt) |
+| 1 | Tras inventario y pruebas | Resumen de revisi?n; el archivo auxiliar se retir? en la limpieza. |
+| 2 | Tras primera propuesta | Resumen de revisi?n; el archivo auxiliar se retir? en la limpieza. |
+| 3 | Tras ajustar propuestas | Resumen de revisi?n; el archivo auxiliar se retir? en la limpieza. |
 
 ### Acuerdos que se incorporan
 

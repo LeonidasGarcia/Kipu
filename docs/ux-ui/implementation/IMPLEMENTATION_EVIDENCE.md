@@ -8,8 +8,7 @@ Comprobado con los datos existentes del Samsung (4 de 4), en Light, Dark y fuent
 200 %. La acción abrió la pantalla real Kipu Premium; Google Play mostró ofertas
 no disponibles durante el recorrido. No se realizó ninguna compra.
 
-Capturas: `basic_plan_limit_light.png`, `basic_plan_limit_dark.png` y
-`basic_plan_limit_dark_font200.png`. Build y lint satisfactorios mediante
+Las capturas de esa comprobaci?n se retiraron tras la revisi?n. Build y lint satisfactorios mediante
 `:app:assembleDebug :app:lintDebug`. Escala de fuente restaurada a 0.9.
 
 ## Continuación del 2026-10-04
@@ -31,21 +30,9 @@ Correcciones de esta continuación:
 - Registro rápido: título del monto y monedas pueden cambiar de fila; PEN/USD
   conservan 48 dp de altura y no estiran el formulario por falta de ancho.
 
-## Recorridos y capturas
+## Recorridos revisados
 
-| Comprobación | Evidencia |
-| --- | --- |
-| Dashboard Dark, cupo y dock al 200 % | `resumed_dashboard_dark_font200.png` |
-| Scroll, cuenta y tarjeta al 200 % | `resumed_dashboard_scrolled_dark_font200.png` |
-| Movimientos y dock Dark al 200 % | `resumed_movimientos_dark_font200.png` |
-| Cambio a Light al 200 % | `resumed_movimientos_light_font200.png` |
-| Filtros Dark, acciones inferiores al 200 % | `resumed_filtros_dark_font200.png` |
-| Registro desde FAB, monedas al 200 % | `resumed_quick_dark_font200.png` |
-| Registro con teclado, CTA visible al 200 % | `resumed_quick_ime_dark_font200.png` |
-
-El recorrido se limita a navegación, cambios de tema, scroll y apertura/cierre de
-formularios. No se guardaron movimientos ni cuentas de prueba en la cuenta real.
-Las capturas pueden mostrar datos del dispositivo y son evidencia local.
+Se revisaron navegaci?n, cambios de tema, scroll, formularios y estados con tama?o de fuente ampliado. Las capturas locales usadas para esas revisiones se retiraron despu?s; las condiciones y resultados se resumen abajo.
 
 ## Límites de aceptación
 

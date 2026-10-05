@@ -20,7 +20,7 @@ args = parser.parse_args()
 if not args.serial:
     parser.error('Select the target device with --serial or ANDROID_SERIAL.')
 adb = str(Path(os.environ['LOCALAPPDATA']) / 'Android/Sdk/platform-tools/adb.exe')
-output = Path('docs/ux-ui/implementation-evidence/tab-performance')
+output = Path('scratch/root-tabs-performance')
 output.mkdir(parents=True, exist_ok=True)
 
 def run(*command):

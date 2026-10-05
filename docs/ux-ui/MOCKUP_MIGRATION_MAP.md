@@ -31,28 +31,7 @@ Este documento registra la trazabilidad completa de la migración y reorganizaci
 
 ---
 
-## 2. Duplicados Verificados (Conservados en `archive/duplicates/`)
-
-| Archivo anterior | Archivo canónico retenido | Hash MD5 | Justificación y Nueva ruta |
-|:---|:---|:---|:---|
-| `Mock/image copy 5.png` | `Mock/image copy 3.png` (`dashboard.png`) | `014a00434fa4785348ae63347502f0c9` | Duplicado exacto bit a bit del Dashboard normal. Conservado en [`docs/ux-ui/archive/duplicates/dashboard-duplicate-image-copy-5.png`](./archive/duplicates/dashboard-duplicate-image-copy-5.png). |
-| `Mock/image copy 15.png` | `Mock/image copy 14.png` (`configure-card.png`) | `bffad2909b9eda985afaa241af129dc9` | Duplicado exacto bit a bit del Paso 3 de configuración. Conservado en [`docs/ux-ui/archive/duplicates/configure-card-duplicate-image-copy-15.png`](./archive/duplicates/configure-card-duplicate-image-copy-15.png). |
-
----
-
-## 3. Canvases de Referencia Anteriores (`archive/old-redesign-references/`)
-
-Láminas compuestas extraídas de herramientas de diseño previas al desglose atómico:
-- `docs/ux-ui/redesign-references/add-instrument.png` → [`docs/ux-ui/archive/old-redesign-references/add-instrument-canvas.png`](./archive/old-redesign-references/add-instrument-canvas.png)
-- `docs/ux-ui/redesign-references/card-configuration.png` → [`docs/ux-ui/archive/old-redesign-references/card-configuration-canvas.png`](./archive/old-redesign-references/card-configuration-canvas.png)
-- `docs/ux-ui/redesign-references/card-selection.png` → [`docs/ux-ui/archive/old-redesign-references/card-selection-canvas.png`](./archive/old-redesign-references/card-selection-canvas.png)
-- `docs/ux-ui/redesign-references/dashboard.png` → [`docs/ux-ui/archive/old-redesign-references/dashboard-canvas.png`](./archive/old-redesign-references/dashboard-canvas.png)
-- `docs/ux-ui/redesign-references/history.png` → [`docs/ux-ui/archive/old-redesign-references/history-canvas.png`](./archive/old-redesign-references/history-canvas.png)
-- `docs/ux-ui/redesign-references/quick-movement.png` → [`docs/ux-ui/archive/old-redesign-references/quick-movement-canvas.png`](./archive/old-redesign-references/quick-movement-canvas.png)
-
----
-
-## 4. Reorganización de Documentación Markdown y Evidencias
+## 2. Reorganización de Documentación Markdown y Evidencias
 
 | Archivo anterior | Nueva ruta | Razón del movimiento |
 |:---|:---|:---|
@@ -61,5 +40,7 @@ Láminas compuestas extraídas de herramientas de diseño previas al desglose at
 | `docs/ux-ui/KIPU_CALM_EMERALD_REDESIGN.md` | [`docs/ux-ui/implementation/KIPU_CALM_EMERALD_REDESIGN.md`](./implementation/KIPU_CALM_EMERALD_REDESIGN.md) | Agrupación junto a las especificaciones activas de implementación Calm Emerald. |
 | `docs/merchant-logo-assets.md` | [`docs/ux-ui/references/merchant-logo-assets.md`](./references/merchant-logo-assets.md) | Centralización de inventarios y activos de diseño en carpeta de referencias UI/UX. |
 | `docs/KIPU_V4_2_STITCH_REDESIGN_CATALOG.md` | [`docs/ux-ui/references/stitch-redesign-catalog.md`](./references/stitch-redesign-catalog.md) | Renombrado en kebab-case y consolidación dentro del repositorio de referencias UI/UX. |
-| `docs/ux-ui/evidence/*` | `docs/ux-ui/evidence/runtime/*` | Normalización obligatoria para separar capturas runtime iniciales de APK. |
-| `docs/ux-ui/evidence-final/*` | `docs/ux-ui/evidence/final/*` | Normalización obligatoria para evidencia recapturada tras la versión instalada final. |
+
+Los duplicados exactos y los canvases previos se retiraron al quedar disponibles los mockups canónicos y de estado. El índice actual esta en [mockups/README.md](./mockups/README.md).
+
+Las capturas runtime/final, metadatos y manifiestos de QA se retiraron posteriormente para limpiar artefactos locales de auditoría. Las conclusiones y límites relevantes permanecen en los informes de auditoría e implementación.

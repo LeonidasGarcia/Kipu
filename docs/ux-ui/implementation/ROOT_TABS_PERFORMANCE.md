@@ -35,7 +35,7 @@ La captura de Finplan sirve como referencia de experiencia. No se inspeccionó s
 
 ## Mediciones
 
-Evidencias crudas en `../implementation-evidence/tab-performance/`.
+Las capturas y trazas crudas de esta medición fueron temporales y se retiraron tras la revisión. Los resultados agregados, condiciones y limitaciones quedan registrados en este documento.
 
 | Corrida | Cambios | Frames | Jank | P50 | P95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -56,7 +56,7 @@ Las capturas usan `input tap; sleep 0.05; screencap`. Es una espera solicitada d
 
 La captura inmediata después de tocar el `+` muestra la hoja entrando; la captura posterior muestra el formulario disponible. La hoja conserva el movimiento nativo de Material 3 y su medida de entrada de 280–320 ms sigue pendiente de una marca de tiempo visual exacta. El ViewModel del formulario se inicializa junto con la raíz, de modo que solo el árbol visual de la hoja se prepara al abrirla.
 
-Una corrida puntual después del toque devolvió 53 frames, 10 janky, P50 57 ms y P95 400 ms. Incluye la apertura de la hoja, los tiempos del canal ADB y el período de animación; no es una medida aislada de respuesta del click. El objetivo del benchmark repetido aquí es medir solo alternancias entre pestañas. Archivos: `plus-dashboard-50ms.png`, `plus-dashboard-370ms.png` y `plus-dashboard-gfxinfo.txt`.
+Una corrida puntual después del toque devolvió 53 frames, 10 janky, P50 57 ms y P95 400 ms. Incluye la apertura de la hoja, los tiempos del canal ADB y el período de animación; no es una medida aislada de respuesta del click. El objetivo del benchmark repetido aquí es medir solo alternancias entre pestañas. Las capturas y trazas de esa corrida fueron temporales y se retiraron tras la revisión.
 
 ## Validación automatizada
 

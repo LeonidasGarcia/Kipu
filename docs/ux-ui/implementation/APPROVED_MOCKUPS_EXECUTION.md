@@ -18,7 +18,7 @@ comprimía y estiraba el bloque del monto. Se conservan las decisiones aprobadas
 Planificación deshabilitada, FAB para registrar y cuatro dígitos requeridos en crédito.
 
 La evidencia y sus límites se detallan en
-[implementation-evidence/README.md](../implementation-evidence/README.md).
+[IMPLEMENTATION_EVIDENCE.md](IMPLEMENTATION_EVIDENCE.md).
 No se declara cerrada la aceptación con TalkBack ni una revisión independiente de
 todo el diff acumulado. No se modificaron reglas financieras ni contratos de dominio
 en esta continuación.
@@ -47,7 +47,7 @@ en esta continuación.
 - [ ] Fase 5: categorías y subcategorías existentes, sin dock global.
   Compilar; comprobar validación y Sheet con teclado.
 - [ ] Fase 6: QA físico Samsung SM-A165M en ambos temas y fuentes ampliadas;
-  capturas en `../implementation-evidence/`, pruebas de regresión aplicables.
+  capturas locales temporales y pruebas de regresión aplicables.
 
 ## Restricciones
 

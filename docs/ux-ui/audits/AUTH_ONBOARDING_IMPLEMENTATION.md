@@ -61,7 +61,7 @@ Errores: fade de 150 ms. Login/registro y recuperación: transiciones de 200 ms.
 - 8 pruebas de interfaz en viewport equivalente al S24+ (1440 × 3120 px, densidad 560), con animator duration scale 0: sin fallos. No se utilizó un S24+ físico.
 - Lint debug: 0 errores y 273 advertencias del workspace. Incluye advertencias de orden de parámetros Compose y APIs de test existentes; no se cambió el Design System global para eliminarlas.
 - App debug ejecutada en emulador: primer arranque muestra introducción; omitir abre login; force-stop y nuevo arranque permanecen en login.
-- Comparación manual de renders con las referencias de login, registro, recuperación/error/confirmación y las tres páginas de introducción, incluyendo `Omboarding 3 - Corregido.png`. Evidencia en `../evidence/auth-onboarding/` para tamaños estándar, compacto, grande/motion reducido y ejecución real.
+- Comparación manual de renders con las referencias de login, registro, recuperación/error/confirmación y las tres páginas de introducción, incluyendo `Omboarding 3 - Corregido.png`. Se generaron capturas de revisión para los distintos tamaños y la ejecución real; los archivos locales se retiraron en la limpieza posterior.
 
 En compactos o con fuente ampliada se desplaza el contenido verticalmente; indicadores y acción del pager permanecen accesibles. Se corrigieron espacios de recuperación y el gesto de la prueba de swipe, que antes actuaba sobre un título parcialmente fuera del viewport.
 
@@ -80,7 +80,7 @@ El contenido de las tres páginas ya está implementado. La validación/configur
 
 ## Cierre de la referencia corregida
 
-La página 3 se comparó con el PNG corregido y la captura adicional compartida por el usuario. Se ajustaron la posición vertical del grupo, el peso semibold del título, el ancho del párrafo y el encabezado centrado. Las labels de la ilustración decorativa conservan escala gráfica; la descripción accesible comunica su contenido completo. El título, la explicación y las acciones respetan la escala de texto del usuario. Las dos acciones finales quedan fuera del scroll y se deshabilitan durante guardado. Nuevas pruebas verifican «Empezar», «Ya tengo una cuenta», tamaño de texto al 200% y bloqueo durante guardado. Capturas nuevas: `onboarding-3.png` y `onboarding-3-font-200.png`.
+La página 3 se comparó con el PNG corregido y la captura adicional compartida por el usuario. Se ajustaron la posición vertical del grupo, el peso semibold del título, el ancho del párrafo y el encabezado centrado. Las labels de la ilustración decorativa conservan escala gráfica; la descripción accesible comunica su contenido completo. El título, la explicación y las acciones respetan la escala de texto del usuario. Las dos acciones finales quedan fuera del scroll y se deshabilitan durante guardado. Nuevas pruebas verifican «Empezar», «Ya tengo una cuenta», tamaño de texto al 200% y bloqueo durante guardado. Las capturas locales nuevas se retiraron en la limpieza posterior.
 
 ## Ajuste de registro y motion para A16
 
@@ -92,7 +92,7 @@ Las pestañas ahora alternan el modo del mismo formulario/ViewModel. Las rutas l
 
 Se añadieron tres pruebas: registro completo con teclado cerrado, posiciones intermedias de la animación y uso del callback de login desde la entrada register. Las tres pasan junto al resto de AuthVisualFlowTest (11 pruebas) en la configuración de referencia A16 (1080×2340px, densidad 450, fuente 1.0). La configuración actual del A16 conectado se leyó sin modificarlo: SM-A165M, densidad efectiva 420 y fuente 0.9 (aproximadamente 411×891dp). Ese tramo de validación se realizó en emulador. La comprobación física posterior solicitada por el usuario se documenta a continuación.
 
-Resultados del ajuste A16: build debug/lab y lint debug correctos (0 errores, 273 advertencias); 53 unitarias sin fallos. Instrumentadas: 11 en A16 de referencia, 17 en la configuración actual del A16, 11 en tamaño equivalente al S24+ y 4 específicas de registro con movimiento reducido, todas sin fallos. Se ejecutó también MainActivity debug en emulador con densidad 420/fuente 0.9, comprobando el formulario entero y el cambio real de pestañas. Evidencia: `../evidence/auth-onboarding/a16-current/register-runtime.png` y `login-register-transition.mp4`; tamaños adicionales en `a16-default/`, `s24-register/` y `registration-reduced-motion/`.
+Resultados del ajuste A16: build debug/lab y lint debug correctos (0 errores, 273 advertencias); 53 unitarias sin fallos. Instrumentadas: 11 en A16 de referencia, 17 en la configuración actual del A16, 11 en tamaño equivalente al S24+ y 4 específicas de registro con movimiento reducido, todas sin fallos. Se ejecutó también MainActivity debug en emulador con densidad 420/fuente 0.9, comprobando el formulario entero y el cambio real de pestañas. Las capturas locales de esta validación se retiraron en la limpieza posterior.
 
 Archivos de código del ajuste: AuthComponents.kt (padding adaptable), AuthFormScreen.kt (densidad del formulario y transición), RegisterScreen.kt (callback de login en modo compartido) y AuthNavigation.kt (pestañas sin desmontar el formulario). AuthVisualFlowTest.kt contiene las tres pruebas nuevas. Spec/plan/tasks propagados; T092 completada. No se modificaron las reglas de autenticación ni el Design System global.
 
@@ -102,7 +102,7 @@ Por solicitud expresa del usuario se comprobó el A16 conectado. El hash del APK
 
 Se abrió MainActivity real y se verificaron las pestañas login/registro. El registro completo, incluidos confirmación, CTA y aviso legal, cabe con el teclado cerrado. Se enfocó el campo de confirmación vacío y se comprobó que, con teclado Samsung abierto, el scroll permite alcanzar «Crear cuenta». No se enviaron solicitudes ni se ingresaron credenciales. Se dejó la app en registro con el teclado cerrado.
 
-Evidencia física en `../evidence/auth-onboarding/a16-physical/`: `register-keyboard-closed.png`, `register-keyboard-open.png`, `register-keyboard-scrolled.png`, `register-final.png` y `login-register-transition.mp4`. El vídeo registra ambos cambios de pestaña en el teléfono real; no se midió FPS ni jank del dispositivo. No fue necesario cambiar código adicional para esta comprobación.
+Se generaron capturas físicas del registro con teclado abierto/cerrado y un vídeo de transición en el teléfono real; esos archivos locales se retiraron en la limpieza posterior. No se midió FPS ni jank del dispositivo. No fue necesario cambiar c?digo adicional para esta comprobación.
 
 ## Legibilidad de requisitos de contraseña
 
@@ -110,6 +110,6 @@ Las capturas y grabaciones de esta implementación se conservan como evidencia l
 
 Tras la referencia adicional del usuario, los requisitos pendientes se muestran neutros mientras se escribe. Solo al pulsar «Crear cuenta» pasan a rojo con icono de aviso si siguen sin cumplirse. Los cumplidos muestran un check relleno verde más claro y texto verde con contraste suficiente. Se elimina la etiqueta adicional «Listo» para seguir la referencia. Las descripciones accesibles distinguen «Pendiente», «No cumplido» y «Cumplido»; el estado se reconoce también por la forma del icono. El intento de registro se reinicia al cambiar de pestaña. No se cambia la política ni la altura habitual de las filas.
 
-AuthFormScreen.kt contiene el ajuste y AuthVisualFlowTest.kt añade una prueba de actualización de los tres requisitos. Las 12 pruebas de interfaz pasan, incluida la comprobación de registro sin scroll en ventana A16, transición con posiciones intermedias y texto ampliado. Capturas revisadas en `../evidence/auth-onboarding/password-feedback/`: `register-requirements-pending.png`, `register-requirements-completed.png` y `register-a16-window.png`.
+AuthFormScreen.kt contiene el ajuste y AuthVisualFlowTest.kt añade una prueba de actualización de los tres requisitos. Las 12 pruebas de interfaz pasan, incluida la comprobación de registro sin scroll en ventana A16, transición con posiciones intermedias y texto ampliado. Las capturas locales de revisión se retiraron en la limpieza posterior.
 
-Build debug/lab correcto; 53 pruebas unitarias sin fallos; lint con 0 errores y 273 advertencias existentes. Se actualizó nuevamente el SM-A165M conservando datos y se abrió registro con campos vacíos y teclado cerrado. La captura `register-physical-updated.png` confirma que el formulario completo sigue visible. No se enviaron solicitudes de autenticación.
+Build debug/lab correcto; 53 pruebas unitarias sin fallos; lint con 0 errores y 273 advertencias existentes. Se actualizó nuevamente el SM-A165M conservando datos y se abrió registro con campos vacíos y teclado cerrado. La captura local confirmó que el formulario completo sigue visible; se retiró en la limpieza posterior. No se enviaron solicitudes de autenticación.
