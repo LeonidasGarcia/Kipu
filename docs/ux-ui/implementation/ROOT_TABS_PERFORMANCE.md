@@ -85,4 +85,6 @@ Las pruebas posteriores usaron exclusivamente el paquete `com.kipu.app.lab`. No 
 
 ## Pendiente para cerrar cero jank
 
+La revisión del PR trasladó la agregación del flujo neto del historial desde el ViewModel a `MovementNetFlowCalculator`, en dominio. Se mantienen las exclusiones, estados e importes por moneda del formulario ya implementado; esta métrica de historial no representa un saldo de cuenta. Nueve pruebas puras cubren signos, monedas, estados, exclusiones, transferencias, compras con tarjeta, desbordamiento y conjunto vacío.
+
 El árbol raíz ya se conserva, pero sigue habiendo trabajo costoso en el primer frame de algunos toques. Hace falta verificar con un dataset representativo y una build de rendimiento, usar FrameTimeline/Perfetto para atribuir los deadlines incumplidos y repetir corridas sin otras cargas. No sustituir esta comprobación por desactivar todas las animaciones ni por una corrida con cero frames.

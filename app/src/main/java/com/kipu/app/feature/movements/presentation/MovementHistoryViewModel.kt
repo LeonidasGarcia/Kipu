@@ -8,6 +8,7 @@ import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.plans.data.entitlement.offlineEntitlementRefreshTicker
 import com.kipu.app.feature.movements.domain.MovementMaintenanceRepository
 import com.kipu.app.feature.movements.domain.MovementRepository
+import com.kipu.app.feature.movements.domain.MovementNetFlowCalculator
 import com.kipu.app.feature.movements.domain.QueryMovementHistory
 import com.kipu.app.feature.movements.domain.VoidTransaction
 import com.kipu.app.feature.movements.domain.model.MovementFinancialState
@@ -293,21 +294,7 @@ class MovementHistoryViewModel @Inject constructor(
                 matchesMinAmount && matchesMaxAmount && matchesDates && matchesStates && matchesCards && matchesMerchants && matchesSync
         }
 
-        val nonFlowLegacyKinds = setOf("OPENING", "ADJUSTMENT", "REVERSAL", "CARD_PAYMENT_CASH")
-        val netMap = mutableMapOf<String, java.math.BigInteger>()
-        for (item in filtered) {
-            val tx = item.transaction
-            val isValidStatus = tx.status == com.kipu.app.feature.movements.domain.model.TransactionStatus.ACTIVE || tx.status == com.kipu.app.feature.movements.domain.model.TransactionStatus.CONFIRMED
-            val isNotNonFlow = tx.legacyKind == null || tx.legacyKind !in nonFlowLegacyKinds
-            val isFlowType = tx.type == MovementType.INCOME || tx.type == MovementType.EXPENSE || tx.operationKind.equals("CARD_PURCHASE", ignoreCase = true)
-            if (isValidStatus && isNotNonFlow && isFlowType && tx.type != MovementType.TRANSFER) {
-                val curr = tx.currency.uppercase(Locale.ROOT)
-                val amount = java.math.BigInteger.valueOf(tx.amountMinor)
-                val currentSum = netMap[curr] ?: java.math.BigInteger.ZERO
-                val delta = if (tx.type == MovementType.INCOME) amount else amount.negate()
-                netMap[curr] = currentSum + delta
-            }
-        }
+        val netMap = MovementNetFlowCalculator.calculate(filtered.asSequence().map { it.transaction }.asIterable())
 
         val mostUsed = items.asSequence()
             .filter { it.transaction.status == com.kipu.app.feature.movements.domain.model.TransactionStatus.ACTIVE }
