@@ -6,23 +6,28 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import com.kipu.app.ui.motion.ProvideReducedMotion
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
+internal val LocalKipuDarkTheme = staticCompositionLocalOf { false }
+
 private val DarkColorScheme = darkColorScheme(
-    primary = KipuInversePrimary,
+    primary = Color(0xFF14B8A6),
     onPrimary = KipuDarkBackground,
-    primaryContainer = KipuPrimaryContainer,
-    onPrimaryContainer = KipuOnPrimaryContainer,
-    secondary = KipuSecondaryContainer,
+    primaryContainer = Color(0xFF134E4A),
+    onPrimaryContainer = Color(0xFFBCEBDD),
+    secondary = KipuSecondary,
     onSecondary = KipuDarkBackground,
-    secondaryContainer = KipuSecondary,
-    onSecondaryContainer = KipuOnSecondary,
-    tertiary = KipuOnTertiaryContainer,
+    secondaryContainer = Color(0xFF134E4A),
+    onSecondaryContainer = Color(0xFFBCEBDD),
+    tertiary = KipuTertiary,
     onTertiary = KipuDarkBackground,
-    tertiaryContainer = KipuTertiary,
-    onTertiaryContainer = KipuOnTertiaryContainer,
+    tertiaryContainer = Color(0xFF1A263B),
+    onTertiaryContainer = Color(0xFFBCEBDD),
     background = KipuDarkBackground,
     onBackground = KipuInverseOnSurface,
     surface = KipuDarkSurface,
@@ -93,12 +98,24 @@ fun KipuTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    ProvideReducedMotion {
+        KipuThemeContent(darkTheme, content)
+    }
+}
+
+@Composable
+private fun KipuThemeContent(
+    darkTheme: Boolean,
+    content: @Composable () -> Unit,
+) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = KipuTypography,
-        shapes = KipuShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalKipuDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = KipuTypography,
+            shapes = KipuShapes,
+            content = { ProvideCalmEmeraldColors(content) }
+        )
+    }
 }

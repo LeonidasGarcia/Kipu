@@ -1,10 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="108dp"
-    android:height="108dp"
+    android:width="320dp"
+    android:height="320dp"
     android:viewportWidth="320"
     android:viewportHeight="320">
+    <path android:pathData="M96,0 H224 A96,96 0 0 1 320,96 V224 A96,96 0 0 1 224,320 H96 A96,96 0 0 1 0,224 V96 A96,96 0 0 1 96,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="320"
+                android:endY="320"
+                android:type="linear">
+                <item android:color="#0F766E" android:offset="0.25" />
+                <item android:color="#64BAB0" android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
     <path
         android:fillColor="#FFFFFFFF"
         android:pathData="M108.047 226.187C112.465 226.187 116.047 229.768 116.047 234.187C116.047 238.604 112.465 242.186 108.047 242.187C103.629 242.187 100.047 238.605 100.047 234.187C100.047 229.768 103.629 226.187 108.047 226.187ZM116 220.141C113.647 218.779 110.914 218 108 218C105.086 218 102.353 218.779 100 220.141V93.8594C102.353 95.2208 105.086 96 108 96C110.914 96 113.647 95.2208 116 93.8594V220.141ZM108 72C112.418 72 116 75.5817 116 80C116 84.4183 112.418 88 108 88C103.582 88 100 84.4183 100 80C100 75.5817 103.582 72 108 72Z" />

@@ -77,8 +77,8 @@
     <string name="perm_revoke_consent">Revocar Consentimiento</string>
 
     <!-- EP-MOV Movements strings -->
-    <string name="movements_title">Historial</string>
-    <string name="movements_search_placeholder">Buscar transacciones&#8230;</string>
+    <string name="movements_title">Movimientos</string>
+    <string name="movements_search_placeholder">Buscar por comercio, categoría…</string>
     <string name="movements_empty_title">Sin movimientos registrados</string>
     <string name="movements_empty_desc">Toca el botón + para registrar tu primera transacción</string>
     <string name="movements_sync_synced">Sincronizado</string>
@@ -92,7 +92,7 @@
     <string name="movements_filter_amount">Monto</string>
     <string name="movements_filter_status">Estado</string>
 
-    <string name="movement_register_title">Registrar Transacción</string>
+    <string name="movement_register_title">Registrar movimiento</string>
     <string name="movement_type_expense">Gasto</string>
     <string name="movement_type_income">Ingreso</string>
     <string name="movement_type_transfer">Transferencia</string>

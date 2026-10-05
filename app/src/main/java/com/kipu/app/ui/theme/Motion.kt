@@ -21,10 +21,14 @@ object KipuMotionTokens {
     const val FeedbackMillis = 150
 
     // Purposeful roles mapped to existing duration scale
-    const val NavEnterMillis = FastMillis
+    const val NavEnterMillis = 220
     const val NavExitMillis = QuickMillis
-    const val SubtreeEnterMillis = FastMillis
-    const val SubtreeExitMillis = QuickMillis
+    const val TopLevelMillis = 160
+    const val SegmentMillis = QuickMillis
+    const val ThemeMillis = 0
+    const val SheetMillis = 300
+    const val SubtreeEnterMillis = 200
+    const val SubtreeExitMillis = 200
     const val StateCrossfadeMillis = QuickMillis
 }
 
