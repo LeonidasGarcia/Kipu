@@ -62,8 +62,8 @@ data class KipuUiColors(
 @Composable
 fun rememberKipuColors(): KipuUiColors {
     val scheme = MaterialTheme.colorScheme
-    return remember(scheme) {
-        val isDark = scheme.background.luminance() < 0.5f
+    val isDark = LocalKipuDarkTheme.current
+    return remember(scheme, isDark) {
         KipuUiColors(
             isDark = isDark,
             background = scheme.background,

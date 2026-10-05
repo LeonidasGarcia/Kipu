@@ -594,11 +594,11 @@ No todo lo agrupado aquí es cosmético: RV-01 incluye accesibilidad; se separa 
 
 | Cambio | Artefactos afectados | Qué actualizar |
 | :--- | :--- | :--- |
-| CE-01 | Vault: `work/active/kipu/Prototipo/P1/Esquema de pantallas generales.md`, `Esquema de pantallas relacionadas con las HU.md`, `Descripción de Pantallas según Historias de Usuario.md`, `Stich Prompts.md`; [catálogo local](../KIPU_V4_2_STITCH_REDESIGN_CATALOG.md) | Raíces, destino inicial, barra con destinos efectivamente construidos, Ajustes y retornos. Diferenciar resumen actual de Inicio futuro |
+| CE-01 | Vault: `work/active/kipu/Prototipo/P1/Esquema de pantallas generales.md`, `Esquema de pantallas relacionadas con las HU.md`, `Descripción de Pantallas según Historias de Usuario.md`, `Stich Prompts.md`; [catálogo local](../references/stitch-redesign-catalog.md) | Raíces, destino inicial, barra con destinos efectivamente construidos, Ajustes y retornos. Diferenciar resumen actual de Inicio futuro |
 | QW-05/07/08, HI-08/09 | Vault: HU-04/HU-09/HU-10/HU-57 y P22; [UI cuentas](../../specs/002-ep-cta-cuentas-tarjetas/contracts/ui-contract.md) | Significado de indicadores, etiquetas de cupo, contexto monetario, resumen crediticio. No cambiar fórmulas/alertas por diseño |
 | HI-01/02, QW-09/12, CE-04/05 | Vault: HU-22/P15; [UI movimientos](../../specs/004-ep-mov-movimientos-ledger/contracts/ui-contract.md), [contrato de acceso](../../specs/012-ep-pla-planes-monetizacion/contracts/feature-access-policy.md) | Básicos/avanzados, borrador/aplicado/pausado, navegación del panel y fuente/paginación. Mantener gate en dominio |
 | HI-03/04/05/06/07/10, CE-06 | Vault: descripciones de Pantallas 4–7/10–11 y prompts correspondientes; contratos UI de EP-CTA/EP-MOV y [EP-CCO](../../specs/003-ep-cco-categorias-comercios/contracts/ui-contract.md) | Jerarquía de formulario, selección, validación y retención/cierre. No convertir campos opcionales en obligatorios |
-| CE-02/03, RV-01/02/03, MO-02/03/04 | [Design system](../stitch-design-system.md), catálogo visual y prompts de las pantallas afectadas | Roles por tema, tipografía, componentes, motion y variantes de viewport |
+| CE-02/03, RV-01/02/03, MO-02/03/04 | [Design system](../../stitch-design-system.md), catálogo visual y prompts de las pantallas afectadas | Roles por tema, tipografía, componentes, motion y variantes de viewport |
 | Confirmación / conexiones entre journeys | Vault: `Procesos/14-corregir-o-anular-movimiento.md`, `15-consultar-y-filtrar-historial.md`, `22-consultar-situacion-y-analitica-financiera.md`, diagramas correspondientes si representan las rutas afectadas | Cambiar interacción/navegación cuando proceda, conservando compensación contable, autorización y reglas financieras |
 
 La tabla identifica qué revisar y dónde documentar la nueva fuente de verdad. No afirma que todas las HU deban modificarse: si solo cambia representación, bastan contratos de UI y mapas. Los artefactos Spec Kit se citan por trazabilidad; **no se ejecuta ni se inicia su workflow en esta auditoría**.
@@ -683,6 +683,6 @@ Obsidian Mind se consultó mediante `om.search`, `om.recall` y `om.expand`; para
 - `work/active/kipu/Procesos/15-consultar-y-filtrar-historial.md`: básicos Free, combinaciones Premium, historia completa y paginación.
 - `work/active/kipu/Procesos/22-consultar-situacion-y-analitica-financiera.md`: interpretación y composición de situación financiera.
 - `work/active/kipu/Prototipo/P1/`: mapas, descripción de pantallas y `Stich Prompts.md`, utilizados como referencias de intención después del runtime.
-- [Design system local](../stitch-design-system.md), [catálogo visual](../KIPU_V4_2_STITCH_REDESIGN_CATALOG.md), contratos UI citados y [auditoría anterior](../audits/KIPU_FULL_FUNCTIONAL_UX_AUDIT.md), esta última solo como antecedente.
+- [Design system local](../../stitch-design-system.md), [catálogo visual](../references/stitch-redesign-catalog.md), contratos UI citados y [auditoría anterior](../../audits/KIPU_FULL_FUNCTIONAL_UX_AUDIT.md), esta última solo como antecedente.
 
 **Cierre:** el entregable termina en este informe y sus evidencias. Las decisiones estructurales, de contratos o de representación quedan propuestas para aprobación; no se declara cerrado Sprint 4 ni implementado el roadmap.

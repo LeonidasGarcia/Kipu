@@ -386,7 +386,7 @@ fun ProfileSettingsScreen(
                 SettingsCard(
                     icon = Icons.Default.VisibilityOff,
                     title = "Ocultar montos sensibles",
-                    subtitle = "Modo MoneyText en vista general",
+                    subtitle = "Ocultar saldos e importes",
                     trailing = {
                         Switch(
                             checked = state.hideBalances,
@@ -442,8 +442,8 @@ fun ProfileSettingsScreen(
                 onNavigateToMovements?.let {
                     SettingsActionCard(
                         icon = Icons.Default.Payments,
-                        title = "Historial de Movimientos (Ledger)",
-                        subtitle = "Consultar ledger y registrar operaciones",
+                        title = "Movimientos",
+                        subtitle = "Consultar y registrar movimientos",
                         onClick = it,
                     )
                 }

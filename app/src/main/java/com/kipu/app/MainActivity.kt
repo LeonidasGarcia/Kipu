@@ -4,6 +4,8 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
+import com.kipu.app.feature.auth.presentation.AuthCallbackViewModel
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -19,6 +21,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -31,6 +34,10 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.navigation.compose.NavHost
@@ -44,12 +51,14 @@ import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.auth.domain.AuthRepository
 import com.kipu.app.feature.auth.domain.model.AuthResult
-import com.kipu.app.feature.auth.data.RecoverySessionInstaller
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.settings.data.local.ProfilePreferencesDao
 import com.kipu.app.navigation.ACCOUNT_FORM_ROUTE
 import com.kipu.app.navigation.ACCOUNTS_DASHBOARD_ROUTE
 import com.kipu.app.navigation.AUTH_LOGIN_ROUTE
+import com.kipu.app.navigation.AUTH_START_ROUTE
+import com.kipu.app.navigation.AUTH_INTRO_ROUTE
+import com.kipu.app.feature.auth.data.OnboardingPreferences
 import com.kipu.app.navigation.AUTH_RESET_PASSWORD_ROUTE
 import com.kipu.app.navigation.AuthDeepLinkHandler
 import com.kipu.app.navigation.BIOMETRIC_ROUTE
@@ -81,6 +90,8 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -107,9 +118,11 @@ class MainActivity : FragmentActivity() {
     lateinit var planPreferencesDao: PlanPreferencesDao
 
     @Inject
-    lateinit var recoverySessionInstaller: RecoverySessionInstaller
+    lateinit var onboardingPreferences: OnboardingPreferences
 
     private var pendingDeepLink by mutableStateOf<DeepLinkResult?>(null)
+    private var restorationJob: Job? = null
+    private val authCallbackViewModel: AuthCallbackViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -140,11 +153,13 @@ class MainActivity : FragmentActivity() {
             }.collectAsState(initial = null)
 
             val isDark = when (profileState.value?.themeMode) {
-                "LIGHT" -> false
                 "DARK" -> true
+                "LIGHT" -> false
                 else -> isSystemInDarkTheme()
             }
             val isMasked = profileState.value?.hideBalances ?: false
+
+            val movementsSelected = rememberSaveable(currentUserId) { mutableStateOf(false) }
 
             var lastKnownUserId by remember { mutableStateOf(currentUserId) }
             LaunchedEffect(currentUserId) {
@@ -154,37 +169,42 @@ class MainActivity : FragmentActivity() {
                     navController.clearBackStack(MOVEMENTS_HISTORY_ROUTE)
                 }
                 lastKnownUserId = currentUserId
+
             }
 
             LaunchedEffect(Unit) {
-                val restored = authRepository.restoreSession().getOrNull() as? AuthResult.Success
+                restorationJob = currentCoroutineContext()[Job]
                 val hasActionableDeepLink = pendingDeepLink is DeepLinkResult.ResetPassword ||
-                    pendingDeepLink is DeepLinkResult.ConfirmEmail
-                if (restored != null && !hasActionableDeepLink) {
-                    postAuthDestination(restored.userId)?.let { destination ->
-                        navController.currentBackStackEntryFlow
-                            .filter { it.destination.route == AUTH_LOGIN_ROUTE }
-                            .first()
-                        navController.navigate(destination) {
-                            popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
-                            launchSingleTop = true
-                        }
+                    pendingDeepLink is DeepLinkResult.ConfirmEmail ||
+                    authCallbackViewModel.state.value.handledCallback
+                // Recovery installs its own temporary session; never race it with restoration.
+                if (hasActionableDeepLink) return@LaunchedEffect
+                val restored = authRepository.restoreSession().getOrNull() as? AuthResult.Success
+                if (!hasActionableDeepLink) {
+                    val destination = if (restored != null) {
+                        postAuthDestination(restored.userId) ?: AUTH_LOGIN_ROUTE
+                    } else if (onboardingPreferences.checkpoint.first().completed) {
+                        AUTH_LOGIN_ROUTE
+                    } else AUTH_INTRO_ROUTE
+                    navController.currentBackStackEntryFlow
+                        .filter { it.destination.route == AUTH_START_ROUTE }.first()
+                    navController.navigate(destination) {
+                        popUpTo(AUTH_START_ROUTE) { inclusive = true }
+                        launchSingleTop = true
                     }
                 }
             }
 
             LaunchedEffect(pendingDeepLink) {
-                when (val link = pendingDeepLink) {
-                    is DeepLinkResult.ResetPassword -> {
-                        recoverySessionInstaller.install(link.callbackUrl)
-                        navController.navigate(AUTH_RESET_PASSWORD_ROUTE)
-                        pendingDeepLink = null
-                    }
-                    is DeepLinkResult.ConfirmEmail -> {
-                        navController.navigate(AUTH_LOGIN_ROUTE)
-                        pendingDeepLink = null
-                    }
-                    else -> Unit
+                authCallbackViewModel.handle(pendingDeepLink, restorationJob)
+            }
+            val authCallbackState by authCallbackViewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(authCallbackState.targetRoute) {
+                authCallbackState.targetRoute?.let { destination ->
+                    navController.navigate(destination) { popUpTo(0) { inclusive = true } }
+                    intent?.data = null
+                    pendingDeepLink = null
+                    authCallbackViewModel.consumeNavigation()
                 }
             }
 
@@ -220,59 +240,25 @@ class MainActivity : FragmentActivity() {
                                 bottomBar = {
                                     if (shouldShowBottomBar) {
                                         KipuNavigationBar(
-                                            currentRoute = currentRoute,
+                                            currentRoute = if (currentRoute == ACCOUNTS_DASHBOARD_ROUTE && movementsSelected.value) MOVEMENTS_HISTORY_ROUTE else currentRoute,
                                             onNavigateToDinero = {
+                                                movementsSelected.value = false
                                                 if (currentRoute != ACCOUNTS_DASHBOARD_ROUTE) {
-                                                    val hasDashboardInStack = runCatching {
-                                                        navController.getBackStackEntry(ACCOUNTS_DASHBOARD_ROUTE)
-                                                    }.isSuccess
-
                                                     navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) {
-                                                        if (hasDashboardInStack) {
-                                                            popUpTo(ACCOUNTS_DASHBOARD_ROUTE) {
-                                                                inclusive = false
-                                                                saveState = true
-                                                            }
-                                                        } else {
-                                                            val currentEntry = navController.currentBackStackEntry
-                                                            if (currentEntry != null) {
-                                                                popUpTo(currentEntry.destination.id) {
-                                                                    inclusive = true
-                                                                    saveState = true
-                                                                }
-                                                            }
-                                                        }
+                                                        popUpTo(ACCOUNTS_DASHBOARD_ROUTE)
                                                         launchSingleTop = true
-                                                        restoreState = true
                                                     }
                                                 }
                                             },
                                             onNavigateToMovimientos = {
-                                                if (currentRoute != MOVEMENTS_HISTORY_PATTERN &&
-                                                    currentRoute != MOVEMENTS_HISTORY_ROUTE &&
-                                                    currentRoute?.startsWith("movements/history") != true
-                                                ) {
-                                                    val hasDashboardInStack = runCatching {
-                                                        navController.getBackStackEntry(ACCOUNTS_DASHBOARD_ROUTE)
-                                                    }.isSuccess
-
-                                                    navController.navigate(MOVEMENTS_HISTORY_ROUTE) {
-                                                        if (hasDashboardInStack) {
-                                                            popUpTo(ACCOUNTS_DASHBOARD_ROUTE) {
-                                                                saveState = true
-                                                            }
-                                                        } else {
-                                                            val currentEntry = navController.currentBackStackEntry
-                                                            if (currentEntry != null) {
-                                                                popUpTo(currentEntry.destination.id) {
-                                                                    inclusive = false
-                                                                    saveState = true
-                                                                }
-                                                            }
-                                                        }
-                                                        launchSingleTop = true
-                                                        restoreState = true
-                                                    }
+                                                // Root tabs share a retained composition; no navigation transaction.
+                                                if (currentRoute == ACCOUNTS_DASHBOARD_ROUTE) {
+                                                    movementsSelected.value = true
+                                                }
+                                            },
+                                            onRegisterClick = {
+                                                if (accessState is LocalAccess.Available) {
+                                                    navController.currentBackStackEntry?.savedStateHandle?.set("open_register_movement", true)
                                                 }
                                             },
                                         )
@@ -280,34 +266,36 @@ class MainActivity : FragmentActivity() {
                                 },
                             ) { innerPadding ->
                                 val reducedMotion = rememberReducedMotionEnabled()
+                                val navigationOffset = with(LocalDensity.current) { 24.dp.roundToPx() }
                                 NavHost(
                                     navController = navController,
-                                    startDestination = AUTH_LOGIN_ROUTE,
+                                    startDestination = AUTH_START_ROUTE,
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .padding(innerPadding)
                                         .consumeWindowInsets(innerPadding),
                                     enterTransition = {
-                                        if (reducedMotion) {
+                                        val initialRoute = initialState.destination.route
+                                        val targetRoute = targetState.destination.route
+                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
                                             EnterTransition.None
+                                        } else if (isDetailRoute(targetRoute)) {
+                                            slideInHorizontally(
+                                                initialOffsetX = { navigationOffset },
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
+                                            ) + fadeIn(
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
+                                            )
                                         } else {
-                                            val targetRoute = targetState.destination.route
-                                            if (isDetailRoute(targetRoute)) {
-                                                slideIntoContainer(
-                                                    towards = AnimatedContentTransitionScope.SlideDirection.Start,
-                                                    animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
-                                                ) + fadeIn(
-                                                    animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
-                                                )
-                                            } else {
-                                                fadeIn(
-                                                    animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
-                                                )
-                                            }
+                                            fadeIn(
+                                                animationSpec = tween(KipuMotionTokens.TopLevelMillis, easing = KipuEasingTokens.Decelerate),
+                                            )
                                         }
                                     },
                                     exitTransition = {
-                                        if (reducedMotion) {
+                                        val initialRoute = initialState.destination.route
+                                        val targetRoute = targetState.destination.route
+                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
                                             ExitTransition.None
                                         } else {
                                             fadeOut(
@@ -316,31 +304,36 @@ class MainActivity : FragmentActivity() {
                                         }
                                     },
                                     popEnterTransition = {
-                                        if (reducedMotion) {
+                                        val initialRoute = initialState.destination.route
+                                        val targetRoute = targetState.destination.route
+                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
                                             EnterTransition.None
-                                        } else {
+                                        } else if (isDetailRoute(targetRoute)) {
                                             fadeIn(
                                                 animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
+                                            )
+                                        } else {
+                                            fadeIn(
+                                                animationSpec = tween(KipuMotionTokens.TopLevelMillis, easing = KipuEasingTokens.Decelerate),
                                             )
                                         }
                                     },
                                     popExitTransition = {
-                                        if (reducedMotion) {
+                                        val initialRoute = initialState.destination.route
+                                        val targetRoute = targetState.destination.route
+                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
                                             ExitTransition.None
+                                        } else if (isDetailRoute(initialRoute)) {
+                                            slideOutHorizontally(
+                                                targetOffsetX = { navigationOffset },
+                                                animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
+                                            ) + fadeOut(
+                                                animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
+                                            )
                                         } else {
-                                            val initialRoute = initialState.destination.route
-                                            if (isDetailRoute(initialRoute)) {
-                                                slideOutOfContainer(
-                                                    towards = AnimatedContentTransitionScope.SlideDirection.End,
-                                                    animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
-                                                ) + fadeOut(
-                                                    animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
-                                                )
-                                            } else {
-                                                fadeOut(
-                                                    animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
-                                                )
-                                            }
+                                            fadeOut(
+                                                animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
+                                            )
                                         }
                                     },
                                 ) {
@@ -350,7 +343,7 @@ class MainActivity : FragmentActivity() {
                                             scope.launch {
                                                 postAuthDestination(userId)?.let { destination ->
                                                     navController.navigate(destination) {
-                                                        popUpTo(AUTH_LOGIN_ROUTE) { inclusive = true }
+                                                        popUpTo(0) { inclusive = true }
                                                         launchSingleTop = true
                                                     }
                                                 }
@@ -376,6 +369,8 @@ class MainActivity : FragmentActivity() {
                                     )
                                     accountsDestinations(
                                         navController = navController,
+                                        movementsSelected = movementsSelected,
+                                        onSelectMoney = { movementsSelected.value = false },
                                     )
                                     movementDestinations(
                                         navController = navController,
@@ -437,4 +432,12 @@ private fun isDetailRoute(route: String?): Boolean {
         route == NOTIFICATION_CENTER_ROUTE ||
         route.startsWith("settings/") ||
         route == PLAN_PURCHASE_ROUTE
+}
+
+private fun isTopLevelRoute(route: String?): Boolean {
+    if (route == null) return false
+    return route == ACCOUNTS_DASHBOARD_ROUTE ||
+        route == MOVEMENTS_HISTORY_PATTERN ||
+        route == MOVEMENTS_HISTORY_ROUTE ||
+        route.startsWith("movements/history")
 }

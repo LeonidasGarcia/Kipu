@@ -3,10 +3,9 @@ package com.kipu.app.feature.movements.presentation
 import android.content.Context
 import android.os.SystemClock
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.kipu.app.core.database.KipuDatabase
@@ -81,7 +80,8 @@ class MovementHistoryPerformanceTest {
         compose.onNodeWithTag("tx_row_performance-0").assertIsDisplayed()
         compose.onNodeWithTag("tx_row_performance-9999").assertDoesNotExist()
         compose.onNodeWithTag("list_movements")
-            .performScrollToNode(hasTestTag("tx_row_performance-9999"))
+            // Jump near the end; scanning every viewport measures the test driver, not lazy rendering.
+            .performScrollToIndex(transactions.lastIndex)
         compose.onNodeWithTag("tx_row_performance-9999").assertIsDisplayed()
     }
 

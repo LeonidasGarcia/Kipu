@@ -8,6 +8,11 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.navigation.NavBackStackEntry
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.feature.accounts.presentation.dashboard.DashboardScreen
@@ -57,29 +62,15 @@ private fun NavController.navigateToInstrumentDetail(instrumentId: String, isCar
 
 fun NavGraphBuilder.accountsDestinations(
     navController: NavController,
+    movementsSelected: State<Boolean>,
+    onSelectMoney: () -> Unit,
 ) {
     composable(ACCOUNTS_DASHBOARD_ROUTE) { backStackEntry ->
-        val viewModel: AccountsViewModel = hiltViewModel()
-        val settingsViewModel: SettingsViewModel = hiltViewModel()
-        val notificationBadgeViewModel: NotificationBadgeViewModel = hiltViewModel()
-        val unreadNotificationCount by notificationBadgeViewModel.unreadCount.collectAsStateWithLifecycle()
-        val feedback = backStackEntry.savedStateHandle
-            .getStateFlow<String?>(ACCOUNT_DASHBOARD_FEEDBACK_KEY, null)
-            .collectAsStateWithLifecycle()
-        DashboardScreen(
-            viewModel = viewModel,
-            onToggleMasked = { settingsViewModel.toggleHideBalances() },
-            onNavigateToNewAccount = { navController.navigateToAccountForm() },
-            onNavigateToNewCard = { navController.navigateToCardForm() },
-            onAccountClick = { accountId -> navController.navigateToAccountDetail(accountId) },
-            onCardClick = { cardId -> navController.navigateToCardDetail(cardId) },
-            onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
-            onNavigateToNotifications = navController::navigateToNotifications,
-            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
-            unreadNotificationCount = unreadNotificationCount,
-            feedbackMessage = feedback.value,
-            onFeedbackConsumed = { backStackEntry.savedStateHandle[ACCOUNT_DASHBOARD_FEEDBACK_KEY] = null },
-        )
+        BackHandler(enabled = movementsSelected.value) { onSelectMoney() }
+        RetainedRootTabs(movementsSelected = movementsSelected) {
+            Box { AccountsRootContent(navController, backStackEntry, movementsSelected) }
+            Box { MovementHistoryContent(navController, backStackEntry, movementsSelected) }
+        }
     }
 
     composable(
@@ -115,6 +106,7 @@ fun NavGraphBuilder.accountsDestinations(
             onSaveSuccess = { message -> navController.returnToAccountsDashboard(message) },
             onNavigateToCardDetail = { card -> navController.navigateToCardDetail(card.id.value) },
             onNavigateToRecordConsumption = { card -> navController.navigateToCardDetail(card.id.value, startPurchase = true) },
+            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
         )
     }
 
@@ -127,6 +119,7 @@ fun NavGraphBuilder.accountsDestinations(
             onNavigateToCardDetail = { card -> navController.navigateToCardDetail(card.id.value) },
             onNavigateToRecordConsumption = { card -> navController.navigateToCardDetail(card.id.value, startPurchase = true) },
             initialCreditCard = true,
+            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
         )
     }
 
@@ -157,4 +150,34 @@ fun NavGraphBuilder.accountsDestinations(
             onNavigateBack = { navController.popBackStack() },
         )
     }
+}
+
+@Composable
+private fun AccountsRootContent(navController: NavController, backStackEntry: NavBackStackEntry, movementsSelected: State<Boolean>) {
+        val viewModel: AccountsViewModel = hiltViewModel()
+        val settingsViewModel: SettingsViewModel = hiltViewModel()
+        val notificationBadgeViewModel: NotificationBadgeViewModel = hiltViewModel()
+        val unreadNotificationCount by notificationBadgeViewModel.unreadCount.collectAsStateWithLifecycle()
+        val feedback by backStackEntry.savedStateHandle
+            .getStateFlow<String?>(ACCOUNT_DASHBOARD_FEEDBACK_KEY, null)
+            .collectAsStateWithLifecycle()
+        val openRegisterMovement by backStackEntry.savedStateHandle
+            .getStateFlow("open_register_movement", false)
+            .collectAsStateWithLifecycle()
+        DashboardScreen(
+            viewModel = viewModel,
+            onToggleMasked = { settingsViewModel.toggleHideBalances() },
+            onNavigateToNewAccount = { navController.navigateToAccountForm() },
+            onNavigateToNewCard = { navController.navigateToCardForm() },
+            onAccountClick = { accountId -> navController.navigateToAccountDetail(accountId) },
+            onCardClick = { cardId -> navController.navigateToCardDetail(cardId) },
+            onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
+            onNavigateToNotifications = navController::navigateToNotifications,
+            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
+            unreadNotificationCount = unreadNotificationCount,
+            feedbackMessage = feedback,
+            onFeedbackConsumed = { backStackEntry.savedStateHandle[ACCOUNT_DASHBOARD_FEEDBACK_KEY] = null },
+            openRegisterMovement = openRegisterMovement && !movementsSelected.value,
+            onConsumeRegisterMovement = { backStackEntry.savedStateHandle["open_register_movement"] = false },
+        )
 }

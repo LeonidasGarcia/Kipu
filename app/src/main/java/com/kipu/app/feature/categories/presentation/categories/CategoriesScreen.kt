@@ -73,7 +73,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import com.kipu.app.ui.motion.rememberReducedMotionEnabled
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -682,7 +683,7 @@ fun QuotaBanner(
                 // Squircle Gear Icon
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.primary.copy(alpha = if (colors.isDark) 0.25f else 0.12f)),
                     contentAlignment = Alignment.Center,
@@ -778,9 +779,10 @@ fun CategoryRootCard(
     val colors = rememberKipuColors()
     val isRootActive = item.category.isActive
     val cardAlpha = if (isRootActive) 1f else 0.55f
-    val rotationAngle by animateFloatAsState(
+    val reducedMotion = rememberReducedMotionEnabled()
+    val rotationAngle = animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
-        animationSpec = tween(KipuMotionTokens.FastMillis),
+        animationSpec = tween(if (reducedMotion) 0 else KipuMotionTokens.SegmentMillis),
         label = "expand_rotation",
     )
     var showRootMenu by remember { mutableStateOf(false) }
@@ -940,7 +942,7 @@ fun CategoryRootCard(
                         tint = colors.inkSecondary,
                         modifier = Modifier
                             .size(22.dp)
-                            .rotate(rotationAngle),
+                            .graphicsLayer { rotationZ = rotationAngle.value },
                     )
                 }
             }
@@ -948,8 +950,10 @@ fun CategoryRootCard(
             // Subcategories Collapsible List
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = fadeIn(tween(KipuMotionTokens.FastMillis)) + expandVertically(tween(KipuMotionTokens.FastMillis)),
-                exit = fadeOut(tween(KipuMotionTokens.FastMillis)) + shrinkVertically(tween(KipuMotionTokens.FastMillis)),
+                enter = fadeIn(tween(if (reducedMotion) 0 else KipuMotionTokens.SubtreeEnterMillis)) +
+                    expandVertically(tween(if (reducedMotion) 0 else KipuMotionTokens.SubtreeEnterMillis)),
+                exit = fadeOut(tween(if (reducedMotion) 0 else KipuMotionTokens.QuickMillis)) +
+                    shrinkVertically(tween(if (reducedMotion) 0 else KipuMotionTokens.QuickMillis)),
             ) {
                 Column(
                     modifier = Modifier
@@ -961,9 +965,7 @@ fun CategoryRootCard(
                         var showSubMenu by remember { mutableStateOf(false) }
 
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (colors.isDark) colors.surfaceVariant.copy(alpha = 0.45f) else colors.surfaceVariant.copy(alpha = 0.4f),
-                            border = BorderStroke(1.dp, colors.border.copy(alpha = 0.5f)),
+                            color = Color.Transparent,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Row(
@@ -1020,7 +1022,7 @@ fun CategoryRootCard(
                                 Box {
                                     IconButton(
                                         onClick = { showSubMenu = true },
-                                        modifier = Modifier.size(40.dp),
+                                        modifier = Modifier.size(48.dp),
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.MoreVert,

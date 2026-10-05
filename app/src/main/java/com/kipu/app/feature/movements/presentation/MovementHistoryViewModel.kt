@@ -8,6 +8,7 @@ import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.plans.data.entitlement.offlineEntitlementRefreshTicker
 import com.kipu.app.feature.movements.domain.MovementMaintenanceRepository
 import com.kipu.app.feature.movements.domain.MovementRepository
+import com.kipu.app.feature.movements.domain.MovementNetFlowCalculator
 import com.kipu.app.feature.movements.domain.QueryMovementHistory
 import com.kipu.app.feature.movements.domain.VoidTransaction
 import com.kipu.app.feature.movements.domain.model.MovementFinancialState
@@ -75,6 +76,9 @@ data class MovementHistoryUiState(
     val detailRevisions: List<com.kipu.app.feature.movements.domain.model.MovementRevisionAudit> = emptyList(),
     val detailLoading: Boolean = false,
     val detailError: Boolean = false,
+    val totalFilteredCount: Int = 0,
+    val netByCurrency: Map<String, java.math.BigInteger> = emptyMap(),
+    val mostUsedAccountId: String? = null,
 ) {
     val hasActiveAdvancedFilters: Boolean
         get() = selectedAccountIds.isNotEmpty() ||
@@ -290,6 +294,16 @@ class MovementHistoryViewModel @Inject constructor(
                 matchesMinAmount && matchesMaxAmount && matchesDates && matchesStates && matchesCards && matchesMerchants && matchesSync
         }
 
+        val netMap = MovementNetFlowCalculator.calculate(filtered.asSequence().map { it.transaction }.asIterable())
+
+        val mostUsed = items.asSequence()
+            .filter { it.transaction.status == com.kipu.app.feature.movements.domain.model.TransactionStatus.ACTIVE }
+            .mapNotNull { it.transaction.sourceAccountId }
+            .groupingBy { it }
+            .eachCount()
+            .maxByOrNull { it.value }
+            ?.key
+
         val grouped = groupTransactionsByDate(filtered)
 
         MovementHistoryUiState(
@@ -301,6 +315,9 @@ class MovementHistoryViewModel @Inject constructor(
             selectedFilterType = filterType,
             allTransactions = items,
             filteredTransactions = grouped,
+            totalFilteredCount = filtered.size,
+            netByCurrency = netMap,
+            mostUsedAccountId = mostUsed,
             showRegisterSheet = showSheet && (sessionCoordinator.localAccess.value is LocalAccess.Available),
             selectedTransactionForVoid = voidState.selectedItem?.takeIf { it.transaction.userId == owner },
             isVoiding = voidState.isVoiding,
@@ -337,7 +354,7 @@ class MovementHistoryViewModel @Inject constructor(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Lazily,
         initialValue = MovementHistoryUiState(),
     )
 

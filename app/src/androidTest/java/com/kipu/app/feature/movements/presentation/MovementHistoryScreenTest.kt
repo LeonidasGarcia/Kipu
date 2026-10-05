@@ -290,7 +290,7 @@ class MovementHistoryScreenTest {
 
         compose.setContent {
             TestViewport {
-                EmptyMovementsState(
+                CalmEmeraldEmptyMovementsState(
                     hasActiveFilters = true,
                     onClearFilters = { clearClicked = true },
                 )
@@ -307,7 +307,7 @@ class MovementHistoryScreenTest {
     fun emptyMovementsStateWithoutFiltersShowsDefaultEmptyAndNoClearButton() {
         compose.setContent {
             TestViewport {
-                EmptyMovementsState(
+                CalmEmeraldEmptyMovementsState(
                     hasActiveFilters = false,
                     onClearFilters = null,
                 )
@@ -327,9 +327,9 @@ class MovementHistoryScreenTest {
                 appliedFilters = AdvancedFiltersState(financialStates = setOf(com.kipu.app.feature.movements.domain.model.MovementFinancialState.VOIDED))),
             onDismiss = {}, onApply = { applied = it; it.validate() }) } }
         compose.onNodeWithTag("chip_filter_voided").performScrollTo().assertIsSelected()
-        compose.onNodeWithTag("btn_reset_advanced_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("btn_reset_advanced_filters").assertIsDisplayed().performClick()
         assertEquals(null, applied)
-        compose.onNodeWithTag("btn_apply_filters").performScrollTo().performClick()
+        compose.onNodeWithTag("btn_apply_filters").assertIsDisplayed().performClick()
         assertTrue(applied!!.financialStates.isEmpty())
     }
 }

@@ -6,6 +6,8 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -14,6 +16,20 @@ import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun rememberReducedMotionEnabled(): Boolean {
+    return LocalReducedMotion.current ?: observeReducedMotionEnabled()
+}
+
+private val LocalReducedMotion = staticCompositionLocalOf<Boolean?> { null }
+
+/** One system observer per themed tree, shared by all animated components. */
+@Composable
+fun ProvideReducedMotion(content: @Composable () -> Unit) {
+    val reducedMotion = observeReducedMotionEnabled()
+    CompositionLocalProvider(LocalReducedMotion provides reducedMotion, content = content)
+}
+
+@Composable
+private fun observeReducedMotionEnabled(): Boolean {
     val context = LocalContext.current
     var reducedMotion by remember(context) { mutableStateOf(readReducedMotion(context)) }
 

@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@androidx.compose.runtime.Immutable
 data class DashboardUiState(
     val isLoading: Boolean = true,
     val dashboardData: FinancialDashboardData? = null,
@@ -51,6 +52,7 @@ data class DashboardUiState(
     val errorMessage: String? = null,
 )
 
+@androidx.compose.runtime.Immutable
 data class InstrumentsUiState(
     val isLoading: Boolean = true,
     val activeAccounts: List<Account> = emptyList(),
@@ -194,7 +196,7 @@ class AccountsViewModel @Inject constructor(
         emit(DashboardUiState(isLoading = false, errorMessage = e.message ?: "Error al cargar el dashboard"))
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
+        started = SharingStarted.Lazily,
         initialValue = DashboardUiState(isLoading = true),
     )
 
@@ -222,7 +224,7 @@ class AccountsViewModel @Inject constructor(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
+        started = SharingStarted.Lazily,
         initialValue = InstrumentsUiState(isLoading = true),
     )
 

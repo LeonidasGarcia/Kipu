@@ -71,6 +71,7 @@ class AuthViewModel @Inject constructor(
 
     fun login() {
         val currentState = _uiState.value
+        if (currentState.isLoading || currentState.cooldownSeconds > 0) return
         val emailValidation = PasswordValidator.validateEmail(currentState.email)
         if (!emailValidation.isValid) {
             _uiState.update { it.copy(emailError = (emailValidation as PasswordValidator.ValidationResult.Invalid).reason) }
@@ -114,6 +115,7 @@ class AuthViewModel @Inject constructor(
 
     fun register() {
         val currentState = _uiState.value
+        if (currentState.isLoading || currentState.cooldownSeconds > 0) return
         val emailValidation = PasswordValidator.validateEmail(currentState.email)
         if (!emailValidation.isValid) {
             _uiState.update { it.copy(emailError = (emailValidation as PasswordValidator.ValidationResult.Invalid).reason) }

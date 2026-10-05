@@ -83,7 +83,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     }
                 }
                 Text(
-                    stringResource(R.string.history_filter_draft_notice),
+                    "Personaliza los movimientos que ves",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
@@ -102,7 +102,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Free basics first: Dates
-                Text(stringResource(R.string.history_filter_basic), style = MaterialTheme.typography.titleSmall)
+                Text("Periodo y Fecha", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     KipuFilterChip(selected = draft.fromDate.isBlank() && draft.toDate.isBlank(), onClick = {
                         draft = draft.copy(fromDate = "", toDate = "")
@@ -110,23 +110,44 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     KipuFilterChip(selected = draft.fromDate == LocalDate.now().toString() && draft.toDate == draft.fromDate, onClick = {
                         draft = draft.copy(fromDate = LocalDate.now().toString(), toDate = LocalDate.now().toString())
                     }, label = { Text(stringResource(R.string.history_today)) })
-                    KipuFilterChip(selected = draft.fromDate == LocalDate.now().withDayOfMonth(1).toString() && draft.toDate == LocalDate.now().toString(), onClick = {
-                        draft = draft.copy(fromDate = LocalDate.now().withDayOfMonth(1).toString(), toDate = LocalDate.now().toString())
-                    }, label = { Text(stringResource(R.string.history_month)) })
+                    val today = LocalDate.now()
+                    listOf(
+                        Triple("7 días", today.minusDays(6), today),
+                        Triple("Este mes", today.withDayOfMonth(1), today.withDayOfMonth(today.lengthOfMonth())),
+                        Triple("Año", today.withDayOfYear(1), today.withMonth(12).withDayOfMonth(31)),
+                    ).forEach { (label, from, to) ->
+                        KipuFilterChip(selected = draft.fromDate == from.toString() && draft.toDate == to.toString(),
+                            onClick = { draft = draft.copy(fromDate = from.toString(), toDate = to.toString()) },
+                            label = { Text(label) })
+                    }
                 }
-                OutlinedButton(onClick = { dates = true }, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text(if (draft.fromDate.isBlank() && draft.toDate.isBlank()) stringResource(R.string.history_custom_dates)
-                        else "${draft.fromDate.ifBlank { "…" }} — ${draft.toDate.ifBlank { "…" }}")
+                val from = runCatching { LocalDate.parse(draft.fromDate) }.getOrNull()
+                val to = runCatching { LocalDate.parse(draft.toDate) }.getOrNull()
+                val dateFormat = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
+                OutlinedButton(onClick = { dates = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text(if (from == null && to == null) stringResource(R.string.history_custom_dates)
+                        else "${from?.format(dateFormat) ?: "…"} — ${to?.format(dateFormat) ?: "…"}")
+                }
+                if (from != null && to != null && !to.isBefore(from)) {
+                    Text("${java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1} días",
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 // Advanced / Premium sections
                 if (!allowed) {
-                    MovementAccessCard(state, onViewPlans, onVerify, onDismissRecovery)
+                    Text("Filtros avanzados · Premium", style = MaterialTheme.typography.titleSmall)
+                    Text("Cuenta · Tarjeta · Categoría · Importe · Comercio", style = MaterialTheme.typography.bodyMedium)
+                    if (state.fallbackUsed || state.recovery != HistoryAccessRecovery.IDLE ||
+                        state.accessStatus is MovementHistoryAccessDecision.RevalidationRequired) {
+                        MovementAccessCard(state, onViewPlans, onVerify, onDismissRecovery)
+                    } else {
+                        TextButton(onClick = onViewPlans, modifier = Modifier.heightIn(min = 48.dp)) { Text("Ver Premium") }
+                    }
                     OutlinedButton(
                         onClick = { showPremiumOptions = !showPremiumOptions },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                     ) {
-                        Text(if (showPremiumOptions) "Ocultar opciones Premium" else "Ver opciones Premium")
+                        Text(if (showPremiumOptions) "Ocultar filtros avanzados" else "Mostrar filtros avanzados")
                     }
                     if (showPremiumOptions) {
                         AdvancedFiltersControls(
@@ -185,7 +206,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                         onClick = { draft = MovementFilterDraft(); errors = emptyMap() },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_reset_advanced_filters")
                     ) {
-                        Text(stringResource(R.string.movements_filter_reset))
+                        Text("Limpiar")
                     }
                     Button(
                         onClick = {
@@ -225,12 +246,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                             Text(appliedText)
                         }
                     }
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    ) {
-                        Text(stringResource(R.string.history_filter_cancel))
-                    }
+
                 }
             }
     }

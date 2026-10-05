@@ -1,6 +1,8 @@
 package com.kipu.app.navigation
 
 import androidx.navigation.NavController
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import com.kipu.app.feature.plans.presentation.PlanSelectionRoute
@@ -18,11 +20,12 @@ fun NavGraphBuilder.appDestinations(
     navController: NavController,
     onAuthenticated: (userId: String) -> Unit,
     onSignOut: () -> Unit,
+    movementsSelected: MutableState<Boolean> = mutableStateOf(false),
 ) {
     authDestinations(navController = navController, onAuthenticated = onAuthenticated)
-    planSelectionDestination(navController = navController, onConfirmed = { navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) })
+    planSelectionDestination(navController = navController, onConfirmed = { navController.navigate(BIOMETRIC_ROUTE) })
     settingsDestinations(navController = navController, onSignOut = onSignOut)
-    accountsDestinations(navController = navController)
+    accountsDestinations(navController, movementsSelected, onSelectMoney = { movementsSelected.value = false })
     movementDestinations(navController = navController)
     movementsDestinations(navController = navController)
     notificationDestinations(navController = navController)

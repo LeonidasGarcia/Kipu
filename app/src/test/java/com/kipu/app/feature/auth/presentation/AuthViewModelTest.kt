@@ -35,16 +35,20 @@ class AuthViewModelTest {
     private var fakeSignInResult: Result<AuthResult> = Result.success(AuthResult.Success("user-123"))
     private var fakeRegisterResult: Result<AuthResult> = Result.success(AuthResult.ConfirmationRequired("test@example.com"))
     private var lastCapturedCredentials: AuthCredentials? = null
+    private var signInCalls = 0
+    private var registerCalls = 0
 
     private val fakeRepository = object : AuthRepository {
         override val cooldownState: StateFlow<CooldownState> = fakeCooldownState
 
         override suspend fun register(credentials: AuthCredentials): Result<AuthResult> {
+            registerCalls++
             lastCapturedCredentials = credentials
             return fakeRegisterResult
         }
 
         override suspend fun signIn(credentials: AuthCredentials): Result<AuthResult> {
+            signInCalls++
             lastCapturedCredentials = credentials
             return fakeSignInResult
         }
@@ -72,6 +76,44 @@ class AuthViewModelTest {
         assertNull(state.emailError)
         assertNull(state.passwordError)
         assertFalse(state.isLoading)
+    }
+
+    @Test fun `duplicate login while loading only dispatches once`() = runTest {
+        val viewModel = AuthViewModel(fakeRepository)
+        viewModel.onEmailChanged("test@example.com")
+        viewModel.onPasswordChanged("Password123")
+        viewModel.login()
+        assertTrue(viewModel.uiState.value.isLoading)
+        viewModel.login()
+        advanceUntilIdle()
+        assertEquals(1, signInCalls)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test fun `registration with policy compliant password needs no special character`() = runTest {
+        val viewModel = AuthViewModel(fakeRepository)
+        viewModel.onEmailChanged("test@example.com")
+        viewModel.onPasswordChanged("Password123")
+        viewModel.register()
+        assertEquals("", viewModel.uiState.value.password)
+        assertTrue(viewModel.uiState.value.isLoading)
+        advanceUntilIdle()
+        assertEquals(1, registerCalls)
+        assertEquals("test@example.com", viewModel.uiState.value.confirmationRequiredEmail)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test fun `network error keeps email but clears transient password`() = runTest {
+        fakeSignInResult = Result.failure(Exception("Se requiere conexión a internet para iniciar sesión."))
+        val viewModel = AuthViewModel(fakeRepository)
+        viewModel.onEmailChanged("test@example.com")
+        viewModel.onPasswordChanged("Password123")
+        viewModel.login()
+        advanceUntilIdle()
+        assertEquals("test@example.com", viewModel.uiState.value.email)
+        assertEquals("", viewModel.uiState.value.password)
+        assertNotNull(viewModel.uiState.value.generalError)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     @Test

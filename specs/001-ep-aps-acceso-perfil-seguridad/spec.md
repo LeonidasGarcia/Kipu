@@ -4,7 +4,9 @@
 
 **Created**: 2026-09-20
 
-**Status**: Approved
+**Status**: Refined
+
+**Refined**: 2026-10-05 — Implementación visual de acceso y onboarding autorizada por el usuario; conserva HU-01/HU-02/HU-03 y el destino posterior de HU-52.
 
 **Input**: Especificar EP-APS para el incremento del Sprint 1 con HU-01 a HU-05, manteniendo HU-06 como evolución futura fuera del alcance implementable.
 
@@ -406,6 +408,15 @@ Como usuario de Kipu, quiero habilitar un desbloqueo biométrico opcional, para 
 - Una sesión previa permite el núcleo manual local definido por el producto; primer login, recuperación y validaciones remotas requieren conectividad.
 
 ## Definition of Done
+
+### Refinamiento visual de acceso — 2026-10-05
+
+- VIS-APS-001: Login, registro y recuperación usan componentes Compose reales y adaptables según las ocho referencias de `docs/ux-ui/mockups/Sesion/`, sin usar pantallas rasterizadas.
+- VIS-APS-002: Introducción de exactamente tres páginas con swipe, siguiente, atrás, indicador y salida final/omitir. La tercera página usa la referencia aprobada `Omboarding 3 - Corregido.png`: ilustración de privacidad, «Tus finanzas son tuyas» y su descripción, CTA «Empezar» y «Ya tengo una cuenta». Ambas acciones finales completan el checkpoint y llevan al acceso existente.
+- VIS-APS-003: Persistir por instalación página y finalización de la introducción. Una sesión restaurable y los callbacks de Auth continúan por su flujo existente; completar la introducción lleva al acceso. No sustituye la selección de plan ni biometría posteriores al registro.
+- VIS-APS-004: Conservar la política aprobada de 8–72 caracteres, letra y número; confirmar contraseña en registro. La recuperación nunca revela existencia de cuentas: adaptar el texto del PNG de error a formato inválido o fallo de solicitud y usar confirmación neutra para correos válidos.
+- VIS-APS-005: Insets/IME, scroll, controles de al menos 48dp, semántica accesible, estados loading/error/success y motion de 150–350ms que respeta Reduce Motion. Reutilizar Inter y tokens existentes sin modificar globalmente el Design System. Ajustar decoración y espaciados al alto disponible para que el registro quepa con teclado cerrado en A16 y tamaños similares; mantener scroll con teclado, errores o texto ampliado. El cambio de pestaña conserva un único formulario y anima la aparición/retiro de los campos adicionales sin sustituir la pantalla.
+- VIS-APS-006: Validar dominio/ViewModels, navegación, pager y persistencia, compilar, ejecutar lint y comparar las pantallas renderizadas con referencias, registrando límites de proveedor/dispositivo.
 
 - Los 22 escenarios Gherkin oficiales de HU-01 a HU-05 pasan con evidencia reproducible.
 - Los escenarios complementarios de cambio de cuenta, sesión vencida, interrupciones, revocación externa, aislamiento de preferencias, registros seguros y accesibilidad cuentan con evidencia.

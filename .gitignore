@@ -60,9 +60,23 @@ docs/audits/evidence/
 # Local workspace, agent and test baseline files
 .backups/
 .mcp.json
+.tools/powerbi-report-mcp/
+.codex/config.toml
+.agents/mcp_config.json
 .om-project
 AGENTS.md
 CLAUDE.md
 supabase/local-baseline/
 supabase/sprint_3_remote_baseline_routines.sql
+
+# Local captures, device traces and exploratory notes
+/scratch/
+/finplan.mp4
+/finplan*.png
+/kipu_now.png
+/PERFORMANCE_AUDIT.md
+/PERFORMANCE_REPORT.md
+/docs/ux-ui/evidence/auth-onboarding/
+/docs/ux-ui/implementation-evidence/*
+!/docs/ux-ui/implementation-evidence/README.md
 

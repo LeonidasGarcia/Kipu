@@ -13,7 +13,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,32 +23,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalDensity
+import java.math.BigInteger
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.PieChart
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -59,15 +59,12 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
-import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -88,11 +85,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -102,7 +101,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kipu.app.core.finance.domain.CreditCalculations
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.feature.accounts.domain.model.Account
@@ -110,50 +108,17 @@ import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.AccountWithBalance
 import com.kipu.app.feature.accounts.domain.model.Card as DomainCard
-import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.feature.accounts.presentation.components.CreditCardSummaryCard
 import com.kipu.app.feature.movements.presentation.QuickMovementBottomSheet
 import com.kipu.app.feature.notifications.presentation.UnreadNotificationBadge
 import com.kipu.app.ui.component.LocalBalanceMasked
-import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
-import com.kipu.app.ui.component.symbol
-import com.kipu.app.ui.theme.rememberKipuColors
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
+import com.kipu.app.ui.theme.rememberCalmEmeraldColors
+import com.kipu.app.ui.theme.KipuMotionTokens
+import com.kipu.app.ui.motion.rememberReducedMotionEnabled
+import kotlinx.coroutines.launch
 
-/**
- * Design tokens strictly aligned with docs/design/KIPU_CUENTAS_Y_TARJETAS_IMPLEMENTATION_PLAN.md
- */
-private object KipuColors {
-    val Primary: Color @Composable get() = rememberKipuColors().primary
-    val OnPrimary: Color @Composable get() = rememberKipuColors().onPrimary
-    val PrimaryText: Color @Composable get() = rememberKipuColors().primaryText
-    val PrimaryDark: Color @Composable get() = if (rememberKipuColors().isDark) Color(0xFF074842) else Color(0xFF094E49)
-    val PrimaryContainer: Color @Composable get() = rememberKipuColors().primaryContainer
-    val Income: Color @Composable get() = rememberKipuColors().positive
-    val Expense: Color @Composable get() = rememberKipuColors().debt
-    val Warning: Color @Composable get() = rememberKipuColors().warning
-    val WarningContainer: Color @Composable get() = rememberKipuColors().warningContainer
-    val WarningBadge: Color @Composable get() = if (rememberKipuColors().isDark) Color(0xFF713F12) else Color(0xFFFDE68A)
-    val WarningText: Color @Composable get() = rememberKipuColors().onWarningContainer
-    val Surface: Color @Composable get() = rememberKipuColors().surface
-    val SurfaceVariant: Color @Composable get() = rememberKipuColors().surfaceVariant
-    val Background: Color @Composable get() = rememberKipuColors().background
-    val Border: Color @Composable get() = rememberKipuColors().border
-    val Ink: Color @Composable get() = rememberKipuColors().inkPrimary
-    val TextMuted: Color @Composable get() = rememberKipuColors().inkSecondary
-    val TextMutedOnVariant: Color @Composable get() = if (rememberKipuColors().isDark) rememberKipuColors().inkSecondary else Color(0xFF475569)
-}
-
-/**
- * DashboardScreen implementing the 4 R6 states from Kipu V4.2:
- * 1. Empty State: Sin instrumentos registrados
- * 2. Active Dashboard: Tarjetas en lista compacta con Hero gradiente #0F766E
- * 3. Free Plan Limit: Banner ámbar de límite alcanzado 4/4
- * 4. Privacy Mode: Crossfade instantáneo a saldos ofuscados (S/ •••••••• y S/ ••••••)
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
@@ -171,6 +136,8 @@ fun DashboardScreen(
     onNavigateToPlans: () -> Unit = {},
     onNavigateToMovements: () -> Unit = {},
     onToggleMasked: (() -> Unit)? = null,
+    openRegisterMovement: Boolean = false,
+    onConsumeRegisterMovement: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val state by viewModel.dashboardUiState.collectAsStateWithLifecycle()
@@ -180,7 +147,9 @@ fun DashboardScreen(
     var showRegisterMovementSheet by rememberSaveable { mutableStateOf(false) }
     var isArchivedExpanded by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val isMasked = LocalBalanceMasked.current
+    val vmMasked by viewModel.isMasked.collectAsStateWithLifecycle()
+    val isMasked = vmMasked || LocalBalanceMasked.current
+    val emeraldColors = rememberCalmEmeraldColors()
 
     LaunchedEffect(feedbackMessage) {
         feedbackMessage?.let {
@@ -189,6 +158,14 @@ fun DashboardScreen(
         }
     }
     LaunchedEffect(viewModel) { viewModel.refreshCreditUtilizationNotifications() }
+
+    // Respond to root navigation register movement trigger
+    LaunchedEffect(openRegisterMovement) {
+        if (openRegisterMovement) {
+            showRegisterMovementSheet = true
+            onConsumeRegisterMovement()
+        }
+    }
 
     val data = state.dashboardData
     val isEmptyState = !state.isLoading && state.errorMessage == null &&
@@ -203,53 +180,104 @@ fun DashboardScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = "Mi dinero",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = KipuColors.Ink,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Avatar circle with MC initials
+                            Surface(
+                                shape = CircleShape,
+                                color = emeraldColors.incomeBg,
+                                border = BorderStroke(1.dp, emeraldColors.incomeBorder),
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        text = "MC",
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                        ),
+                                        color = emeraldColors.primaryDeep,
+                                    )
+                                }
+                            }
+                            Column {
+                                Text(
+                                    text = "Bienvenido",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = emeraldColors.secondaryMuted,
+                                )
+                                Text(
+                                    text = "Mi dinero",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 18.sp,
+                                    ),
+                                    color = emeraldColors.primaryText,
+                                )
+                            }
+                        }
                     },
                     actions = {
-                        // Privacy toggle in TopBar
-                        IconButton(
-                            onClick = {
-                                if (onToggleMasked != null) {
-                                    onToggleMasked()
-                                } else {
-                                    viewModel.toggleMasked()
-                                }
-                            },
-                            modifier = Modifier.semantics {
-                                contentDescription = if (isMasked) "Mostrar saldos" else "Ocultar saldos"
-                            },
+                        // Small white circular notification button with 48dp touch target
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onNavigateToNotifications),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                imageVector = if (isMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = null,
-                                tint = if (isMasked) KipuColors.PrimaryText else KipuColors.TextMuted,
-                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = emeraldColors.surfaceCard,
+                                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    UnreadNotificationBadge(
+                                        unreadCount = unreadNotificationCount,
+                                        onClick = onNavigateToNotifications,
+                                    )
+                                }
+                            }
                         }
 
-                        UnreadNotificationBadge(
-                            unreadCount = unreadNotificationCount,
-                            onClick = onNavigateToNotifications,
-                        )
+                        Spacer(modifier = Modifier.width(4.dp))
 
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription = "Configuración y filtros",
-                                tint = KipuColors.TextMuted,
-                            )
+                        // Small white circular settings button with 48dp touch target
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .clickable(onClick = onNavigateToSettings),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = emeraldColors.surfaceCard,
+                                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                                modifier = Modifier.size(38.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Configuración",
+                                        tint = emeraldColors.secondaryMuted,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = KipuColors.Background,
+                        containerColor = emeraldColors.background,
                     ),
                 )
             },
-            containerColor = KipuColors.Background,
+            containerColor = emeraldColors.background,
             modifier = modifier,
         ) { innerPadding ->
             Box(
@@ -260,7 +288,7 @@ fun DashboardScreen(
                 if (state.isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center),
-                        color = KipuColors.PrimaryText,
+                        color = emeraldColors.primaryDeep,
                     )
                 } else if (state.errorMessage != null) {
                     Text(
@@ -298,7 +326,7 @@ fun DashboardScreen(
                         onManageQuota = { showQuotaSelection = true },
                         onNavigateToPlans = onNavigateToPlans,
                         onNavigateToNewAccount = onNavigateToNewAccount,
-                        onRegisterMovement = { showRegisterMovementSheet = true },
+                        onNavigateToNewCard = onNavigateToNewCard,
                     )
                 }
             }
@@ -324,9 +352,7 @@ fun DashboardScreen(
     if (showRegisterMovementSheet) {
         QuickMovementBottomSheet(
             onDismissRequest = { showRegisterMovementSheet = false },
-            onNavigateToNewAccount = {
-                onNavigateToNewAccount()
-            },
+            onNavigateToNewAccount = onNavigateToNewAccount,
             onSaved = { _ ->
                 showRegisterMovementSheet = false
             },
@@ -338,7 +364,7 @@ fun DashboardScreen(
 }
 
 /**
- * State 1: Empty State (Sin instrumentos registrados)
+ * State 1: Empty Dashboard Content
  */
 @Composable
 private fun EmptyDashboardContent(
@@ -349,127 +375,192 @@ private fun EmptyDashboardContent(
     onNavigateToPlans: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // Hero zero balance
         item {
-            Spacer(modifier = Modifier.height(4.dp))
-            // Quota bar: Plan Free 0 de 4 cuentas
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = emeraldColors.heroGradientStart),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(22.dp))
+                    .drawBehind {
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.06f),
+                            radius = size.width * 0.45f,
+                            center = Offset(size.width * 0.95f, size.height * 0.1f),
+                            style = Stroke(width = 30f),
+                        )
+                    },
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Surface(shape = CircleShape, color = Color(0xFF6EE7B7), modifier = Modifier.size(7.dp)) {}
+                            Text(
+                                text = "TOTAL DISPONIBLE",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+                                color = Color(0xFFA7F3D0),
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "S/ 0.00",
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 32.sp,
+                            fontFeatureSettings = "tnum",
+                        ),
+                        color = Color.White,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Empieza agregando tu primera cuenta o efectivo",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f),
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = emeraldColors.heroSubcardBg,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("En cuentas", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = Color.White.copy(alpha = 0.8f))
+                                Text("S/ 0.00", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp), color = Color.White)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = emeraldColors.heroSubcardBg,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("En efectivo", style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp), color = Color.White.copy(alpha = 0.8f))
+                                Text("S/ 0.00", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp), color = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Plan strip
+        item {
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = KipuColors.Surface,
-                border = BorderStroke(1.dp, KipuColors.Border),
+                shape = RoundedCornerShape(14.dp),
+                color = emeraldColors.surfaceCard,
+                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                FlowRow(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Surface(
                             shape = CircleShape,
-                            color = KipuColors.Income,
-                            modifier = Modifier.size(8.dp),
-                        ) {}
+                            color = emeraldColors.incomeBg,
+                            modifier = Modifier.size(34.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.PieChart,
+                                    contentDescription = null,
+                                    tint = emeraldColors.incomeEmerald,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
                         Column {
                             Text(
-                                text = "Plan Free • $quotaCount de $maxQuota instrumentos",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = KipuColors.Ink,
+                                text = "Cupo Free · $quotaCount de $maxQuota cuentas y tarjetas",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = emeraldColors.primaryText,
                             )
                             Text(
-                                text = "Cuentas y tarjetas cuentan como instrumentos",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = KipuColors.TextMuted,
+                                text = "Te quedan ${(maxQuota - quotaCount).coerceAtLeast(0)} cuentas y tarjetas disponibles",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                color = emeraldColors.secondaryMuted,
                             )
                         }
                     }
                     Text(
                         text = "Ver planes >",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = KipuColors.PrimaryText,
-                        modifier = Modifier.clickable(onClick = onNavigateToPlans),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = emeraldColors.primaryDeep,
+                        modifier = Modifier
+                            .clickable(onClick = onNavigateToPlans)
+                            .padding(horizontal = 8.dp, vertical = 12.dp),
                     )
                 }
             }
         }
 
+        // Section Title: Cuentas y efectivo
         item {
-            // Total cero card: S/ 0.00 PEN
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "Cuentas y efectivo",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = emeraldColors.primaryText,
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = emeraldColors.pillTrack,
+                    ) {
+                        Text(
+                            text = "0 registradas",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = emeraldColors.secondaryMuted,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        // Central Empty Card: Aún no tienes cuentas registradas
+        item {
             Card(
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = KipuColors.Surface),
-                border = BorderStroke(1.dp, KipuColors.Border),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(modifier = Modifier.padding(18.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "TOTAL DISPONIBLE REAL",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = KipuColors.TextMuted,
-                            letterSpacing = 0.5.sp,
-                        )
-                        Text(
-                            text = "PEN / S/",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = KipuColors.TextMuted,
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "S/ 0.00 PEN",
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFeatureSettings = "tnum",
-                        ),
-                        color = KipuColors.Ink,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = KipuColors.TextMuted,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = "Registra tu primera cuenta para conocer tu liquidez real neta.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = KipuColors.TextMuted,
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            // Central Welcome Card: Aún no tienes cuentas
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = KipuColors.Surface),
-                border = BorderStroke(1.dp, KipuColors.Border),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
@@ -477,50 +568,49 @@ private fun EmptyDashboardContent(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = KipuColors.PrimaryContainer,
-                        modifier = Modifier.size(64.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = emeraldColors.incomeBg,
+                        border = BorderStroke(1.dp, emeraldColors.incomeBorder),
+                        modifier = Modifier.size(52.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.AccountBalanceWallet,
                                 contentDescription = null,
-                                tint = KipuColors.PrimaryText,
-                                modifier = Modifier.size(32.dp),
+                                tint = emeraldColors.incomeEmerald,
+                                modifier = Modifier.size(26.dp),
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = "Aún no tienes cuentas",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = KipuColors.Ink,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Centraliza tus cuentas bancarias, tarjetas de crédito y efectivo en un solo lugar seguro para el control total de tus finanzas.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = KipuColors.TextMuted,
+                        text = "Aún no tienes cuentas registradas",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = emeraldColors.primaryText,
                         textAlign = TextAlign.Center,
-                        lineHeight = 20.sp,
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Registra tus cuentas bancarias, billeteras digitales o efectivo físico para tener control de tus finanzas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = emeraldColors.secondaryMuted,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp,
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = onNavigateToNewAccount,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = KipuColors.Primary,
-                            contentColor = KipuColors.OnPrimary,
+                            containerColor = emeraldColors.primaryDeep,
+                            contentColor = emeraldColors.onPrimaryDeep,
                         ),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
                     ) {
                         Text(
-                            text = "+ Agregar mi primera cuenta",
+                            text = "+ Agregar primera cuenta",
                             fontWeight = FontWeight.Bold,
-                            color = KipuColors.OnPrimary,
+                            color = emeraldColors.onPrimaryDeep,
                             style = MaterialTheme.typography.labelLarge,
                         )
                     }
@@ -528,90 +618,112 @@ private fun EmptyDashboardContent(
             }
         }
 
+        // Tarjetas de crédito empty
         item {
-            // Section: OPCIONES RECOMENDADAS
-            Text(
-                text = "OPCIONES RECOMENDADAS",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = KipuColors.TextMuted,
-                letterSpacing = 0.5.sp,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = "Tarjetas de crédito",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = emeraldColors.primaryText,
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = emeraldColors.pillTrack,
+                    ) {
+                        Text(
+                            text = "0 activas",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = emeraldColors.secondaryMuted,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
             Card(
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = KipuColors.Surface),
-                border = BorderStroke(1.dp, KipuColors.Border),
+                colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column {
-                    RecommendedOptionItem(
-                        icon = Icons.Default.AccountBalance,
-                        iconContainerColor = Color(0xFFE0F2FE),
-                        iconTint = Color(0xFF0284C7),
-                        title = "Cuenta de sueldo o ahorros",
-                        subtitle = "BCP, BBVA, Interbank, Scotiabank",
-                        onClick = onNavigateToNewAccount,
-                    )
-                    Surface(
-                        color = KipuColors.Border,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .padding(start = 68.dp),
-                    ) {}
-                    RecommendedOptionItem(
-                        icon = Icons.Default.CreditCard,
-                        iconContainerColor = Color(0xFFEDE9FE),
-                        iconTint = Color(0xFF7C3AED),
-                        title = "Tarjeta de crédito",
-                        subtitle = "Monitorea fechas de corte y líneas",
-                        onClick = onNavigateToNewCard,
-                    )
-                    Surface(
-                        color = KipuColors.Border,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .padding(start = 68.dp),
-                    ) {}
-                    RecommendedOptionItem(
-                        icon = Icons.Default.Payments,
-                        iconContainerColor = Color(0xFFDCFCE7),
-                        iconTint = KipuColors.Income,
-                        title = "Efectivo o Billetera digital",
-                        subtitle = "Control diario de billetes, Yape o Plin",
-                        onClick = onNavigateToNewAccount,
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (emeraldColors.isDark) Color(0xFF1E293B) else Color(0xFFF1F5F9),
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CreditCard,
+                                    contentDescription = null,
+                                    tint = emeraldColors.secondaryMuted,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "Sin tarjetas de crédito vinculadas",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = emeraldColors.primaryText,
+                            )
+                            Text(
+                                text = "Controla límites de crédito y fechas de pago",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = emeraldColors.secondaryMuted,
+                            )
+                        }
+                    }
+                    TextButton(onClick = onNavigateToNewCard, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text("+ Vincular", fontWeight = FontWeight.Bold, color = emeraldColors.primaryDeep)
+                    }
                 }
             }
         }
 
+        // Privacy Guarantee Card
         item {
-            // Local Privacy Security Note
             Surface(
                 shape = RoundedCornerShape(12.dp),
-                color = KipuColors.PrimaryContainer,
-                border = BorderStroke(1.dp, if (rememberKipuColors().isDark) KipuColors.PrimaryText else Color(0xFFBBF7D0)),
+                color = emeraldColors.incomeBg,
+                border = BorderStroke(1.dp, emeraldColors.incomeBorder),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Lock,
+                        imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = KipuColors.PrimaryText,
-                        modifier = Modifier.size(18.dp),
+                        tint = emeraldColors.incomeEmerald,
+                        modifier = Modifier.size(16.dp),
                     )
                     Text(
-                        text = "Privacidad Kipu: Cifrado local seguro en tu dispositivo. No requerimos claves bancarias ni contraseñas transaccionales.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KipuColors.PrimaryText,
-                        lineHeight = 18.sp,
+                        text = "Tus datos permanecen privados y protegidos. Puedes comenzar agregando una cuenta de ahorros o el efectivo que llevas contigo.",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = emeraldColors.primaryDeep,
+                        lineHeight = 16.sp,
                     )
                 }
             }
@@ -620,173 +732,8 @@ private fun EmptyDashboardContent(
     }
 }
 
-@Composable
-private fun RecommendedOptionItem(
-    icon: ImageVector,
-    iconContainerColor: Color,
-    iconTint: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val (effectiveIconContainer, effectiveIconTint) = dashboardPastelColors(iconContainerColor, iconTint)
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = effectiveIconContainer,
-            modifier = Modifier.size(42.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                tint = effectiveIconTint,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = KipuColors.Ink,
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = KipuColors.TextMuted,
-            )
-        }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.NavigateNext,
-            contentDescription = null,
-            tint = KipuColors.TextMuted,
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
-@Composable
-private fun dashboardPastelColors(container: Color, foreground: Color): Pair<Color, Color> {
-    return when (container) {
-        Color(0xFFE0F2FE) -> if (rememberKipuColors().isDark) Color(0xFF0C4A6E) to Color(0xFF7DD3FC)
-            else container to Color(0xFF075985)
-        Color(0xFFEDE9FE) -> if (rememberKipuColors().isDark) Color(0xFF4C1D95) to Color(0xFFC4B5FD)
-            else container to Color(0xFF5B21B6)
-        Color(0xFFDCFCE7) -> if (rememberKipuColors().isDark) Color(0xFF14532D) to Color(0xFF86EFAC)
-            else container to Color(0xFF166534)
-        Color(0xFFDBEAFE) -> if (rememberKipuColors().isDark) Color(0xFF1E3A8A) to Color(0xFF93C5FD)
-            else container to Color(0xFF1E40AF)
-        Color(0xFFFEE2E2) -> if (rememberKipuColors().isDark) Color(0xFF7F1D1D) to Color(0xFFFCA5A5)
-            else container to Color(0xFFB91C1C)
-        Color(0xFFFEF3C7) -> if (rememberKipuColors().isDark) Color(0xFF78350F) to Color(0xFFFCD34D)
-            else container to Color(0xFF92400E)
-        Color(0xFFF3E8FF) -> if (rememberKipuColors().isDark) Color(0xFF581C87) to Color(0xFFD8B4FE)
-            else container to Color(0xFF6B21A8)
-        Color(0xFFCFFAFE), Color(0xFFCCFBF1) -> if (rememberKipuColors().isDark) Color(0xFF134E4A) to Color(0xFF5EEAD4)
-            else container to Color(0xFF0E7490)
-        Color(0xFFF1F5F9) -> if (rememberKipuColors().isDark) Color(0xFF334155) to Color(0xFFCBD5E1)
-            else container to Color(0xFF334155)
-        else -> if (rememberKipuColors().isDark) rememberKipuColors().surfaceVariant to rememberKipuColors().inkPrimary
-            else container to foreground
-    }
-}
-
 /**
- * Shared action group containing "Añadir instrumento" (SmallFloatingActionButton with quota lock badge)
- * and "Registrar" (ExtendedFloatingActionButton).
- * Touch targets are maintained >= 48dp.
- */
-@Composable
-private fun DashboardActionGroup(
-    isQuotaReached: Boolean,
-    onNavigateToNewAccount: () -> Unit,
-    onRegisterMovement: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Secondary action: Añadir instrumento
-        Box {
-            SmallFloatingActionButton(
-                onClick = onNavigateToNewAccount,
-                containerColor = KipuColors.Surface,
-                contentColor = KipuColors.PrimaryText,
-                shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 3.dp),
-                modifier = Modifier
-                    .size(48.dp)
-                    .semantics { contentDescription = "Añadir instrumento" },
-            ) {
-                Icon(
-                    imageVector = Icons.Default.AccountBalance,
-                    contentDescription = "Añadir instrumento",
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            if (isQuotaReached) {
-                Surface(
-                    shape = CircleShape,
-                    color = KipuColors.Warning,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .align(Alignment.TopEnd),
-                    border = BorderStroke(1.dp, Color.White),
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.Lock,
-                            contentDescription = "Cupo alcanzado",
-                            tint = Color.White,
-                            modifier = Modifier.size(9.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        // Primary action: Registrar movimiento
-        ExtendedFloatingActionButton(
-            onClick = onRegisterMovement,
-            containerColor = KipuColors.Primary,
-            contentColor = KipuColors.OnPrimary,
-            shape = CircleShape,
-            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                )
-            },
-            text = {
-                Text(
-                    text = "Registrar",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            },
-            modifier = Modifier
-                .heightIn(min = 48.dp)
-                .semantics { contentDescription = "Registrar movimiento" },
-        )
-    }
-}
-
-/**
- * States 2, 3, 4: Active Dashboard with Hero Gradient, Compact Cards, Amber Limit Banner, and Privacy Crossfades
+ * State 2, 3, 4: Active Dashboard Content
  */
 @Composable
 private fun ActiveDashboardContent(
@@ -801,11 +748,11 @@ private fun ActiveDashboardContent(
     onCardClick: (String) -> Unit,
     onManageQuota: () -> Unit,
     onNavigateToPlans: () -> Unit,
-    onNavigateToNewAccount: () -> Unit = {},
-    onRegisterMovement: () -> Unit = {},
-    bottomContentPadding: Dp = 24.dp,
+    onNavigateToNewAccount: () -> Unit,
+    onNavigateToNewCard: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
     val computableCount = data?.activeComputableCount ?: instruments.activeComputableCount
     val maxQuota = data?.maxFreeQuota ?: instruments.maxFreeQuota
     val isQuotaReached = computableCount >= maxQuota
@@ -813,12 +760,29 @@ private fun ActiveDashboardContent(
     val liquidAccounts = data?.liquidAccounts.orEmpty()
     val activeCreditCards = data?.creditCards.orEmpty().filter { !it.card.isArchived }
 
-    val bankAccountsTotal = liquidAccounts
-        .filter { it.account.type != AccountType.CASH }
-        .sumOf { it.balance.minorUnits }
-    val cashAccountsTotal = liquidAccounts
-        .filter { it.account.type == AccountType.CASH }
-        .sumOf { it.balance.minorUnits }
+    val bankAccountsByCurrency = remember(liquidAccounts) {
+        val map = mutableMapOf<Currency, BigInteger>()
+        liquidAccounts.filter { it.account.type != AccountType.CASH }.forEach { item ->
+            val curr = item.balance.currency
+            map[curr] = map.getOrDefault(curr, BigInteger.ZERO).add(BigInteger.valueOf(item.balance.minorUnits))
+        }
+        if (map.isEmpty()) map[Currency.PEN] = BigInteger.ZERO
+        map
+    }
+
+    val cashAccountsByCurrency = remember(liquidAccounts) {
+        val map = mutableMapOf<Currency, BigInteger>()
+        liquidAccounts.filter { it.account.type == AccountType.CASH }.forEach { item ->
+            val curr = item.balance.currency
+            map[curr] = map.getOrDefault(curr, BigInteger.ZERO).add(BigInteger.valueOf(item.balance.minorUnits))
+        }
+        if (map.isEmpty()) map[Currency.PEN] = BigInteger.ZERO
+        map
+    }
+
+    val hasUsd = (data?.totalUsd != null && data.totalUsd.minorUnits != 0L) ||
+        liquidAccounts.any { it.balance.currency == Currency.USD } ||
+        instruments.activeAccounts.any { it.currency.name == "USD" }
 
     val archivedAccounts = instruments.archivedAccounts
     val archivedCreditCardsWithDebt = data?.creditCards.orEmpty().filter {
@@ -829,9 +793,10 @@ private fun ActiveDashboardContent(
     }
     val totalArchivedCount = archivedAccounts.size + archivedCreditCardsWithDebt.size + archivedCardsWithoutDebt.size
 
-    val chevronRotation by animateFloatAsState(
+    val reducedMotion = rememberReducedMotionEnabled()
+    val chevronRotation = animateFloatAsState(
         targetValue = if (isArchivedExpanded) 180f else 0f,
-        animationSpec = tween(durationMillis = 250),
+        animationSpec = tween(durationMillis = if (reducedMotion) 0 else KipuMotionTokens.SegmentMillis),
         label = "archivedChevronRotation",
     )
 
@@ -839,596 +804,387 @@ private fun ActiveDashboardContent(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // State 3: Amber Alert Banner when Free Plan limit is reached
-        item {
-            AnimatedVisibility(
-                visible = isQuotaReached,
-                enter = expandVertically(tween(300)) + fadeIn(tween(250)),
-                exit = shrinkVertically(tween(250)) + fadeOut(tween(200)),
-            ) {
-                Card(
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = KipuColors.WarningContainer),
-                    border = BorderStroke(1.dp, KipuColors.Warning),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        // Privacy Banner when active
+        if (isMasked) {
+            item(key = "privacy_banner") {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color(0xFF093E35),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 4.dp),
+                        .padding(top = 2.dp),
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = KipuColors.Warning,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                                Text(
-                                    text = "Límite alcanzado",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = KipuColors.WarningText,
-                                )
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = KipuColors.WarningBadge,
-                            ) {
-                                Text(
-                                    text = "$computableCount / $maxQuota instrumentos",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = KipuColors.WarningText,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Has ocupado los $maxQuota instrumentos disponibles de tu plan Free (cuentas y tarjetas). Para añadir más entidades o billeteras digitales, pasa a Kipu Pro.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = KipuColors.WarningText,
-                            lineHeight = 18.sp,
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Button(
-                            onClick = onNavigateToPlans,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = KipuColors.Primary,
-                                contentColor = KipuColors.OnPrimary,
-                            ),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Security,
-                                    contentDescription = null,
-                                    tint = KipuColors.OnPrimary,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                                Text(
-                                    text = "Pasar a Pro (Instrumentos Ilimitados)",
-                                    fontWeight = FontWeight.Bold,
-                                    color = KipuColors.OnPrimary,
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                            }
-                        }
-                        if (computableCount > maxQuota) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            TextButton(
-                                onClick = onManageQuota,
-                                modifier = Modifier.align(Alignment.CenterHorizontally),
-                            ) {
-                                Text(
-                                    text = "Elegir instrumentos disponibles",
-                                    color = KipuColors.PrimaryText,
-                                    fontWeight = FontWeight.SemiBold,
-                                    style = MaterialTheme.typography.labelMedium,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Quota bar when NOT reached
-        if (!isQuotaReached) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = KipuColors.Surface,
-                    border = BorderStroke(1.dp, KipuColors.Border),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f),
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = KipuColors.Income,
-                                modifier = Modifier.size(8.dp),
-                            ) {}
-                            Column {
-                                Text(
-                                    text = "Plan Free • $computableCount de $maxQuota instrumentos",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = KipuColors.Ink,
-                                )
-                                Text(
-                                    text = "Cuentas y tarjetas cuentan como instrumentos",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = KipuColors.TextMuted,
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.VisibilityOff,
+                                contentDescription = null,
+                                tint = Color(0xFFA7F3D0),
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Text(
+                                text = "Modo privacidad activado · Toca el ojo para revelar",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium, fontSize = 12.sp),
+                                color = Color.White,
+                            )
                         }
-                        Text(
-                            text = "Ver planes >",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = KipuColors.PrimaryText,
-                            modifier = Modifier.clickable(onClick = onNavigateToPlans),
-                        )
+                        IconButton(
+                            onClick = onToggleMasked,
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Desactivar modo privacidad",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp),
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // State 2 & 4: Hero Gradient Card (#0F766E) with Crossfade privacy transitions
-        item {
-            Box(
+        // 1. HERO FIRST in Active Dashboard (deep emerald 22dp rounded)
+        item(key = "dashboard_hero") {
+            Card(
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = emeraldColors.heroGradientStart),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(KipuColors.Primary, KipuColors.PrimaryDark),
-                        ),
-                    )
-                    .padding(20.dp),
+                    .clip(RoundedCornerShape(22.dp))
+                    .drawBehind {
+                        // Subtle decorative arcs
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.05f),
+                            radius = size.width * 0.45f,
+                            center = Offset(size.width * 0.95f, size.height * 0.15f),
+                            style = Stroke(width = 30f),
+                        )
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.03f),
+                            radius = size.width * 0.7f,
+                            center = Offset(size.width * 0.95f, size.height * 0.15f),
+                            style = Stroke(width = 20f),
+                        )
+                    },
             ) {
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    // Responsive Hero header: Single compact row in normal scale,
-                    // separate rows/wrapping by elements with intrinsic width when fontScale > 1.15
-                    val fontScale = LocalDensity.current.fontScale
-                    val isLargeFont = fontScale > 1.15f
-
-                    if (isLargeFont) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    modifier = Modifier.weight(1f, fill = false),
-                                ) {
-                                    Text(
-                                        text = "TOTAL DISPONIBLE",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color.White,
-                                        letterSpacing = 0.5.sp,
-                                    )
-                                    if (!isMasked) {
-                                        Text(text = "•", color = Color.White.copy(alpha = 0.6f))
-                                    }
-                                }
-
-                                IconButton(
-                                    onClick = onToggleMasked,
-                                    modifier = Modifier.size(48.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = if (isMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isMasked) "Mostrar saldos" else "Ocultar saldos",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
-
-                            if (isMasked || isQuotaReached) {
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    if (isMasked) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color.White.copy(alpha = 0.2f),
-                                        ) {
-                                            Text(
-                                                text = "🔒 Modo Privado",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color.White,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                maxLines = 1,
-                                                softWrap = false,
-                                            )
-                                        }
-                                    }
-                                    if (isQuotaReached) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color.White.copy(alpha = 0.15f),
-                                        ) {
-                                            Text(
-                                                text = "● En tiempo real",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.White,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                maxLines = 1,
-                                                softWrap = false,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(
-                                    text = "TOTAL DISPONIBLE",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White,
-                                    letterSpacing = 0.5.sp,
-                                )
-                                if (isMasked) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color.White.copy(alpha = 0.2f),
-                                    ) {
-                                        Text(
-                                            text = "🔒 Modo Privado",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            maxLines = 1,
-                                            softWrap = false,
-                                        )
-                                    }
-                                } else {
-                                    Text(text = "•", color = Color.White.copy(alpha = 0.6f))
-                                }
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                if (isQuotaReached) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color.White.copy(alpha = 0.15f),
-                                    ) {
-                                        Text(
-                                            text = "● En tiempo real",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            maxLines = 1,
-                                            softWrap = false,
-                                        )
-                                    }
-                                }
-                                IconButton(
-                                    onClick = onToggleMasked,
-                                    modifier = Modifier.size(48.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = if (isMasked) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (isMasked) "Mostrar saldos" else "Ocultar saldos",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Main balance with Crossfade
-                    Crossfade(
-                        targetState = isMasked,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "heroBalanceCrossfade",
-                    ) { masked ->
-                        MoneyText(
-                            money = data?.totalPen ?: Money(0L, Currency.PEN),
-                            isMasked = masked,
-                            style = MaterialTheme.typography.headlineLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = Color.White,
-                        )
-                    }
-
-                    // Subtitle with Crossfade
-                    Crossfade(
-                        targetState = isMasked,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "heroSubtitleCrossfade",
-                    ) { masked ->
-                        Text(
-                            text = if (masked) {
-                                "🔒 Activos líquidos ocultos · Toca el ojo para revelar"
-                            } else {
-                                "Activos líquidos (Ahorros y efectivo · Excluye líneas de crédito)"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White,
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Subtotals breakdown: Cuentas bancarias vs Efectivo físico
+                    // Header row: TOTAL DISPONIBLE + Eye toggle
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFF6EE7B7),
+                                modifier = Modifier.size(7.dp),
+                            ) {}
                             Text(
-                                text = "En cuentas bancarias",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
+                                text = "TOTAL DISPONIBLE",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.6.sp,
+                                ),
+                                color = Color(0xFFA7F3D0),
                             )
-                            Crossfade(
-                                targetState = isMasked,
-                                animationSpec = tween(durationMillis = 200),
-                                label = "bankSubtotalCrossfade",
-                            ) { masked ->
-                                MoneyText(
-                                    minorUnits = bankAccountsTotal,
-                                    currency = Currency.PEN,
-                                    isMasked = masked,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                    color = Color.White,
-                                )
+                            if (isMasked) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color.White.copy(alpha = 0.15f),
+                                ) {
+                                    Text(
+                                        text = "Oculto",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                    )
+                                }
                             }
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "En efectivo físico",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                            )
-                            Crossfade(
-                                targetState = isMasked,
-                                animationSpec = tween(durationMillis = 200),
-                                label = "cashSubtotalCrossfade",
-                            ) { masked ->
-                                MoneyText(
-                                    minorUnits = cashAccountsTotal,
-                                    currency = Currency.PEN,
-                                    isMasked = masked,
-                                    style = MaterialTheme.typography.titleMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                    ),
-                                    color = Color.White,
+                        if (isMasked) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.18f),
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onToggleMasked)
+                                    .semantics {
+                                        contentDescription = "Mostrar saldos"
+                                    },
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.VisibilityOff,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                        } else {
+                            IconButton(
+                                onClick = onToggleMasked,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .semantics {
+                                        contentDescription = "Ocultar saldos"
+                                    },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Visibility,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
                     }
 
-                    // Liquid sources and reconciliation indicator
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color.White.copy(alpha = 0.12f),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccountBalanceWallet,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (liquidAccounts.size == 1) "1 fuente líquida" else "${liquidAccounts.size} fuentes líquidas",
-                                style = MaterialTheme.typography.labelSmall,
+                    // Main Total Balance (PEN and USD separated, never combined)
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        val fontScale = LocalDensity.current.fontScale
+                        val shouldStack = maxWidth < 340.dp || fontScale >= 1.25f
+
+                        if (shouldStack || hasUsd) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column {
+                                    if (hasUsd) {
+                                        Text(
+                                            text = "Soles (PEN)",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                            color = Color.White.copy(alpha = 0.75f),
+                                        )
+                                    }
+                                    MoneyText(
+                                        money = data?.totalPen ?: Money(0L, Currency.PEN),
+                                        isMasked = isMasked,
+                                        style = MaterialTheme.typography.headlineLarge.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = if (hasUsd) 26.sp else 32.sp,
+                                            fontFeatureSettings = "tnum",
+                                        ),
+                                        color = Color.White,
+                                    )
+                                }
+                                if (hasUsd) {
+                                    Column {
+                                        Text(
+                                            text = "Dólares (USD)",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                            color = Color.White.copy(alpha = 0.75f),
+                                        )
+                                        MoneyText(
+                                            money = data?.totalUsd ?: Money(0L, Currency.USD),
+                                            isMasked = isMasked,
+                                            style = MaterialTheme.typography.titleLarge.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 20.sp,
+                                                fontFeatureSettings = "tnum",
+                                            ),
+                                            color = Color.White,
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            MoneyText(
+                                money = data?.totalPen ?: Money(0L, Currency.PEN),
+                                isMasked = isMasked,
+                                style = MaterialTheme.typography.headlineLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 32.sp,
+                                    fontFeatureSettings = "tnum",
+                                ),
                                 color = Color.White,
                             )
+                        }
+                    }
+
+                    // Clear Truthful Subtitle
+                    Text(
+                        text = "Activos líquidos reales · Excluye líneas de crédito",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                        color = Color.White.copy(alpha = 0.8f),
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Two Tinted Compact Panels: En cuentas bancarias & En efectivo side-by-side
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = emeraldColors.heroSubcardBg,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "En cuentas bancarias",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = Color.White.copy(alpha = 0.8f),
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                bankAccountsByCurrency.forEach { (curr, totalBigInt) ->
+                                    val safeMinor = totalBigInt.coerceIn(
+                                        BigInteger.valueOf(Long.MIN_VALUE),
+                                        BigInteger.valueOf(Long.MAX_VALUE),
+                                    ).toLong()
+                                    MoneyText(
+                                        minorUnits = safeMinor,
+                                        currency = curr,
+                                        isMasked = isMasked,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                        ),
+                                        color = Color.White,
+                                    )
+                                }
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = emeraldColors.heroSubcardBg,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "En efectivo",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = Color.White.copy(alpha = 0.8f),
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                cashAccountsByCurrency.forEach { (curr, totalBigInt) ->
+                                    val safeMinor = totalBigInt.coerceIn(
+                                        BigInteger.valueOf(Long.MIN_VALUE),
+                                        BigInteger.valueOf(Long.MAX_VALUE),
+                                    ).toLong()
+                                    MoneyText(
+                                        minorUnits = safeMinor,
+                                        currency = curr,
+                                        isMasked = isMasked,
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp,
+                                        ),
+                                        color = Color.White,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Credit utilization notifications
+        // Quota reference is secondary to money; effective entitlement is validated on save.
+        item(key = "quota_strip") {
+            if (isQuotaReached && maxQuota > 0) {
+                BasicPlanLimitCard(
+                    usedQuota = computableCount,
+                    maxQuota = maxQuota,
+                    onNavigateToPlans = onNavigateToPlans,
+                )
+            } else {
+            Surface(shape = RoundedCornerShape(16.dp), color = emeraldColors.pillTrack,
+                modifier = Modifier.fillMaxWidth()) {
+                FlowRow(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(if (LocalDensity.current.fontScale > 1.3f) Modifier.fillMaxWidth()
+                        else Modifier.widthIn(min = 180.dp).weight(1f)) {
+                        Text("Cupo Free · $computableCount de $maxQuota",
+                            style = MaterialTheme.typography.labelLarge, color = emeraldColors.primaryText)
+                        Text(if (isQuotaReached) "Cupo de cuentas y tarjetas completo"
+                            else "${(maxQuota - computableCount).coerceAtLeast(0)} espacios disponibles",
+                            style = MaterialTheme.typography.bodySmall, color = emeraldColors.secondaryMuted)
+                    }
+                    TextButton(onClick = onNavigateToPlans, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text("Ver planes")
+                    }
+                }
+            }
+            }
+        }
+
+        // Credit notifications
         if (creditNotifications.isNotEmpty()) {
             items(creditNotifications, key = { it.id }) { notification ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onCardClick(notification.cardId) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                    colors = CardDefaults.cardColors(containerColor = emeraldColors.warningBg),
                     shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, emeraldColors.warningBorder),
                 ) {
                     Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
                     ) {
                         Text(
                             notification.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = emeraldColors.warningAmber,
                         )
-                        Text(notification.body, style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            "Aviso de utilización · ${notification.createdAt}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
-                        )
+                        Text(notification.body, style = MaterialTheme.typography.bodySmall, color = emeraldColors.primaryText)
                     }
                 }
             }
         }
 
-        // Action group inline in LazyColumn flow for all font scales to prevent overlapping headers/cards
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                DashboardActionGroup(
-                    isQuotaReached = isQuotaReached,
-                    onNavigateToNewAccount = onNavigateToNewAccount,
-                    onRegisterMovement = onRegisterMovement,
-                )
-            }
+        // 3. Section: Cuentas y efectivo
+        item(key = "accounts_section_header") {
+            MoneySectionHeader("Cuentas y efectivo", "${liquidAccounts.size} ${if (liquidAccounts.size == 1) "activa" else "activas"}",
+                "+ Cuenta", onNavigateToNewAccount, "Gestionar", onManageQuota)
         }
 
-        // Section: Cuentas y efectivo
-        item {
-            Spacer(modifier = Modifier.height(4.dp))
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = "Cuentas y efectivo",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = KipuColors.Ink,
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (isQuotaReached && rememberKipuColors().isDark) Color(0xFF7F1D1D)
-                            else if (isQuotaReached) Color(0xFFFEE2E2) else KipuColors.SurfaceVariant,
-                    ) {
-                        Text(
-                            text = if (isQuotaReached) "${liquidAccounts.size} activas (Max)" else "${liquidAccounts.size} activas",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (isQuotaReached) KipuColors.Expense else KipuColors.TextMutedOnVariant,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Gestionar",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = KipuColors.PrimaryText,
-                    modifier = Modifier.clickable(onClick = onManageQuota),
-                )
-            }
-        }
-
-        // Compact Account Cards
+        // Account cards list
         items(liquidAccounts, key = { it.account.id.value }) { item ->
-            CompactAccountItemCard(
+            CalmEmeraldAccountCard(
                 accountWithBalance = item,
                 isMasked = isMasked,
                 onClick = { onAccountClick(item.account.id.value) },
             )
         }
 
-        // Section: Tarjetas de crédito
-        if (activeCreditCards.isNotEmpty()) {
-            item {
-                Column(modifier = Modifier.padding(top = 6.dp)) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = "Tarjetas de crédito",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = KipuColors.Ink,
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = KipuColors.SurfaceVariant,
-                            ) {
-                                Text(
-                                    text = "${activeCreditCards.size} ${if (activeCreditCards.size == 1) "activa" else "activas"}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = KipuColors.TextMutedOnVariant,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        text = "Líneas de crédito (no suman a tu disponible)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = KipuColors.TextMuted,
-                    )
-                }
+        // 4. Section: Tarjetas de crédito
+        item(key = "cards_section_header") {
+            Column(modifier = Modifier.padding(top = 6.dp)) {
+                MoneySectionHeader("Tarjetas de crédito", "${activeCreditCards.size} ${if (activeCreditCards.size == 1) "activa" else "activas"}",
+                    "+ Tarjeta", onNavigateToNewCard, "Ver detalle",
+                    { activeCreditCards.firstOrNull()?.let { onCardClick(it.card.id.value) } }, activeCreditCards.isNotEmpty())
+                Text(
+                    text = "Líneas de crédito (no suman al saldo disponible)",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = emeraldColors.secondaryMuted,
+                )
             }
+        }
 
-            // Credit Card Summary Cards
+        if (activeCreditCards.isNotEmpty()) {
             items(activeCreditCards, key = { it.card.id.value }) { creditItem ->
                 CreditCardSummaryCard(
                     creditCardWithSummary = creditItem,
@@ -1437,14 +1193,13 @@ private fun ActiveDashboardContent(
             }
         }
 
-        // Accordion: Instrumentos y cuentas archivadas
+        // Archived items accordion
         if (totalArchivedCount > 0) {
-            item {
-                Spacer(modifier = Modifier.height(4.dp))
+            item(key = "archived_section") {
                 Card(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = KipuColors.Surface),
-                    border = BorderStroke(1.dp, KipuColors.Border),
+                    colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+                    border = BorderStroke(1.dp, emeraldColors.borderSubtle),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -1463,14 +1218,13 @@ private fun ActiveDashboardContent(
                                 Icon(
                                     imageVector = Icons.Default.Archive,
                                     contentDescription = null,
-                                    tint = KipuColors.TextMuted,
+                                    tint = emeraldColors.secondaryMuted,
                                     modifier = Modifier.size(20.dp),
                                 )
                                 Text(
-                                    text = "Instrumentos y cuentas archivadas",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = KipuColors.Ink,
+                                    text = "Cuentas y tarjetas archivadas",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = emeraldColors.primaryText,
                                 )
                             }
                             Row(
@@ -1479,21 +1233,20 @@ private fun ActiveDashboardContent(
                             ) {
                                 Surface(
                                     shape = CircleShape,
-                                    color = KipuColors.SurfaceVariant,
+                                    color = emeraldColors.pillTrack,
                                 ) {
                                     Text(
                                         text = "$totalArchivedCount",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = KipuColors.TextMutedOnVariant,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = emeraldColors.secondaryMuted,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                     )
                                 }
                                 Icon(
                                     imageVector = Icons.Default.ExpandMore,
                                     contentDescription = if (isArchivedExpanded) "Colapsar" else "Expandir",
-                                    tint = KipuColors.TextMuted,
-                                    modifier = Modifier.rotate(chevronRotation),
+                                    tint = emeraldColors.secondaryMuted,
+                                    modifier = Modifier.graphicsLayer { rotationZ = chevronRotation.value },
                                 )
                             }
                         }
@@ -1504,13 +1257,13 @@ private fun ActiveDashboardContent(
                             exit = shrinkVertically(tween(200)) + fadeOut(tween(150)),
                         ) {
                             Column(
-                                modifier = Modifier.padding(top = 12.dp),
+                                modifier = Modifier.padding(top = 10.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 archivedAccounts.forEach { account ->
                                     ArchivedInstrumentCard(
                                         title = account.alias,
-                                        subtitle = "${account.type.toDashboardLabel()} • ${account.currency.name}",
+                                        subtitle = "${account.type.toDashboardLabel()} · ${account.currency.name}",
                                         onClick = { onAccountClick(account.id.value) },
                                     )
                                 }
@@ -1526,7 +1279,7 @@ private fun ActiveDashboardContent(
                                 archivedCardsWithoutDebt.forEach { card ->
                                     ArchivedInstrumentCard(
                                         title = card.alias ?: "${card.issuer} ${card.network}",
-                                        subtitle = "${card.issuer} • ${card.network} •••• ${card.lastFourDigits}",
+                                        subtitle = "${card.issuer} · ${card.network} •••• ${card.lastFourDigits}",
                                         badge = "Archivada",
                                         onClick = { onCardClick(card.id.value) },
                                     )
@@ -1538,17 +1291,131 @@ private fun ActiveDashboardContent(
             }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(bottomContentPadding))
+        // Financial Health Banner (Images 2, 3, 4, 5)
+        item(key = "financial_health_banner") {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = emeraldColors.incomeBg,
+                border = BorderStroke(1.dp, emeraldColors.incomeBorder),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = emeraldColors.incomeEmerald,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = "Tus cuentas están sincronizadas. El nivel de deuda en tarjeta se mantiene en rango saludable (inferior al 30%).",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                        ),
+                        color = emeraldColors.incomeEmerald,
+                    )
+                }
+            }
+        }
+
+        // Bottom space above floating nav bar
+        item(key = "bottom_space") {
+            Spacer(modifier = Modifier.height(72.dp))
         }
     }
 }
 
 /**
- * Compact Account Card for State 2 & 4
+ * Calm Emerald Compact Account Card
  */
 @Composable
-private fun CompactAccountItemCard(
+private fun BasicPlanLimitCard(
+    usedQuota: Int,
+    maxQuota: Int,
+    onNavigateToPlans: () -> Unit,
+) {
+    val colors = rememberCalmEmeraldColors()
+    val progress = (usedQuota.toFloat() / maxQuota).coerceIn(0f, 1f)
+    val percentage = (usedQuota.toLong() * 100 / maxQuota).toInt()
+    val stacked = LocalDensity.current.fontScale > 1.3f
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = colors.surfaceCard,
+        border = BorderStroke(1.dp, colors.warningBorder),
+        shadowElevation = 1.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = if (stacked) Modifier.fillMaxWidth() else Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Surface(shape = CircleShape, color = colors.warningBg) {
+                        Icon(
+                            imageVector = Icons.Default.PieChart,
+                            contentDescription = null,
+                            tint = colors.warningAmber,
+                            modifier = Modifier.padding(8.dp).size(20.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Plan Básico", style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold, color = colors.primaryText)
+                        Text("$usedQuota de $maxQuota cuentas y tarjetas usadas ($percentage %)",
+                            style = MaterialTheme.typography.bodySmall, color = colors.secondaryMuted)
+                        Surface(shape = RoundedCornerShape(50), color = colors.warningBg) {
+                            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(Modifier.size(5.dp).clip(CircleShape).background(colors.warningAmber))
+                                Text("Límite alcanzado", style = MaterialTheme.typography.labelSmall,
+                                    color = colors.warningText)
+                            }
+                        }
+                    }
+                }
+                Button(
+                    onClick = onNavigateToPlans,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(50),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.warningAmber,
+                        contentColor = if (colors.isDark) colors.onPrimaryDeep else colors.primaryText,
+                    ),
+                ) {
+                    Text("Mejorar a PRO", style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold)
+                }
+            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = colors.warningAmber,
+                trackColor = colors.warningBg,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalmEmeraldAccountCard(
     accountWithBalance: AccountWithBalance,
     isMasked: Boolean,
     onClick: () -> Unit,
@@ -1556,14 +1423,14 @@ private fun CompactAccountItemCard(
 ) {
     val account = accountWithBalance.account
     val isCash = account.type == AccountType.CASH
+    val emeraldColors = rememberCalmEmeraldColors()
 
     val (badgeBg, badgeTint, badgeLabel) = resolveAccountBadgeColors(account)
 
     Card(
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = KipuColors.Surface),
-        border = BorderStroke(1.dp, KipuColors.Border),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+        border = BorderStroke(1.dp, emeraldColors.borderSubtle),
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
@@ -1579,14 +1446,13 @@ private fun CompactAccountItemCard(
             Surface(
                 shape = RoundedCornerShape(12.dp),
                 color = badgeBg,
-                modifier = Modifier.size(44.dp),
+                modifier = Modifier.size(42.dp),
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    if (badgeLabel != null) {
+                    if (badgeLabel != null && LocalDensity.current.fontScale <= 1.3f) {
                         Text(
                             text = badgeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
                             color = badgeTint,
                         )
                     } else {
@@ -1599,13 +1465,13 @@ private fun CompactAccountItemCard(
                             imageVector = iconVector,
                             contentDescription = null,
                             tint = badgeTint,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 }
             }
 
-            // Account details
+            // Account Name & Type
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1613,22 +1479,26 @@ private fun CompactAccountItemCard(
                 ) {
                     Text(
                         text = account.alias,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = KipuColors.Ink,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                        ),
+                        color = emeraldColors.primaryText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (account.preset == AccountPreset.BCP && account.alias.contains("Sueldo", ignoreCase = true)) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
-                            color = rememberKipuColors().positiveContainer,
+                            color = emeraldColors.incomeBg,
                         ) {
                             Text(
                                 text = "Principal",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = KipuColors.PrimaryText,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                ),
+                                color = emeraldColors.incomeEmerald,
                                 modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                             )
                         }
@@ -1639,56 +1509,51 @@ private fun CompactAccountItemCard(
                 val typeLabel = account.type.toDashboardLabel()
                 Text(
                     text = "$issuerLabel · $typeLabel · ${account.currency.name}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = KipuColors.TextMuted,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = emeraldColors.secondaryMuted,
                     maxLines = 1,
                 )
                 if (account.isPlanLocked) {
                     Text(
                         text = "Bloqueado por el plan Free",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KipuColors.Expense,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = emeraldColors.expenseCoral,
                     )
                 }
             }
 
-            // Balance and label
+            // Balance and Status
             Column(horizontalAlignment = Alignment.End) {
-                Crossfade(
-                    targetState = isMasked,
-                    animationSpec = tween(durationMillis = 200),
-                    label = "accountItemCrossfade",
-                ) { masked ->
-                    if (masked) {
-                        Text(
-                            text = "S/ ••••••••",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFeatureSettings = "tnum",
-                            ),
-                            color = KipuColors.Ink,
-                        )
-                    } else {
-                        MoneyText(
-                            money = accountWithBalance.balance,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = KipuColors.Ink,
-                            isMasked = false,
-                        )
-                    }
-                }
-                Text(
-                    text = if (isCash) "En mano" else "Disponible",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = KipuColors.TextMuted,
+                MoneyText(
+                    money = accountWithBalance.balance,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                    ),
+                    color = emeraldColors.primaryText,
+                    isMasked = isMasked,
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (!isCash) {
+                        Surface(
+                            shape = CircleShape,
+                            color = emeraldColors.incomeEmerald,
+                            modifier = Modifier.size(5.dp),
+                        ) {}
+                    }
+                    Text(
+                        text = if (isCash) "En bolsillo" else "Disponible",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        color = if (isCash) emeraldColors.secondaryMuted else emeraldColors.incomeEmerald,
+                    )
+                }
             }
         }
     }
 }
-
-
 
 @Composable
 private fun ArchivedInstrumentCard(
@@ -1699,14 +1564,16 @@ private fun ArchivedInstrumentCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
+
     Card(
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = KipuColors.SurfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = emeraldColors.pillTrack),
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1715,9 +1582,8 @@ private fun ArchivedInstrumentCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = KipuColors.Ink,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = emeraldColors.primaryText,
                     )
                     if (debtMoney != null) {
                         Row(
@@ -1727,43 +1593,34 @@ private fun ArchivedInstrumentCard(
                             Text(
                                 text = "$subtitle · Deuda:",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = KipuColors.TextMutedOnVariant,
+                                color = emeraldColors.secondaryMuted,
                             )
                             MoneyText(
                                 money = debtMoney,
                                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                                color = KipuColors.Expense,
+                                color = emeraldColors.expenseCoral,
                             )
                         }
                     } else {
                         Text(
                             subtitle,
                             style = MaterialTheme.typography.bodySmall,
-                            color = KipuColors.TextMutedOnVariant,
+                            color = emeraldColors.secondaryMuted,
                         )
                     }
                 }
-                val badgeColors = if (badge.contains("Deuda pendiente")) {
-                    if (rememberKipuColors().isDark) Color(0xFF7F1D1D) to KipuColors.Expense
-                    else Color(0xFFFEE2E2) to KipuColors.Expense
-                } else {
-                    KipuColors.SurfaceVariant to KipuColors.TextMutedOnVariant
-                }
-                Surface(shape = RoundedCornerShape(6.dp), color = badgeColors.first) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (badge.contains("Deuda pendiente")) emeraldColors.expenseBg else emeraldColors.surfaceCard,
+                ) {
                     Text(
                         badge,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = badgeColors.second,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                        color = if (badge.contains("Deuda pendiente")) emeraldColors.expenseCoral else emeraldColors.secondaryMuted,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
             }
-            Text(
-                text = "El historial se conserva. Toca para ver o reactivar.",
-                style = MaterialTheme.typography.bodySmall,
-                color = KipuColors.TextMutedOnVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
         }
     }
 }
@@ -1778,23 +1635,66 @@ private fun AccountType.toDashboardLabel(): String = when (this) {
 
 @Composable
 private fun resolveAccountBadgeColors(account: Account): Triple<Color, Color, String?> {
-    val base = when (account.preset) {
-        AccountPreset.BCP -> Triple(Color(0xFFE0F2FE), Color(0xFF0284C7), "BCP")
-        AccountPreset.BBVA -> Triple(Color(0xFFDBEAFE), Color(0xFF1D4ED8), "BBVA")
-        AccountPreset.INTERBANK -> Triple(Color(0xFFDCFCE7), Color(0xFF059669), "IBK")
-        AccountPreset.SCOTIABANK -> Triple(Color(0xFFFEE2E2), Color(0xFFDC2626), "Scotiabank")
-        AccountPreset.BANCO_NACION -> Triple(Color(0xFFFEF3C7), Color(0xFFD97706), "BN")
-        AccountPreset.YAPE -> Triple(Color(0xFFF3E8FF), Color(0xFF7E22CE), "Yape")
-        AccountPreset.PLIN -> Triple(Color(0xFFCFFAFE), Color(0xFF0891B2), "Plin")
-        AccountPreset.CASH -> Triple(Color(0xFFDCFCE7), Color(0xFF16A34A), null)
+    val isDark = rememberCalmEmeraldColors().isDark
+    return when (account.preset) {
+        AccountPreset.BCP -> Triple(
+            if (isDark) Color(0xFF0C4A6E) else Color(0xFFE0F2FE),
+            if (isDark) Color(0xFF7DD3FC) else Color(0xFF0284C7),
+            "BCP"
+        )
+        AccountPreset.BBVA -> Triple(
+            if (isDark) Color(0xFF1E3A8A) else Color(0xFFDBEAFE),
+            if (isDark) Color(0xFF93C5FD) else Color(0xFF1D4ED8),
+            "BBVA"
+        )
+        AccountPreset.INTERBANK -> Triple(
+            if (isDark) Color(0xFF14532D) else Color(0xFFDCFCE7),
+            if (isDark) Color(0xFF86EFAC) else Color(0xFF059669),
+            "IBK"
+        )
+        AccountPreset.SCOTIABANK -> Triple(
+            if (isDark) Color(0xFF7F1D1D) else Color(0xFFFEE2E2),
+            if (isDark) Color(0xFFFCA5A5) else Color(0xFFDC2626),
+            "Scotiabank"
+        )
+        AccountPreset.BANCO_NACION -> Triple(
+            if (isDark) Color(0xFF78350F) else Color(0xFFFEF3C7),
+            if (isDark) Color(0xFFFCD34D) else Color(0xFFD97706),
+            "BN"
+        )
+        AccountPreset.YAPE -> Triple(
+            if (isDark) Color(0xFF581C87) else Color(0xFFF3E8FF),
+            if (isDark) Color(0xFFD8B4FE) else Color(0xFF7E22CE),
+            "Yape"
+        )
+        AccountPreset.PLIN -> Triple(
+            if (isDark) Color(0xFF164E63) else Color(0xFFCFFAFE),
+            if (isDark) Color(0xFF67E8F9) else Color(0xFF0891B2),
+            "Plin"
+        )
+        AccountPreset.CASH -> Triple(
+            if (isDark) Color(0xFF14532D) else Color(0xFFE2F4EE),
+            if (isDark) Color(0xFF86EFAC) else Color(0xFF075E52),
+            null
+        )
         else -> when (account.type) {
-            AccountType.CASH -> Triple(Color(0xFFDCFCE7), Color(0xFF16A34A), null)
-            AccountType.DIGITAL_WALLET -> Triple(Color(0xFFEDE9FE), Color(0xFF7C3AED), null)
-            else -> Triple(Color(0xFFF1F5F9), Color(0xFF0F766E), null)
+            AccountType.CASH -> Triple(
+                if (isDark) Color(0xFF14532D) else Color(0xFFE2F4EE),
+                if (isDark) Color(0xFF86EFAC) else Color(0xFF075E52),
+                null
+            )
+            AccountType.DIGITAL_WALLET -> Triple(
+                if (isDark) Color(0xFF4C1D95) else Color(0xFFEDE9FE),
+                if (isDark) Color(0xFFC4B5FD) else Color(0xFF7C3AED),
+                null
+            )
+            else -> Triple(
+                if (isDark) Color(0xFF134E4A) else Color(0xFFE6F7F3),
+                if (isDark) Color(0xFF5EEAD4) else Color(0xFF075E52),
+                null
+            )
         }
     }
-    val adapted = dashboardPastelColors(base.first, base.second)
-    return Triple(adapted.first, adapted.second, base.third)
 }
 
 @Composable
@@ -1806,6 +1706,7 @@ private fun InstrumentQuotaSelectionDialog(
     onDismiss: () -> Unit,
     onSave: (Set<String>) -> Unit,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
     val allIds = remember(accounts, cards) {
         (accounts.map { it.id.value } + cards.map { it.id.value }).toSet()
     }
@@ -1820,8 +1721,8 @@ private fun InstrumentQuotaSelectionDialog(
         title = {
             Text(
                 "Instrumentos disponibles",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = emeraldColors.primaryText,
             )
         },
         text = {
@@ -1829,6 +1730,7 @@ private fun InstrumentQuotaSelectionDialog(
                 Text(
                     "Elige hasta $maxQuota. Los demás conservarán su historial y saldos, pero no podrán usarse mientras superes el límite Free.",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = emeraldColors.secondaryMuted,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 accounts.forEach { account ->
@@ -1844,7 +1746,7 @@ private fun InstrumentQuotaSelectionDialog(
                                 else if (!checked) selected.remove(id)
                             },
                         )
-                        Text(account.alias, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                        Text(account.alias, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = emeraldColors.primaryText)
                     }
                 }
                 cards.forEach { card ->
@@ -1864,6 +1766,7 @@ private fun InstrumentQuotaSelectionDialog(
                             card.alias ?: "${card.issuer} •••• ${card.lastFourDigits}",
                             modifier = Modifier.weight(1f),
                             style = MaterialTheme.typography.bodyMedium,
+                            color = emeraldColors.primaryText,
                         )
                     }
                 }
@@ -1871,13 +1774,48 @@ private fun InstrumentQuotaSelectionDialog(
         },
         confirmButton = {
             TextButton(onClick = { onSave(selected.toSet()) }) {
-                Text("Guardar", fontWeight = FontWeight.Bold, color = KipuColors.PrimaryText)
+                Text("Guardar", fontWeight = FontWeight.Bold, color = emeraldColors.primaryDeep)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text("Cancelar", color = emeraldColors.secondaryMuted)
             }
         },
     )
+}
+
+@Composable
+private fun MoneySectionHeader(
+    title: String, count: String, addLabel: String, onAdd: () -> Unit,
+    manageLabel: String, onManage: () -> Unit, showManage: Boolean = true,
+) {
+    val colors = rememberCalmEmeraldColors()
+    val stacked = androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.2f
+    val heading: @Composable (Modifier) -> Unit = { modifier ->
+        FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp), fontWeight = FontWeight.Bold)
+            Surface(shape = RoundedCornerShape(6.dp), color = colors.pillTrack) {
+                Text(count, style = MaterialTheme.typography.labelSmall, color = colors.secondaryMuted,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+            }
+        }
+    }
+    val actions: @Composable () -> Unit = {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onAdd, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(addLabel, style = MaterialTheme.typography.labelMedium)
+            }
+            if (showManage) TextButton(onClick = onManage, contentPadding = PaddingValues(horizontal = 4.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(manageLabel, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+    if (stacked) {
+        Column(Modifier.fillMaxWidth()) { heading(Modifier.fillMaxWidth()); actions() }
+    } else {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            heading(Modifier.weight(1f)); actions()
+        }
+    }
 }
