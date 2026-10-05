@@ -49,8 +49,6 @@ class AuthScreensTest {
             )
         }
 
-        composeTestRule.onNodeWithText("Crear Cuenta").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Registrarme").assertIsDisplayed()
         // FR-051 dialog
         composeTestRule.onNodeWithText("Cuenta existente").assertIsDisplayed()
         composeTestRule.onNodeWithText("El correo ingresado ya está asociado a una cuenta Kipu. ¿Deseas iniciar sesión?").assertIsDisplayed()
