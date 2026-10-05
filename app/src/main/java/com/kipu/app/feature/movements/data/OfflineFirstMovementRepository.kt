@@ -47,15 +47,19 @@ class OfflineFirstMovementRepository @Inject constructor(
             transactions,
             categoryDao.observePresentationsForUser(userId),
             merchantDao.observeMerchants(),
-        ) { entities, presentations, merchants ->
+            accountDao.observeAll(userId),
+            cardDao.observeAll(userId),
+        ) { entities, presentations, merchants, accounts, cards ->
             val categoriesById = presentations.associateBy { it.categoryId }
             val merchantsById = merchants.associateBy { it.id }
+            val accountsById = accounts.associateBy { it.id }
+            val cardsById = cards.associateBy { it.id }
             entities.map { entity ->
                 run {
                     val domain = entity.toDomain()
-                    val sourceAlias = domain.sourceAccountId?.let { accountDao.getById(userId, it)?.alias }
-                    val destAlias = domain.destinationAccountId?.let { accountDao.getById(userId, it)?.alias }
-                    val card = domain.cardId?.let { cardDao.getById(userId, it) }
+                    val sourceAlias = domain.sourceAccountId?.let { accountsById[it]?.alias }
+                    val destAlias = domain.destinationAccountId?.let { accountsById[it]?.alias }
+                    val card = domain.cardId?.let(cardsById::get)
                     val category = domain.categoryId?.let(categoriesById::get)
                     TransactionItem(
                         transaction = domain,

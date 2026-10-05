@@ -7,6 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -156,6 +160,7 @@ fun CategoryFormDialog(
  * Uses exact 44.dp items with SpaceBetween arrangement to guarantee all 7 elements
  * fit on any screen size without horizontal scrolling or right-edge clipping.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CategoryFormContent(
     isEditing: Boolean = false,
@@ -175,6 +180,8 @@ fun CategoryFormContent(
     onBack: () -> Unit,
     onConfirm: () -> Unit,
     isCreating: Boolean = false,
+    showBack: Boolean = false,
+    selectOnSave: Boolean = false,
     errorMessage: String? = null,
     modifier: Modifier = Modifier,
 ) {
@@ -201,6 +208,7 @@ fun CategoryFormContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            if (showBack) {
             IconButton(
                 onClick = onBack,
                 modifier = Modifier
@@ -213,6 +221,7 @@ fun CategoryFormContent(
                     tint = colors.inkPrimary,
                 )
             }
+            }
 
             Text(
                 text = when {
@@ -221,6 +230,7 @@ fun CategoryFormContent(
                     isSubcategory -> "Nueva subcategoría"
                     else -> "Nueva categoría"
                 },
+                modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = colors.inkPrimary,
@@ -285,7 +295,7 @@ fun CategoryFormContent(
 
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(parentColor.copy(alpha = if (colors.isDark) 0.35f else 0.2f)),
                             contentAlignment = Alignment.Center,
@@ -353,7 +363,7 @@ fun CategoryFormContent(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(colors.primary.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center,
@@ -477,10 +487,10 @@ fun CategoryFormContent(
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
 
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     QUICK_ICONS.forEach { iconKey ->
                         val isSelected = icon.equals(iconKey, ignoreCase = true)
@@ -488,7 +498,7 @@ fun CategoryFormContent(
 
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .border(
                                     width = if (isSelected) 2.dp else 1.dp,
@@ -513,7 +523,7 @@ fun CategoryFormContent(
                     // 7mo elemento: botón "+" de Más iconos
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(48.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .border(
                                 width = 1.dp,
@@ -546,10 +556,10 @@ fun CategoryFormContent(
                     modifier = Modifier.padding(bottom = 6.dp),
                 )
 
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     QUICK_COLORS.forEach { hex ->
                         val isSelected = color.equals(hex, ignoreCase = true)
@@ -557,7 +567,7 @@ fun CategoryFormContent(
 
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .clip(CircleShape)
                                 .background(chipColor)
                                 .border(
@@ -591,7 +601,7 @@ fun CategoryFormContent(
                     // 7mo elemento: botón de Paleta HSV avanzada
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(48.dp)
                             .clip(CircleShape)
                             .border(1.dp, colors.border, CircleShape)
                             .background(colors.surfaceVariant.copy(alpha = 0.5f))
@@ -665,13 +675,13 @@ fun CategoryFormContent(
 
         // Sticky CTA Button
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
             color = colors.surface,
             tonalElevation = 6.dp,
         ) {
             Button(
                 onClick = onConfirm,
-                enabled = name.isNotBlank() && !isCreating,
+                enabled = name.isNotBlank() && name.length <= 30 && !isCreating,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 52.dp)
@@ -680,7 +690,7 @@ fun CategoryFormContent(
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = colors.primary,
-                    contentColor = Color.White,
+                    contentColor = colors.onPrimary,
                     disabledContainerColor = colors.border,
                     disabledContentColor = colors.inkSecondary,
                 ),
@@ -693,7 +703,7 @@ fun CategoryFormContent(
                     )
                 } else {
                     Text(
-                        text = if (isSubcategory) "Guardar y seleccionar ✓" else "Guardar categoría",
+                        text = if (selectOnSave) "Guardar y seleccionar" else if (isSubcategory) "Guardar subcategoría" else "Guardar categoría",
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp,
                     )

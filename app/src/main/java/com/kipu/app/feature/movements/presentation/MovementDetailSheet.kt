@@ -36,6 +36,7 @@ fun MovementDetailSheet(
     onEdit: () -> Unit,
     onVoid: () -> Unit,
 ) {
+    val colors = com.kipu.app.ui.theme.rememberCalmEmeraldColors()
     val tx = item.transaction
     val voided = tx.status == TransactionStatus.VOIDED
     val specialized = isSpecializedMovement(item)
@@ -44,7 +45,7 @@ fun MovementDetailSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val amountPrefix = when (tx.type) {
-        MovementType.EXPENSE -> "-"
+        MovementType.EXPENSE -> "−"
         MovementType.INCOME -> "+"
         MovementType.TRANSFER -> ""
     }
@@ -52,9 +53,9 @@ fun MovementDetailSheet(
     val amountColor = if (voided) {
         MaterialTheme.colorScheme.onSurfaceVariant
     } else when (tx.type) {
-        MovementType.INCOME -> MaterialTheme.colorScheme.primary
-        MovementType.EXPENSE -> MaterialTheme.colorScheme.onSurface
-        MovementType.TRANSFER -> MaterialTheme.colorScheme.primary
+        MovementType.INCOME -> colors.incomeEmerald
+        MovementType.EXPENSE -> colors.expenseCoral
+        MovementType.TRANSFER -> colors.transferBlue
     }
 
     KipuBottomSheet(
@@ -90,7 +91,7 @@ fun MovementDetailSheet(
                 amount = "$amountPrefix${formatMinorUnits(tx.amountMinor)}",
                 currencySymbol = currencySymbol,
                 color = amountColor,
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge,
                 modifier = Modifier.padding(vertical = 12.dp).testTag("detail_amount"),
             )
             if (voided) {
@@ -143,7 +144,6 @@ fun MovementDetailSheet(
                 Button(onClick = onEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("detail_edit")) { Text(stringResource(R.string.movement_action_edit)) }
                 OutlinedButton(onClick = onVoid, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("detail_void")) { Text(stringResource(R.string.movement_action_void)) }
             }
-            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(stringResource(R.string.history_detail_close)) }
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -180,8 +180,8 @@ private fun humanizeRevisionReason(reason: String?): String? {
 }
 
 @Composable private fun DetailField(label: String, value: String) {
-    Column(Modifier.padding(vertical = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
         Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
+        Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }

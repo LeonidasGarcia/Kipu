@@ -1403,6 +1403,8 @@ internal fun CreateSubcategoryView(
     onSave: () -> Unit,
 ) {
     CategoryFormContent(
+        showBack = true,
+        selectOnSave = true,
         isEditing = false,
         categoryType = categories.find { it.id == selectedParentId }?.categoryType ?: CategoryType.EXPENSE,
         name = name,

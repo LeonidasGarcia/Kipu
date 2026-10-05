@@ -290,7 +290,7 @@ class MovementHistoryScreenTest {
 
         compose.setContent {
             TestViewport {
-                EmptyMovementsState(
+                CalmEmeraldEmptyMovementsState(
                     hasActiveFilters = true,
                     onClearFilters = { clearClicked = true },
                 )
@@ -307,7 +307,7 @@ class MovementHistoryScreenTest {
     fun emptyMovementsStateWithoutFiltersShowsDefaultEmptyAndNoClearButton() {
         compose.setContent {
             TestViewport {
-                EmptyMovementsState(
+                CalmEmeraldEmptyMovementsState(
                     hasActiveFilters = false,
                     onClearFilters = null,
                 )

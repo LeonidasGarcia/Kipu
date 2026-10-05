@@ -1,33 +1,34 @@
 package com.kipu.app.feature.movements.presentation
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import com.kipu.app.ui.component.KipuFilterChip
-import com.kipu.app.ui.component.KipuEmptyState
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -35,13 +36,12 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,28 +65,41 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.R
+import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.TransactionItem
 import com.kipu.app.feature.movements.domain.model.TransactionStatus
+import com.kipu.app.ui.component.LocalBalanceMasked
 import com.kipu.app.ui.component.MoneyText
 import com.kipu.app.ui.component.formatMinorUnits
-import com.kipu.app.ui.theme.KipuExpense
-import com.kipu.app.ui.theme.KipuIncome
+import com.kipu.app.ui.theme.rememberCalmEmeraldColors
+import kotlinx.coroutines.launch
+import java.math.BigDecimal
+import java.math.BigInteger
+import java.math.RoundingMode
+import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -95,48 +109,93 @@ fun MovementHistoryRoute(
     onNavigateToPlans: () -> Unit = {},
     onNavigateToEditor: (String) -> Unit = {},
     viewModel: MovementHistoryViewModel = hiltViewModel(),
+    prewarmQuickMovement: Boolean = false,
     modifier: Modifier = Modifier,
     savedMessage: Boolean = false,
     onSavedMessageConsumed: () -> Unit = {},
+    openRegisterMovement: Boolean = false,
+    onConsumeRegisterMovement: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val quickMovementViewModel = if (prewarmQuickMovement) hiltViewModel<QuickMovementViewModel>() else null
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val savedText = stringResource(R.string.history_saved_pending)
     val voidedText = stringResource(R.string.history_voided_pending)
+    val emeraldColors = rememberCalmEmeraldColors()
+
     LaunchedEffect(savedMessage) {
-        if (savedMessage) { onSavedMessageConsumed(); snackbarHostState.showSnackbar(savedText) }
+        if (savedMessage) {
+            onSavedMessageConsumed()
+            snackbarHostState.showSnackbar(savedText)
+        }
     }
-    val colorScheme = MaterialTheme.colorScheme
-    val mostUsedAccountId = remember(uiState.allTransactions) {
-        uiState.allTransactions.asSequence()
-            .filter { it.transaction.status == TransactionStatus.ACTIVE }
-            .mapNotNull { it.transaction.sourceAccountId }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
+
+    // Respond to root navigation register movement trigger
+    LaunchedEffect(openRegisterMovement) {
+        if (openRegisterMovement) {
+            viewModel.onOpenRegisterSheet()
+            onConsumeRegisterMovement()
+        }
     }
-    val searchDescription = stringResource(R.string.movements_search_placeholder)
-    val filterChipColors = FilterChipDefaults.filterChipColors(
-        selectedContainerColor = colorScheme.primaryContainer,
-        selectedLabelColor = colorScheme.onPrimaryContainer,
-        containerColor = colorScheme.surfaceContainerLow,
-        labelColor = colorScheme.onSurfaceVariant,
-    )
+
+    val mostUsedAccountId = uiState.mostUsedAccountId
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = stringResource(R.string.movements_title),
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                        color = colorScheme.onSurface,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.movements_title),
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 24.sp,
+                            ),
+                            color = emeraldColors.primaryText,
+                        )
+
+                        // Period context pill
+                        val periodLabel = remember(uiState.fromDate, uiState.toDate) {
+                            if (uiState.fromDate != null && uiState.toDate != null) {
+                                val fmt = SimpleDateFormat("MMM", Locale("es", "PE"))
+                                val fromStr = fmt.format(Date(uiState.fromDate!!)).replaceFirstChar { it.uppercase() }
+                                val toStr = fmt.format(Date(uiState.toDate!!)).replaceFirstChar { it.uppercase() }
+                                if (fromStr.equals(toStr, ignoreCase = true)) fromStr else "$fromStr - $toStr"
+                            } else if (uiState.fromDate != null) {
+                                SimpleDateFormat("MMM yyyy", Locale("es", "PE")).format(Date(uiState.fromDate!!)).replaceFirstChar { it.uppercase() }
+                            } else {
+                                "Todos"
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = emeraldColors.surfaceCard,
+                            border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp)),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .heightIn(min = 36.dp)
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = periodLabel,
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                    color = emeraldColors.secondaryMuted,
+                                )
+                            }
+                        }
+                    }
                 },
                 actions = {
                     IconButton(
@@ -148,40 +207,29 @@ fun MovementHistoryRoute(
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = null,
-                            tint = colorScheme.onSurfaceVariant,
+                            tint = emeraldColors.secondaryMuted,
+                            modifier = Modifier.size(20.dp),
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.surface),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = emeraldColors.background),
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = viewModel::onOpenRegisterSheet,
-                containerColor = colorScheme.primaryContainer,
-                contentColor = colorScheme.onPrimaryContainer,
-                shape = CircleShape,
-                modifier = Modifier
-                    .size(56.dp)
-                    .testTag("fab_add_transaction")
-                    .semantics { contentDescription = "Registrar nueva transacción" },
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    tint = colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        },
-        containerColor = colorScheme.background,
+        containerColor = emeraldColors.background,
         modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(innerPadding).testTag("list_movements"),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .testTag("list_movements"),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item(key = "history_controls") {
-                Column {
+                Column(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
                     // Search Bar
                     OutlinedTextField(
                         value = uiState.searchQuery,
@@ -189,15 +237,16 @@ fun MovementHistoryRoute(
                         placeholder = {
                             Text(
                                 stringResource(R.string.movements_search_placeholder),
-                                color = colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium
+                                color = emeraldColors.secondaryMuted,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp)
                             )
                         },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                tint = colorScheme.onSurfaceVariant,
+                                tint = emeraldColors.secondaryMuted,
+                                modifier = Modifier.size(20.dp),
                             )
                         },
                         trailingIcon = {
@@ -213,7 +262,8 @@ fun MovementHistoryRoute(
                                         Icon(
                                             imageVector = Icons.Default.Close,
                                             contentDescription = null,
-                                            tint = colorScheme.onSurfaceVariant
+                                            tint = emeraldColors.secondaryMuted,
+                                            modifier = Modifier.size(18.dp),
                                         )
                                     }
                                 }
@@ -227,135 +277,344 @@ fun MovementHistoryRoute(
                                     Icon(
                                         Icons.Default.FilterList,
                                         contentDescription = null,
-                                        tint = if (uiState.hasActiveAdvancedFilters) colorScheme.primary else colorScheme.onSurfaceVariant
+                                        tint = if (uiState.hasActiveAdvancedFilters) emeraldColors.primaryDeep else emeraldColors.secondaryMuted,
+                                        modifier = Modifier.size(20.dp),
                                     )
                                 }
                             }
                         },
                         singleLine = true,
-                        shape = MaterialTheme.shapes.medium,
+                        shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = colorScheme.surfaceContainerLowest,
-                            unfocusedContainerColor = colorScheme.surfaceContainerLowest,
-                            focusedBorderColor = colorScheme.primary,
-                            unfocusedBorderColor = colorScheme.outlineVariant,
-                            cursorColor = colorScheme.primary,
+                            focusedContainerColor = emeraldColors.surfaceCard,
+                            unfocusedContainerColor = emeraldColors.surfaceCard,
+                            focusedBorderColor = emeraldColors.primaryDeep,
+                            unfocusedBorderColor = emeraldColors.borderSubtle,
+                            cursorColor = emeraldColors.primaryDeep,
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 56.dp)
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .semantics { contentDescription = searchDescription }
+                            .heightIn(min = 52.dp)
                             .testTag("input_search_movements"),
                     )
 
-                    // Filter Chips (Todos, Gasto, Ingreso, Transferencia)
+                    // Type Filter Chips: Todos, Gastos, Ingresos, Transf.
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth(),
                     ) {
-                        KipuFilterChip(
+                        CalmEmeraldTypeChip(
+                            label = "Todos",
                             selected = uiState.selectedFilterType == null,
                             onClick = { viewModel.onFilterTypeSelected(null) },
-                            label = { Text("Todos") },
-                            colors = filterChipColors,
+                            hasCheck = true,
                             modifier = Modifier.testTag("chip_filter_all"),
                         )
-                        KipuFilterChip(
+                        CalmEmeraldTypeChip(
+                            label = "Gastos",
+                            dotColor = emeraldColors.expenseCoral,
                             selected = uiState.selectedFilterType == MovementType.EXPENSE,
                             onClick = { viewModel.onFilterTypeSelected(MovementType.EXPENSE) },
-                            label = { Text(stringResource(R.string.movement_type_expense)) },
-                            colors = filterChipColors,
                             modifier = Modifier.testTag("chip_filter_expense"),
                         )
-                        KipuFilterChip(
+                        CalmEmeraldTypeChip(
+                            label = "Ingresos",
+                            dotColor = emeraldColors.incomeEmerald,
                             selected = uiState.selectedFilterType == MovementType.INCOME,
                             onClick = { viewModel.onFilterTypeSelected(MovementType.INCOME) },
-                            label = { Text(stringResource(R.string.movement_type_income)) },
-                            colors = filterChipColors,
                             modifier = Modifier.testTag("chip_filter_income"),
                         )
-                        KipuFilterChip(
+                        CalmEmeraldTypeChip(
+                            label = "Transf.",
+                            dotColor = emeraldColors.transferBlue,
                             selected = uiState.selectedFilterType == MovementType.TRANSFER,
                             onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
-                            label = { Text(stringResource(R.string.movement_type_transfer)) },
-                            colors = filterChipColors,
                             modifier = Modifier.testTag("chip_filter_transfer"),
                         )
+
                         if (uiState.hasActiveAdvancedFilters || uiState.selectedFilterType != null || uiState.searchQuery.isNotBlank()) {
-                            KipuFilterChip(
-                                selected = false,
-                                onClick = viewModel::onClearFilters,
-                                label = { Text(stringResource(R.string.movements_filter_clear)) },
-                                colors = filterChipColors,
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = emeraldColors.surfaceCard,
+                                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
                                 modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(onClick = viewModel::onClearFilters)
                                     .testTag("btn_clear_filters")
                                     .semantics { contentDescription = "Limpiar todos los filtros" },
-                            )
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .padding(horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.movements_filter_clear),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                                        color = emeraldColors.expenseCoral,
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    MovementAccessCard(uiState, onNavigateToPlans, viewModel::onRevalidateAccess,
-                        viewModel::onDismissRecovery, Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
-                    MovementAppliedFilters(uiState, viewModel::onRemoveFilter,
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp))
+                    // Summary Card for Filtered Query (pre-computed in ViewModel)
+                    val totalMovCount = uiState.totalFilteredCount
+                    val netByCurrency = uiState.netByCurrency
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+                        border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f, fill = false)) {
+                                    Text(
+                                        text = "BALANCE NETO",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 0.6.sp,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = emeraldColors.secondaryMuted,
+                                    )
+                                    Text(
+                                        text = "Resultados filtrados",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 10.sp,
+                                        ),
+                                        color = emeraldColors.secondaryMuted.copy(alpha = 0.8f),
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = emeraldColors.pillTrack,
+                                ) {
+                                    Text(
+                                        text = if (totalMovCount == 1) "1 mov" else "$totalMovCount movs",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                        ),
+                                        color = emeraldColors.secondaryMuted,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
 
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            val currenciesToShow = remember(netByCurrency) {
+                                if (netByCurrency.isEmpty()) listOf("PEN")
+                                else {
+                                    val list = mutableListOf<String>()
+                                    if (netByCurrency.containsKey("PEN")) list.add("PEN")
+                                    if (netByCurrency.containsKey("USD")) list.add("USD")
+                                    netByCurrency.keys.filter { it != "PEN" && it != "USD" }.forEach { list.add(it) }
+                                    list
+                                }
+                            }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                currenciesToShow.forEach { currency ->
+                                    val netMinor = netByCurrency[currency] ?: BigInteger.ZERO
+                                    val (prefix, formattedAmount) = formatSignedBigIntegerMinor(netMinor)
+                                    val symbol = when (currency) {
+                                        "PEN" -> "S/"
+                                        "USD" -> "$"
+                                        else -> currency
+                                    }
+                                    val netColor = when {
+                                        netMinor > BigInteger.ZERO -> emeraldColors.incomeEmerald
+                                        netMinor < BigInteger.ZERO -> emeraldColors.expenseCoral
+                                        else -> emeraldColors.primaryText
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (currenciesToShow.size > 1) {
+                                            Text(
+                                                text = currency,
+                                                style = MaterialTheme.typography.labelMedium.copy(
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.sp,
+                                                ),
+                                                color = emeraldColors.secondaryMuted,
+                                            )
+                                        }
+                                        MoneyText(
+                                            amount = "$prefix$formattedAmount",
+                                            currencySymbol = symbol,
+                                            style = MaterialTheme.typography.headlineMedium.copy(
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = if (currenciesToShow.size > 1) 20.sp else 24.sp,
+                                                fontFeatureSettings = "tnum",
+                                            ),
+                                            color = netColor,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // System / Access cards
+                    MovementAccessCard(
+                        uiState,
+                        onNavigateToPlans,
+                        viewModel::onRevalidateAccess,
+                        viewModel::onDismissRecovery,
+                        Modifier.fillMaxWidth(),
+                    )
+                    MovementAppliedFilters(
+                        uiState,
+                        viewModel::onRemoveFilter,
+                        Modifier.fillMaxWidth(),
+                    )
                 }
             }
+
             when {
                 uiState.isLoading -> item(key = "loading") {
-                    Box(Modifier.fillMaxWidth().heightIn(min = 240.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = colorScheme.primary)
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 240.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = emeraldColors.primaryDeep)
                     }
                 }
+
                 uiState.queryError -> item(key = "read_error") {
-                    Column(Modifier.fillMaxWidth().heightIn(min = 240.dp).padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                        Text(stringResource(R.string.history_query_error), style = MaterialTheme.typography.titleMedium)
-                        Text(stringResource(R.string.history_query_error_body), style = MaterialTheme.typography.bodyMedium)
-                        OutlinedButton(onClick = viewModel::onRetryHistory, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text(stringResource(R.string.history_retry))
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 240.dp)
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            stringResource(R.string.history_query_error),
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = emeraldColors.primaryText,
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            stringResource(R.string.history_query_error_body),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = emeraldColors.secondaryMuted,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = viewModel::onRetryHistory,
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = emeraldColors.primaryDeep,
+                                contentColor = emeraldColors.onPrimaryDeep,
+                            ),
+                            modifier = Modifier.heightIn(min = 48.dp),
+                        ) {
+                            Text(stringResource(R.string.history_retry), color = emeraldColors.onPrimaryDeep)
                         }
                     }
                 }
+
                 uiState.filteredTransactions.isEmpty() -> item(key = "empty") {
                     val isSearch = uiState.searchQuery.isNotBlank()
                     val hasFilters = uiState.hasActiveAdvancedFilters || uiState.selectedFilterType != null
-                    EmptyMovementsState(
+                    CalmEmeraldEmptyMovementsState(
                         isSearchActive = isSearch,
                         hasActiveFilters = hasFilters,
                         onClearSearch = { viewModel.onSearchQueryChanged("") },
                         onClearFilters = viewModel::onClearFilters,
                         onRegister = viewModel::onOpenRegisterSheet,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 260.dp).padding(horizontal = 32.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
                     )
                 }
-                else -> uiState.filteredTransactions.forEach { (dateHeader, rows) ->
-                    item(key = "header_$dateHeader") {
-                        Text(dateHeader, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp))
-                    }
-                    items(rows, key = { it.transaction.id }) { item ->
-                        TransactionRow(item, onClick = { viewModel.onOpenDetail(item) },
-                            onEditClick = { onNavigateToEditor(item.transaction.id) },
-                            onVoidClick = { viewModel.onSelectTransactionForVoid(item) },
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp))
+
+                else -> {
+                    uiState.filteredTransactions.forEach { (dateHeader, rows) ->
+                        item(key = "header_$dateHeader") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = dateHeader,
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = emeraldColors.primaryText,
+                                )
+                                Text(
+                                    text = if (rows.size == 1) "1 movimiento" else "${rows.size} movimientos",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                    color = emeraldColors.secondaryMuted,
+                                )
+                            }
+                        }
+
+                        itemsIndexed(
+                            items = rows,
+                            key = { _, item -> "movement_${item.transaction.id}" },
+                            contentType = { _, _ -> "movement" },
+                        ) { index, item ->
+                            val first = index == 0
+                            val last = index == rows.lastIndex
+                            Card(
+                                shape = RoundedCornerShape(
+                                    topStart = if (first) 16.dp else 0.dp,
+                                    topEnd = if (first) 16.dp else 0.dp,
+                                    bottomStart = if (last) 16.dp else 0.dp,
+                                    bottomEnd = if (last) 16.dp else 0.dp,
+                                ),
+                                colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+                                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, end = 16.dp, bottom = if (last) 10.dp else 0.dp),
+                            ) {
+                                TransactionRow(
+                                    item = item,
+                                    onClick = { viewModel.onOpenDetail(item) },
+                                    onEditClick = { onNavigateToEditor(item.transaction.id) },
+                                    onVoidClick = { viewModel.onSelectTransactionForVoid(item) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
                     }
                 }
             }
-            item(key = "fab_space") { Spacer(Modifier.height(88.dp)) }
+
+            // Bottom space for floating nav bar
+            item(key = "bottom_space") {
+                Spacer(Modifier.height(72.dp))
+            }
         }
     }
 
     if (uiState.showRegisterSheet) {
         QuickMovementBottomSheet(
             onDismissRequest = viewModel::onCloseRegisterSheet,
+            viewModel = quickMovementViewModel ?: hiltViewModel(),
             onNavigateToNewAccount = onNavigateToNewAccount,
             mostUsedAccountId = mostUsedAccountId,
             onSaved = { movementType ->
@@ -368,10 +627,15 @@ fun MovementHistoryRoute(
     }
 
     uiState.selectedDetail?.let { item ->
-        MovementDetailSheet(item, uiState.detailRevisions, uiState.detailLoading, uiState.detailError,
+        MovementDetailSheet(
+            item,
+            uiState.detailRevisions,
+            uiState.detailLoading,
+            uiState.detailError,
             onDismiss = viewModel::onCloseDetail,
             onEdit = { viewModel.onCloseDetail(); onNavigateToEditor(item.transaction.id) },
-            onVoid = { viewModel.onCloseDetail(); viewModel.onSelectTransactionForVoid(item) })
+            onVoid = { viewModel.onCloseDetail(); viewModel.onSelectTransactionForVoid(item) }
+        )
     }
 
     if (uiState.selectedTransactionForVoid != null) {
@@ -394,11 +658,14 @@ fun MovementHistoryRoute(
     }
 
     if (uiState.showAdvancedFilterPanel) {
-        MovementFiltersSheet(uiState,
+        MovementFiltersSheet(
+            uiState,
             onDismiss = { viewModel.onToggleAdvancedFilterPanel(false) },
-            onApply = viewModel::onApplyFilterDraft, onVerify = viewModel::onRevalidateAccess,
-            onViewPlans = onNavigateToPlans, onDismissRecovery = viewModel::onDismissRecovery)
-
+            onApply = viewModel::onApplyFilterDraft,
+            onVerify = viewModel::onRevalidateAccess,
+            onViewPlans = onNavigateToPlans,
+            onDismissRecovery = viewModel::onDismissRecovery
+        )
     }
 }
 
@@ -411,9 +678,8 @@ fun TransactionRow(
     onEditClick: () -> Unit = onClick,
 ) {
     val tx = item.transaction
-    val colorScheme = MaterialTheme.colorScheme
+    val emeraldColors = rememberCalmEmeraldColors()
     val isVoided = tx.status == TransactionStatus.VOIDED
-    val stackedAmount = LocalDensity.current.fontScale > 1.3f
     var showMenu by remember { mutableStateOf(false) }
 
     val legacyTitle = when (tx.legacyKind) {
@@ -443,165 +709,149 @@ fun TransactionRow(
         else -> item.sourceAccountAlias ?: "Cuenta"
     }
 
+    val (iconBg, iconTint) = when {
+        isVoided -> emeraldColors.pillTrack to emeraldColors.secondaryMuted
+        tx.type == MovementType.INCOME -> emeraldColors.incomeBg to emeraldColors.incomeEmerald
+        tx.type == MovementType.EXPENSE -> emeraldColors.expenseBg to emeraldColors.expenseCoral
+        tx.type == MovementType.TRANSFER -> emeraldColors.transferBg to emeraldColors.transferBlue
+        else -> emeraldColors.pillTrack to emeraldColors.primaryDeep
+    }
+
     val amountColor = if (isVoided) {
-        colorScheme.onSurfaceVariant
+        emeraldColors.secondaryMuted
     } else when (tx.type) {
-        MovementType.INCOME -> KipuIncome
-        MovementType.EXPENSE -> colorScheme.onSurface
-        MovementType.TRANSFER -> colorScheme.primary
+        MovementType.INCOME -> emeraldColors.incomeEmerald
+        MovementType.EXPENSE -> emeraldColors.expenseCoral
+        MovementType.TRANSFER -> emeraldColors.transferBlue
     }
 
     val amountPrefix = when (tx.type) {
         MovementType.INCOME -> "+"
-        MovementType.EXPENSE -> "-"
+        MovementType.EXPENSE -> "−"
         MovementType.TRANSFER -> ""
     }
 
     val currencySymbol = if (tx.currency == "PEN") "S/" else "$"
     val formattedAmount = formatMinorUnits(tx.amountMinor)
-    val fullAmountText = "$amountPrefix$currencySymbol $formattedAmount"
 
     Surface(
-        shape = MaterialTheme.shapes.large,
-        color = colorScheme.surface,
+        color = Color.Transparent,
         modifier = modifier
             .testTag("tx_row_${tx.id}")
             .clickable(onClick = onClick),
     ) {
-        BoxWithConstraints(
-            modifier = Modifier.padding(16.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            val fontScale = LocalDensity.current.fontScale
-            val stackedAmount = fontScale > 1.3f || maxWidth < 340.dp || (maxWidth < 420.dp && (title.length > 20 || fullAmountText.length > 12))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            // Tinted circle icon
+            Surface(
+                shape = CircleShape,
+                color = iconBg,
+                modifier = Modifier.size(40.dp),
             ) {
-                // Category / Avatar Icon
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (isVoided) {
-                                colorScheme.surfaceContainerHigh
-                            } else when (tx.type) {
-                                MovementType.INCOME -> KipuIncome.copy(alpha = 0.12f)
-                                MovementType.EXPENSE -> KipuExpense.copy(alpha = 0.12f)
-                                MovementType.TRANSFER -> colorScheme.primary.copy(alpha = 0.12f)
-                            }
+                Box(contentAlignment = Alignment.Center) {
+                    if (item.categoryIcon != null) {
+                        Icon(
+                            imageVector = resolveCategoryIcon(item.categoryIcon),
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(20.dp),
                         )
+                    } else {
+                        Text(
+                            text = title.take(1).uppercase(),
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                            ),
+                            color = iconTint,
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Title & Subtitle + Badges
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text(
-                        text = title.take(1).uppercase(),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = if (isVoided) {
-                                colorScheme.onSurfaceVariant
-                            } else when (tx.type) {
-                                MovementType.INCOME -> KipuIncome
-                                MovementType.EXPENSE -> KipuExpense
-                                MovementType.TRANSFER -> colorScheme.primary
-                            }
-                        )
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp,
+                            textDecoration = if (isVoided) TextDecoration.LineThrough else TextDecoration.None,
+                        ),
+                        color = if (isVoided) emeraldColors.secondaryMuted else emeraldColors.primaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // Title & Subtitle
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                textDecoration = TextDecoration.None,
-                            ),
-                            color = if (isVoided) colorScheme.onSurfaceVariant else colorScheme.onSurface,
-                            maxLines = 2,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        if (isVoided) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = colorScheme.errorContainer.copy(alpha = 0.5f),
-                                modifier = Modifier.testTag("tx_voided_badge_${tx.id}"),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.movement_void_status_badge),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = colorScheme.error,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
+                    if (isVoided) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = emeraldColors.expenseBg,
+                            modifier = Modifier.testTag("tx_voided_badge_${tx.id}"),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.movement_void_status_badge),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                color = emeraldColors.expenseCoral,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
+                        }
+                    } else if (tx.syncStatus == MovementSyncStatus.CONFLICT) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = emeraldColors.warningBg,
+                        ) {
+                            Text(
+                                text = "Requiere revisión",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                color = emeraldColors.warningAmber,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        // Sync badge
-                        SyncStatusIcon(status = tx.syncStatus)
-                    }
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     Text(
-                        tx.syncStatus.uiLabel(),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colorScheme.onSurfaceVariant
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        color = emeraldColors.secondaryMuted,
+                        maxLines = 1,
                     )
-                    if (tx.status == TransactionStatus.REVISED) {
-                        Text(
-                            "Corregido",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = colorScheme.primary
-                        )
-                    }
-                    if (stackedAmount) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        MoneyText(
-                            amount = "$amountPrefix$formattedAmount",
-                            currencySymbol = currencySymbol,
-                            color = amountColor,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFeatureSettings = "tnum",
-                                textDecoration = TextDecoration.None,
-                            ),
-                            modifier = Modifier.testTag("tx_amount_${tx.id}"),
-                        )
-                    }
+                    SyncStatusIcon(status = tx.syncStatus)
                 }
+            }
 
-                Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
-                // Amount with tnum
-                if (!stackedAmount) {
-                    Column(horizontalAlignment = Alignment.End) {
-                        MoneyText(
-                            amount = "$amountPrefix$formattedAmount",
-                            currencySymbol = currencySymbol,
-                            color = amountColor,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontFeatureSettings = "tnum",
-                                textDecoration = TextDecoration.None,
-                            ),
-                            modifier = Modifier.testTag("tx_amount_${tx.id}"),
-                        )
-                    }
-                }
+            // Amount
+            MoneyText(
+                amount = "$amountPrefix$formattedAmount",
+                currencySymbol = currencySymbol,
+                color = amountColor,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    fontFeatureSettings = "tnum",
+                    textDecoration = if (isVoided) TextDecoration.LineThrough else TextDecoration.None,
+                ),
+                modifier = Modifier.testTag("tx_amount_${tx.id}"),
+            )
 
-            // Options menu (Editar / Anular) - only for active / non-voided transactions
+            // Options menu (Editar / Anular)
             if (!isVoided) {
-                Spacer(modifier = Modifier.width(4.dp))
                 Box {
                     IconButton(
                         onClick = { showMenu = true },
@@ -613,8 +863,8 @@ fun TransactionRow(
                         Icon(
                             imageVector = Icons.Default.MoreVert,
                             contentDescription = null,
-                            tint = colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            tint = emeraldColors.secondaryMuted,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                     DropdownMenu(
@@ -648,6 +898,92 @@ fun TransactionRow(
         }
     }
 }
+
+@Composable
+private fun CalmEmeraldTypeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    dotColor: Color? = null,
+    hasCheck: Boolean = false,
+) {
+    val emeraldColors = rememberCalmEmeraldColors()
+
+    val container = if (selected) {
+        if (hasCheck) emeraldColors.primaryDeep
+        else when (dotColor) {
+            emeraldColors.expenseCoral -> emeraldColors.expenseBg
+            emeraldColors.incomeEmerald -> emeraldColors.incomeBg
+            emeraldColors.transferBlue -> emeraldColors.transferBg
+            else -> emeraldColors.incomeBg
+        }
+    } else {
+        emeraldColors.surfaceCard
+    }
+
+    val contentColor = if (selected) {
+        if (hasCheck) emeraldColors.onPrimaryDeep else dotColor ?: emeraldColors.primaryDeep
+    } else {
+        emeraldColors.secondaryMuted
+    }
+
+    val border = if (selected) {
+        if (hasCheck) null
+        else BorderStroke(1.dp, dotColor?.copy(alpha = 0.5f) ?: emeraldColors.primaryDeep)
+    } else {
+        BorderStroke(1.dp, emeraldColors.borderSubtle)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = container,
+        border = border,
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            )
+            .semantics {
+                this.selected = selected
+                this.role = Role.Tab
+            },
+    ) {
+        Row(
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            if (hasCheck && selected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(14.dp),
+                )
+            } else if (dotColor != null) {
+                Surface(
+                    shape = CircleShape,
+                    color = dotColor,
+                    modifier = Modifier.size(7.dp),
+                ) {}
+            }
+
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    fontSize = 12.sp,
+                ),
+                color = contentColor,
+            )
+        }
+    }
 }
 
 @Composable
@@ -655,6 +991,7 @@ fun SyncStatusIcon(
     status: MovementSyncStatus,
     modifier: Modifier = Modifier,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
     when (status) {
         MovementSyncStatus.SYNCED, MovementSyncStatus.MIGRATED_LOCAL -> {
             Icon(
@@ -664,31 +1001,31 @@ fun SyncStatusIcon(
                 } else {
                     stringResource(R.string.movements_sync_synced)
                 },
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = modifier.size(14.dp)
+                tint = emeraldColors.secondaryMuted,
+                modifier = modifier.size(13.dp)
             )
         }
         MovementSyncStatus.PENDING, MovementSyncStatus.IN_FLIGHT -> {
             Icon(
                 imageVector = Icons.Default.Sync,
                 contentDescription = stringResource(R.string.movements_sync_pending),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = modifier.size(14.dp)
+                tint = emeraldColors.primaryDeep,
+                modifier = modifier.size(13.dp)
             )
         }
         MovementSyncStatus.CONFLICT, MovementSyncStatus.FAILED_PERMANENT -> {
             Icon(
                 imageVector = Icons.Default.ErrorOutline,
                 contentDescription = stringResource(R.string.movements_sync_error),
-                tint = KipuExpense,
-                modifier = modifier.size(14.dp)
+                tint = emeraldColors.expenseCoral,
+                modifier = modifier.size(13.dp)
             )
         }
     }
 }
 
 @Composable
-fun EmptyMovementsState(
+fun CalmEmeraldEmptyMovementsState(
     isSearchActive: Boolean = false,
     hasActiveFilters: Boolean = false,
     onClearSearch: (() -> Unit)? = null,
@@ -696,6 +1033,8 @@ fun EmptyMovementsState(
     onRegister: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
+
     val title = when {
         isSearchActive -> stringResource(R.string.movements_search_empty_title)
         hasActiveFilters -> stringResource(R.string.movements_filter_empty_title)
@@ -706,37 +1045,72 @@ fun EmptyMovementsState(
         hasActiveFilters -> stringResource(R.string.movements_filter_empty_desc)
         else -> stringResource(R.string.movements_empty_desc)
     }
-    KipuEmptyState(
-        title = title,
-        message = message,
-        modifier = modifier,
-        icon = {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = emeraldColors.surfaceCard),
+        border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = emeraldColors.incomeBg,
+                border = BorderStroke(1.dp, emeraldColors.incomeBorder),
+                modifier = Modifier.size(64.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(36.dp)
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = null,
+                        tint = emeraldColors.incomeEmerald,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
             }
-        },
-        action = {
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = emeraldColors.primaryText,
+                textAlign = TextAlign.Center,
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = message,
+                style = MaterialTheme.typography.bodySmall,
+                color = emeraldColors.secondaryMuted,
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             if (!isSearchActive && !hasActiveFilters && onRegister != null) {
                 Button(
                     onClick = onRegister,
                     modifier = Modifier.heightIn(min = 48.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        containerColor = emeraldColors.primaryDeep,
+                        contentColor = emeraldColors.onPrimaryDeep,
                     ),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text(stringResource(R.string.history_register))
+                    Text(
+                        text = "+ Registrar primer movimiento",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = emeraldColors.onPrimaryDeep,
+                    )
                 }
             } else if (isSearchActive && onClearSearch != null) {
                 OutlinedButton(
@@ -745,8 +1119,9 @@ fun EmptyMovementsState(
                         .heightIn(min = 48.dp)
                         .testTag("btn_empty_clear_search")
                         .semantics { contentDescription = "Limpiar búsqueda" },
+                    shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text(stringResource(R.string.movements_search_clear))
+                    Text(stringResource(R.string.movements_search_clear), color = emeraldColors.primaryDeep)
                 }
             } else if (hasActiveFilters && onClearFilters != null) {
                 OutlinedButton(
@@ -755,10 +1130,23 @@ fun EmptyMovementsState(
                         .heightIn(min = 48.dp)
                         .testTag("btn_empty_clear_filters")
                         .semantics { contentDescription = "Limpiar filtros" },
+                    shape = RoundedCornerShape(12.dp),
                 ) {
-                    Text(stringResource(R.string.movements_filter_clear))
+                    Text(stringResource(R.string.movements_filter_clear), color = emeraldColors.primaryDeep)
                 }
             }
         }
-    )
+    }
+}
+
+private fun formatSignedBigIntegerMinor(minor: BigInteger): Pair<String, String> {
+    val isNegative = minor < BigInteger.ZERO
+    val absMinor = if (isNegative) minor.negate() else minor
+    val prefix = if (isNegative) "− " else if (minor > BigInteger.ZERO) "+ " else ""
+    val bd = BigDecimal(absMinor).divide(BigDecimal(100), 2, RoundingMode.HALF_UP)
+    val formatted = NumberFormat.getNumberInstance(Locale.US).apply {
+        minimumFractionDigits = 2
+        maximumFractionDigits = 2
+    }.format(bd)
+    return prefix to formatted
 }
