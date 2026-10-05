@@ -7,6 +7,12 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
+
+class RecoveryRequestException(val retryAfterSeconds: Int = 0) : Exception(
+    if (retryAfterSeconds > 0) "Demasiados intentos. Intenta en $retryAfterSeconds segundos."
+    else "No se pudo solicitar la recuperación. Intenta nuevamente."
+)
 
 @Singleton
 open class RequestPasswordRecovery @Inject constructor(
@@ -20,8 +26,7 @@ open class RequestPasswordRecovery @Inject constructor(
     open suspend operator fun invoke(email: String): Result<Unit> {
         val validation = PasswordValidator.validateEmail(email)
         if (!validation.isValid) {
-            // Even on invalid format, return success to maintain neutral behavior externally
-            return Result.success(Unit)
+            return Result.failure(Exception("Formato de correo no válido."))
         }
         val normalized = PasswordValidator.normalizeEmail(email)
         return when (val response = authApi.recovery(com.kipu.app.feature.auth.data.remote.RecoveryRequestDto(email = normalized))) {
@@ -29,7 +34,9 @@ open class RequestPasswordRecovery @Inject constructor(
             is ApiResponse.Error -> {
                 if (response.statusCode == 429) {
                     val retry = response.retryAfter ?: 60
-                    Result.failure(Exception("Demasiados intentos. Intenta en $retry segundos."))
+                    Result.failure(RecoveryRequestException(retry.coerceIn(1, 3600)))
+                } else if (response.statusCode >= 500) {
+                    Result.failure(RecoveryRequestException())
                 } else {
                     Result.success(Unit)
                 }
@@ -66,6 +73,7 @@ open class CompletePasswordReset @Inject constructor(
             runCatching { supabaseClient.auth.signOut() }
             Result.success(Unit)
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             Result.failure(Exception("El enlace de recuperación es inválido, ya fue usado o ha vencido."))
         }
     }

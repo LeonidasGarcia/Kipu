@@ -13,16 +13,45 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import androidx.lifecycle.SavedStateHandle
+import com.kipu.app.feature.auth.domain.RecoveryRequestException
+import kotlinx.coroutines.Job
 
 @HiltViewModel
 class RecoveryViewModel @Inject constructor(
     private val requestPasswordRecovery: RequestPasswordRecovery,
     private val completePasswordReset: CompletePasswordReset,
     private val recoverySessionInstaller: RecoverySessionInstaller,
+    private val savedStateHandle: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(RecoveryUiState())
+    private val _uiState = MutableStateFlow(RecoveryUiState(
+        email = savedStateHandle["email"] ?: "",
+        submittedEmail = savedStateHandle["submittedEmail"] ?: "",
+        isRequestAccepted = savedStateHandle["accepted"] ?: false,
+    ))
     val uiState: StateFlow<RecoveryUiState> = _uiState.asStateFlow()
+    private var cooldownJob: Job? = null
+
+    init {
+        val until = savedStateHandle.get<Long>("resendUntil") ?: 0L
+        val remaining = ((until - System.currentTimeMillis() + 999) / 1_000).coerceIn(0, 3600).toInt()
+        if (remaining > 0) startCooldown(remaining)
+    }
+
+    private fun startCooldown(seconds: Int) {
+        cooldownJob?.cancel()
+        savedStateHandle["resendUntil"] = System.currentTimeMillis() + seconds * 1_000L
+        _uiState.update { it.copy(resendSeconds = seconds) }
+        cooldownJob = viewModelScope.launch {
+            repeat(seconds) {
+                delay(1_000)
+                _uiState.update { state -> state.copy(resendSeconds = (state.resendSeconds - 1).coerceAtLeast(0)) }
+            }
+            savedStateHandle["resendUntil"] = 0L
+        }
+    }
 
     fun showInvalidRecoveryLinkIfNeeded() {
         if (!recoverySessionInstaller.isReady()) {
@@ -33,6 +62,7 @@ class RecoveryViewModel @Inject constructor(
     }
 
     fun onEmailChanged(email: String) {
+        savedStateHandle["email"] = email
         _uiState.update {
             it.copy(
                 email = email,
@@ -53,7 +83,8 @@ class RecoveryViewModel @Inject constructor(
     }
 
     fun submitRecoveryRequest() {
-        val email = _uiState.value.email
+        if (_uiState.value.isLoading || _uiState.value.resendSeconds > 0) return
+        val email = _uiState.value.submittedEmail.ifEmpty { _uiState.value.email }
         val emailValidation = PasswordValidator.validateEmail(email)
         if (!emailValidation.isValid) {
             _uiState.update { it.copy(emailError = (emailValidation as PasswordValidator.ValidationResult.Invalid).reason) }
@@ -64,20 +95,28 @@ class RecoveryViewModel @Inject constructor(
         viewModelScope.launch {
             requestPasswordRecovery(email).fold(
                 onSuccess = {
+                    savedStateHandle["accepted"] = true
+                    savedStateHandle["submittedEmail"] = email
                     // The same confirmation is shown for existing and unknown emails.
                     _uiState.update {
                         it.copy(
                             isLoading = false,
                             isRequestAccepted = true,
                             errorMessage = null,
+                            submittedEmail = email,
+                            resendSeconds = 45,
                         )
                     }
+                    // A finite cooldown provides feedback and prevents accidental repeated sends.
+                    startCooldown(45)
                 },
                 onFailure = { error ->
+                    if (error is RecoveryRequestException && error.retryAfterSeconds > 0) {
+                        startCooldown(error.retryAfterSeconds)
+                    }
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            isRequestAccepted = false,
                             errorMessage = error.message
                                 ?: "No se pudo solicitar la recuperación. Intenta nuevamente.",
                         )
@@ -88,6 +127,7 @@ class RecoveryViewModel @Inject constructor(
     }
 
     fun submitNewPassword() {
+        if (_uiState.value.isLoading || _uiState.value.isPasswordResetSuccess) return
         val password = _uiState.value.newPassword
         val passwordValidation = PasswordValidator.validatePassword(password)
         if (!passwordValidation.isValid) {
@@ -95,7 +135,7 @@ class RecoveryViewModel @Inject constructor(
             return
         }
 
-        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        _uiState.update { it.copy(isLoading = true, errorMessage = null, newPassword = "") }
         viewModelScope.launch {
             val result = completePasswordReset(password)
             result.fold(

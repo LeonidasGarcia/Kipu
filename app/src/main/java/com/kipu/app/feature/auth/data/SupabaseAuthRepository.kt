@@ -33,6 +33,7 @@ class SupabaseAuthRepository @Inject constructor(
     private val sessionCoordinator: SessionCoordinator,
     private val supabaseClient: SupabaseClient,
     private val pendingChangesRepository: PendingChangesRepository,
+    private val sessionGate: AuthSessionGate,
 ) : AuthRepository {
 
     private val _cooldownState = MutableStateFlow(CooldownState())
@@ -168,7 +169,9 @@ class SupabaseAuthRepository @Inject constructor(
         }
     }
 
-    override suspend fun restoreSession(): Result<AuthResult?> {
+    override suspend fun restoreSession(): Result<AuthResult?> = sessionGate.exclusive { restoreSessionExclusive() }
+
+    private suspend fun restoreSessionExclusive(): Result<AuthResult?> {
         return try {
             val sessionJson = sessionStorage.load()
             if (sessionJson.isNullOrEmpty()) {

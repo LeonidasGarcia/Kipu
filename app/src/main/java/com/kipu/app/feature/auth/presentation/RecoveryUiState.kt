@@ -9,4 +9,6 @@ data class RecoveryUiState(
     val isRequestAccepted: Boolean = false,
     val isPasswordResetSuccess: Boolean = false,
     val errorMessage: String? = null,
+    val submittedEmail: String = "",
+    val resendSeconds: Int = 0,
 )

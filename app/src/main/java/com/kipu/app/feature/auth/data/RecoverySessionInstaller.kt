@@ -14,10 +14,13 @@ class RecoverySessionInstaller @Inject constructor(
     private val supabaseClient: SupabaseClient,
     private val sessionStorage: KeystoreEncryptedSessionStorage,
     private val sessionCoordinator: SessionCoordinator,
+    private val sessionGate: AuthSessionGate,
 ) {
     private var ready = false
 
-    suspend fun install(callbackUrl: String): Result<Unit> {
+    suspend fun install(callbackUrl: String): Result<Unit> = sessionGate.exclusive { installExclusive(callbackUrl) }
+
+    private suspend fun installExclusive(callbackUrl: String): Result<Unit> {
         ready = false
         return runCatching {
             val uri = URI(callbackUrl)
