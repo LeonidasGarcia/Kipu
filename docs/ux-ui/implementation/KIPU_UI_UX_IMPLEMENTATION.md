@@ -8,7 +8,7 @@
 - APK: `app/build/outputs/apk/debug/app-debug.apk`.
 - Compilación e instalación final: `.\gradlew.bat installDebug` — `BUILD SUCCESSFUL`; APK instalado en `RFGL70J9E2T` el 2026-10-03 a las 15:12 (hora de Lima).
 - Runtime: Samsung SM-A165M, Android 16 / API 36, pantalla 1080×2340 px, densidad física 450 dpi y override 420 dpi.
-- Evidencia runtime y recapturas de la versión instalada final: [`evidence-final/`](./evidence-final/). El índice separa la evidencia recapturada tras la instalación final de las referencias históricas de los mismos recorridos. Las jerarquías XML se validaron y se les retiró `content-desc`.
+- Evidencia runtime y recapturas de la versión instalada final: [`evidence/final/`](../evidence/final/). El índice separa la evidencia recapturada tras la instalación final de las referencias históricas de los mismos recorridos. Las jerarquías XML se validaron y se les retiró `content-desc`.
 
 ## Cambios implementados
 
@@ -43,4 +43,4 @@ No se creó, editó, anuló, borró ni compró ningún movimiento, cuenta o tarj
 
 ## Evidencia
 
-Las capturas finales y sus jerarquías XML sanitizadas están en [`evidence-final/`](./evidence-final/). Los archivos `before_fix_*` preservan capturas de defectos observados antes de los últimos ajustes; el índice distingue esas referencias de la evidencia final. El informe de auditoría previo está en [`KIPU_UI_UX_AUDIT.md`](./KIPU_UI_UX_AUDIT.md).
+Las capturas finales y sus jerarquías XML sanitizadas están en [`evidence/final/`](../evidence/final/). Los archivos `before_fix_*` preservan capturas de defectos observados antes de los últimos ajustes; el índice distingue esas referencias de la evidencia final. El informe de auditoría previo está en [`KIPU_UI_UX_AUDIT.md`](../audits/KIPU_UI_UX_AUDIT.md).
