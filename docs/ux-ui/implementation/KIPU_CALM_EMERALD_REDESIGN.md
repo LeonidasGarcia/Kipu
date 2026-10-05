@@ -4,9 +4,9 @@
 
 Referencias del segundo lote:
 
-- [Agregar a Mi dinero](../mockups/canonical/add-money/add-to-my-money.png) (canvas original: [add-instrument-canvas.png](../archive/old-redesign-references/add-instrument-canvas.png)).
-- [Seleccionar producto y entidad emisora](../mockups/canonical/cards/select-card.png) (canvas original: [card-selection-canvas.png](../archive/old-redesign-references/card-selection-canvas.png)).
-- [Configurar tarjeta y confirmación](../mockups/canonical/cards/configure-card.png) (canvas original: [card-configuration-canvas.png](../archive/old-redesign-references/card-configuration-canvas.png)).
+- [Agregar a Mi dinero](../mockups/canonical/add-money/add-to-my-money.png).
+- [Seleccionar producto y entidad emisora](../mockups/canonical/cards/select-card.png).
+- [Configurar tarjeta y confirmación](../mockups/canonical/cards/configure-card.png).
 
 El alcance visual reorganiza el alta en elección de instrumento, selección de producto de crédito y configuración. Conserva las rutas de cuenta, débito, billetera y efectivo, así como los callbacks de guardado existentes.
 
@@ -16,15 +16,15 @@ Los umbrales de utilización se describen como avisos que se activan al alcanzar
 
 Las imágenes son referencias visuales. No autorizan incorporar precios de PRO, beneficios bancarios ni tasas ficticias. El conteo de instrumentos no determina por sí solo el plan efectivo; las restricciones se validan mediante el contrato existente. Los cuatro dígitos finales continúan siendo obligatorios para crédito, los días de corte y pago pueden cruzar meses y la TEA de catálogo se presenta como referencia. Una confirmación de éxito debe proceder del guardado real.
 
-La restricción histórica de no ejecutar pruebas fue reemplazada por el brief aprobado de implementación final. El avance y la validación en dispositivo se registran en [APPROVED_MOCKUPS_EXECUTION.md](APPROVED_MOCKUPS_EXECUTION.md) y [la evidencia de implementación](../implementation-evidence/README.md).
+La restricción histórica de no ejecutar pruebas fue reemplazada por el brief aprobado de implementación final. El avance y la validación en dispositivo se registran en [APPROVED_MOCKUPS_EXECUTION.md](APPROVED_MOCKUPS_EXECUTION.md) y [la evidencia de implementación](IMPLEMENTATION_EVIDENCE.md).
 
 ## 1. Visión General y Dirección de Arte
 
 Este documento registra el rediseño visual Calm Emerald en las pantallas de inicio de movimientos, dashboard, historial y alta/configuración de instrumentos, junto con la barra de navegación inferior flotante (`KipuNavigationBar`), basado en las referencias visuales suministradas:
 
-- **Referencia 1 (Hoja de Registro Rápido)**: [register-movement.png](../mockups/canonical/quick-movement/register-movement.png) (canvas original: [quick-movement-canvas.png](../archive/old-redesign-references/quick-movement-canvas.png))
-- **Referencia 2 (Dashboard / Mi Dinero)**: [dashboard.png](../mockups/canonical/dashboard/dashboard.png) (canvas original: [dashboard-canvas.png](../archive/old-redesign-references/dashboard-canvas.png))
-- **Referencia 3 (Historial de Movimientos)**: [movements.png](../mockups/canonical/movements/movements.png) (canvas original: [history-canvas.png](../archive/old-redesign-references/history-canvas.png))
+- **Referencia 1 (Hoja de Registro Rápido)**: [register-movement.png](../mockups/canonical/quick-movement/register-movement.png)
+- **Referencia 2 (Dashboard / Mi Dinero)**: [dashboard.png](../mockups/canonical/dashboard/dashboard.png)
+- **Referencia 3 (Historial de Movimientos)**: [movements.png](../mockups/canonical/movements/movements.png)
 
 ### Paleta Visual y Tokens Específicos (`CalmEmeraldTokens`)
 - **Fondo Mint**: `#F5FAF8` / `#F1FBF7` (Modo claro), `#0B1220` (Modo oscuro).

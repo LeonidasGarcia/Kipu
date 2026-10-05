@@ -1,6 +1,6 @@
 # Índice de Mockups UI/UX de Kipu (Calm Emerald)
 
-Este directorio consolida los mockups visuales oficiales de Kipu organizados bajo el estándar **Calm Emerald Fintech**. Las referencias están divididas en diseños canónicos base (`canonical/`), variantes de estado interactivo (`states/`), referencias de inspiración y diseño (`inspiration/`), y assets archivados (`archive/`).
+Este directorio consolida los mockups visuales oficiales de Kipu bajo el estandar Calm Emerald Fintech. Las referencias se dividen en disenos canonicos (canonical/), variantes interactivas (states/) e inspiracion (inspiration/). Los duplicados exactos y las laminas historicas se retiraron al quedar disponibles los mockups atomicos actuales.
 
 ---
 
@@ -30,19 +30,3 @@ Este directorio consolida los mockups visuales oficiales de Kipu organizados baj
 | **Gradients** | Emerald Flow (Light Mode) | Inspiration | [`inspiration/gradients/emerald-flow.png`](./inspiration/gradients/emerald-flow.png) | Estudio de gradiente "Emerald · Flow" en Gradient Builder para fondos y transiciones fluidas. |
 
 ---
-
-## Archivos Archivados
-
-### Duplicados Verificados (`archive/duplicates/`)
-Archivos idénticos bit a bit retirados de la raíz `Mock/`:
-- [`dashboard-duplicate-image-copy-5.png`](../archive/duplicates/dashboard-duplicate-image-copy-5.png): Copia idéntica de `canonical/dashboard/dashboard.png` (MD5: `014a00434fa4785348ae63347502f0c9`).
-- [`configure-card-duplicate-image-copy-15.png`](../archive/duplicates/configure-card-duplicate-image-copy-15.png): Copia idéntica de `canonical/cards/configure-card.png` (MD5: `bffad2909b9eda985afaa241af129dc9`).
-
-### Canvases Históricos Multipantalla (`archive/old-redesign-references/`)
-Laminas completas previas de Stitch antes de su desglose en pantallas atómicas:
-- [`add-instrument-canvas.png`](../archive/old-redesign-references/add-instrument-canvas.png): Canvas de alta de instrumentos y límite Free.
-- [`card-configuration-canvas.png`](../archive/old-redesign-references/card-configuration-canvas.png): Canvas del paso 3 con validaciones, TEA y modal de éxito.
-- [`card-selection-canvas.png`](../archive/old-redesign-references/card-selection-canvas.png): Canvas del paso 2 con catálogo, banco emisor y búsqueda.
-- [`dashboard-canvas.png`](../archive/old-redesign-references/dashboard-canvas.png): Canvas de Mi dinero con 4 estados (base, vacío, privacidad, límite).
-- [`history-canvas.png`](../archive/old-redesign-references/history-canvas.png): Canvas de historial con vista con transacciones y estado vacío.
-- [`quick-movement-canvas.png`](../archive/old-redesign-references/quick-movement-canvas.png): Canvas del modal de registro rápido en sus 4 variantes.
