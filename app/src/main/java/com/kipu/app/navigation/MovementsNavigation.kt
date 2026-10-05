@@ -2,6 +2,9 @@ package com.kipu.app.navigation
 
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
+import androidx.navigation.NavBackStackEntry
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
@@ -55,17 +58,7 @@ fun NavGraphBuilder.movementsDestinations(
             navDeepLink { uriPattern = "kipu://movements/history?accountId={accountId}&categoryId={categoryId}&query={query}" }
         )
     ) { historyEntry ->
-        val saved by historyEntry.savedStateHandle.getStateFlow("movement_saved", false).collectAsStateWithLifecycle()
-        MovementHistoryRoute(
-            savedMessage = saved,
-            onSavedMessageConsumed = { historyEntry.savedStateHandle["movement_saved"] = false },
-            onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
-            onNavigateToNewAccount = { navController.navigateToAccountForm() },
-            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
-            onNavigateToEditor = { transactionId ->
-                navController.navigateToMovementEditor(transactionId)
-            },
-        )
+        MovementHistoryContent(navController, historyEntry)
     }
     composable(
         route = MOVEMENT_EDITOR_ROUTE,
@@ -82,3 +75,22 @@ fun NavGraphBuilder.movementsDestinations(
     }
 }
 
+
+@Composable
+internal fun MovementHistoryContent(navController: NavController, historyEntry: NavBackStackEntry, movementsSelected: State<Boolean>? = null) {
+        val saved by historyEntry.savedStateHandle.getStateFlow("movement_saved", false).collectAsStateWithLifecycle()
+        val openRegisterMovement by historyEntry.savedStateHandle.getStateFlow("open_register_movement", false).collectAsStateWithLifecycle()
+        MovementHistoryRoute(
+            savedMessage = saved,
+            onSavedMessageConsumed = { historyEntry.savedStateHandle["movement_saved"] = false },
+            onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
+            onNavigateToNewAccount = { navController.navigateToAccountForm() },
+            onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
+            onNavigateToEditor = { transactionId ->
+                navController.navigateToMovementEditor(transactionId)
+            },
+            openRegisterMovement = openRegisterMovement && (movementsSelected?.value != false),
+            onConsumeRegisterMovement = { historyEntry.savedStateHandle["open_register_movement"] = false },
+            prewarmQuickMovement = true,
+        )
+}
