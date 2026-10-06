@@ -28,6 +28,10 @@ Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconc
 - Nuevas proyecciones y comandos; no se reemplazan cuentas, tarjetas, movimientos, recibos ni cursores de sync de Sprint 2.
 - No se implementan anticipadamente efectos financieros de Sprint 3 durante el incremento de Sprint 2.
 
+- Correccion #21: la vista de tasas abierta desde una tarjeta consume su identidad persistida y solo muestra una referencia con coincidencia unica y exacta de producto, emisor, red y moneda; la TEA personal se lee de esa tarjeta. No se modifica el snapshot ni se infiere una tasa.
+
+**Propagated**: 2026-10-06 — Updated from the #21 contextual-rate refinement in spec.md.
+
 ## Technical Context
 
 **Language/Version**: Kotlin 2.4.20 y Java 17; SQL PostgreSQL 17; JSON/OpenAPI 3.1 para contratos

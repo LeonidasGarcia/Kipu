@@ -105,6 +105,9 @@ class AccountsViewModel @Inject constructor(
     private val _creditCatalogError = MutableStateFlow<String?>(null)
     val creditCatalogError: StateFlow<String?> = _creditCatalogError.asStateFlow()
 
+    private val _creditCatalogLoading = MutableStateFlow(false)
+    val creditCatalogLoading: StateFlow<Boolean> = _creditCatalogLoading.asStateFlow()
+
     private val _creditNotifications = MutableStateFlow<List<CreditUtilizationNotification>>(emptyList())
     val creditNotifications: StateFlow<List<CreditUtilizationNotification>> = _creditNotifications.asStateFlow()
 
@@ -139,6 +142,7 @@ class AccountsViewModel @Inject constructor(
 
     fun loadCreditProductCatalog() {
         viewModelScope.launch {
+            _creditCatalogLoading.value = true
             getReferentialRatesUseCase().fold(
                 onSuccess = {
                     _creditProductCatalog.value = it
@@ -146,6 +150,7 @@ class AccountsViewModel @Inject constructor(
                 },
                 onFailure = { _creditCatalogError.value = it.message ?: "No se pudo cargar el catálogo de tasas" },
             )
+            _creditCatalogLoading.value = false
         }
     }
 

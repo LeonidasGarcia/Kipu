@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,7 +20,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,9 +32,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Currency
+import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.domain.model.RateReference
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
@@ -54,9 +53,10 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RateCatalogScreen(
-    cardId: CardId?,
+    creditCard: CreditCard?,
     products: List<CreditProductReference>,
     catalogError: String?,
+    catalogLoading: Boolean,
     events: Flow<AccountUiEvent>,
     onLoadCatalog: () -> Unit,
     onUpdatePersonalTea: (CardId, Int?) -> Unit,
@@ -65,20 +65,16 @@ fun RateCatalogScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var selectedCurrency by remember { mutableStateOf<Currency?>(null) }
-    var personalTeaInput by remember { mutableStateOf("") }
-    var personalTeaError by remember { mutableStateOf<String?>(null) }
-    val rates = remember(selectedCurrency, products) {
-        products.filter { product ->
-            when (selectedCurrency) {
-                Currency.PEN -> product.penTeaMinBps != null || product.penTeaMaxBps != null || product.publishedTeaSummary != null
-                Currency.USD -> product.usdTeaMinBps != null || product.usdTeaMaxBps != null || product.publishedTeaSummary != null
-                null -> true
-            }
-        }
-    }
+    var personalTeaInput by rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    var personalTeaError by rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val context = remember(creditCard, products) { resolveRateCatalogContext(creditCard, products) }
+    val referenceState = rateCatalogReferenceState(catalogLoading, catalogError, context)
 
     LaunchedEffect(Unit) { onLoadCatalog() }
+    LaunchedEffect(creditCard?.id, creditCard?.personalTeaBps) {
+        personalTeaInput = creditCard?.personalTeaBps?.let(::formatTeaInput).orEmpty()
+        personalTeaError = null
+    }
     LaunchedEffect(events) {
         events.collect { event ->
             snackbarHostState.showSnackbar(
@@ -137,7 +133,17 @@ fun RateCatalogScreen(
                 }
             }
 
-            if (cardId != null) {
+            when (val resolved = context) {
+                is RateCatalogContext.Resolved,
+                is RateCatalogContext.NoApplicableReference,
+                is RateCatalogContext.MissingProductIdentity -> {
+                    val card = when (resolved) {
+                        is RateCatalogContext.Resolved -> resolved.card
+                        is RateCatalogContext.NoApplicableReference -> resolved.card
+                        is RateCatalogContext.MissingProductIdentity -> resolved.card
+                        else -> error("Unreachable")
+                    }
+                    item { CardContextHeader(card, (resolved as? RateCatalogContext.Resolved)?.product?.productName ?: (resolved as? RateCatalogContext.NoApplicableReference)?.productName) }
                 item {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -178,7 +184,7 @@ fun RateCatalogScreen(
                                         val teaDouble = personalTeaInput.trim().replace(",", ".").toDoubleOrNull()
                                         if (teaDouble != null && teaDouble in 0.0..1000.0) {
                                             val bps = (teaDouble * 100.0).roundToInt()
-                                            onUpdatePersonalTea(cardId, bps)
+                                            onUpdatePersonalTea(card.id, bps)
                                             personalTeaError = null
                                         } else {
                                             personalTeaError = "Ingresa una TEA entre 0% y 1000%."
@@ -192,11 +198,15 @@ fun RateCatalogScreen(
                         }
                     }
                 }
+                }
+                RateCatalogContext.LoadingCard -> item {
+                    Text("Cargando la tarjeta consultada…", style = MaterialTheme.typography.bodyMedium)
+                }
             }
 
             item {
                 Text(
-                    text = "Tarifario Referencial de Entidades",
+                    text = "Referencia aplicable a esta tarjeta",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -234,71 +244,93 @@ fun RateCatalogScreen(
                         }
                     }
                 }
-                if (products.isEmpty() && catalogError == null) {
-                    Text("Cargando los productos oficiales...", style = MaterialTheme.typography.bodyMedium)
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = selectedCurrency == null,
-                        onClick = { selectedCurrency = null },
-                        label = { Text("Todos") },
-                    )
-                    FilterChip(
-                        selected = selectedCurrency == Currency.PEN,
-                        onClick = { selectedCurrency = Currency.PEN },
-                        label = { Text("Soles (PEN)") },
-                    )
-                    FilterChip(
-                        selected = selectedCurrency == Currency.USD,
-                        onClick = { selectedCurrency = Currency.USD },
-                        label = { Text("Dólares (USD)") },
-                    )
-                }
             }
 
-            items(rates, key = { it.id }) { rate ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "${rate.institutionName} - ${rate.productName}",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            rate.cardNetwork?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text("TEA soles: ${formatTeaRange(rate.penTeaMinBps, rate.penTeaMaxBps)}", style = MaterialTheme.typography.bodyMedium)
-                        Text("TEA dólares: ${formatTeaRange(rate.usdTeaMinBps, rate.usdTeaMaxBps)}", style = MaterialTheme.typography.bodyMedium)
-                        rate.publishedTeaSummary?.let { Text("Tarifario TEA: $it", style = MaterialTheme.typography.bodySmall) }
-                        rate.publishedTceaSummary?.let { Text("TCEA publicada: $it", style = MaterialTheme.typography.bodySmall) }
-                        rate.membershipCondition?.let { Text("Membresía: $it", style = MaterialTheme.typography.bodySmall) }
-                        Text(
-                            "Membresía publicada: ${formatCatalogFee(rate.membershipFeePenMinor, "S/")} · ${formatCatalogFee(rate.membershipFeeUsdMinor, "US$ ")}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Text(
-                            "Verificación: ${humanizeVerificationStatus(rate.verificationStatus)} · Vigencia sin caducidad automática",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        rate.sourceUrl?.let { Text(formatSourcesLabel(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            when (referenceState) {
+                RateCatalogReferenceState.LOADING -> item {
+                    Text("Cargando la referencia aplicable…", style = MaterialTheme.typography.bodyMedium)
+                }
+                RateCatalogReferenceState.ERROR -> Unit
+                RateCatalogReferenceState.AVAILABLE -> {
+                    val resolved = context as RateCatalogContext.Resolved
+                    item(key = resolved.product.id) { ReferentialRateCard(resolved.product, resolved.card.currency) }
+                }
+                RateCatalogReferenceState.ABSENT -> when (val resolved = context) {
+                    is RateCatalogContext.NoApplicableReference -> item {
+                        ContextNotice("No hay una referencia inequívoca para ${resolved.productName}. No seleccionamos una tasa por coincidencia aproximada.")
                     }
+                    is RateCatalogContext.MissingProductIdentity -> item {
+                        ContextNotice("Esta tarjeta no tiene un producto identificado. Registra o selecciona su producto para consultar una referencia aplicable.")
+                    }
+                    RateCatalogContext.LoadingCard -> item {
+                        ContextNotice("No encontramos la tarjeta consultada.")
+                    }
+                    is RateCatalogContext.Resolved -> error("Unreachable")
                 }
             }
 
             item {
                 Spacer(modifier = Modifier.height(32.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun CardContextHeader(card: CreditCard, productName: String?) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer), modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Tarjeta consultada", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text(card.alias ?: "${card.issuer} •••• ${card.lastFourDigits}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${card.issuer} · ${productName ?: "Producto sin identificar"} · ${card.currency.name}", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun ContextNotice(message: String) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant), modifier = Modifier.fillMaxWidth()) {
+        Text(message, modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun ReferentialRateCard(rate: CreditProductReference, currency: Currency) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${rate.institutionName} - ${rate.productName}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                rate.cardNetwork?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            val minTea = if (currency == Currency.PEN) rate.penTeaMinBps else rate.usdTeaMinBps
+            val maxTea = if (currency == Currency.PEN) rate.penTeaMaxBps else rate.usdTeaMaxBps
+            Text("TEA ${if (currency == Currency.PEN) "soles" else "dólares"}: ${formatTeaRange(minTea, maxTea)}", style = MaterialTheme.typography.bodyMedium)
+            rate.publishedTeaSummary?.let { Text("Tarifario TEA: $it", style = MaterialTheme.typography.bodySmall) }
+            rate.publishedTceaSummary?.let { Text("TCEA publicada: $it", style = MaterialTheme.typography.bodySmall) }
+            rate.membershipCondition?.let { Text("Membresía: $it", style = MaterialTheme.typography.bodySmall) }
+            Text(
+                "Membresía publicada: ${formatCatalogFee(rate.membershipFeePenMinor, "S/")} · ${formatCatalogFee(rate.membershipFeeUsdMinor, "US$ ")}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                "Verificación: ${humanizeVerificationStatus(rate.verificationStatus)} · Vigencia sin caducidad automática",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            rate.sourceUrl?.let { Text(formatSourcesLabel(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
@@ -325,3 +357,5 @@ private fun formatTeaRange(minBps: Int?, maxBps: Int?): String = when {
 
 private fun formatCatalogFee(amountMinor: Long?, symbol: String): String =
     amountMinor?.let { "$symbol${"%.2f".format(it / 100.0)}" } ?: "No publicado"
+
+private fun formatTeaInput(teaBps: Int): String = "%.2f".format(teaBps / 100.0)
