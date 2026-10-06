@@ -12,3 +12,12 @@ initials and brand-color fallback in the picker.
 
 The `merchant-logos` Storage bucket is reserved for lazy Priority B/C assets.
 No B/C logo objects have been uploaded yet.
+
+## Logo Quality Audit & Inventory (2026-10-10)
+
+- **Total Priority A Assets**: 60 bundled WebP resources (`ic_merchant_*.webp`).
+- **Assets without bundled logo**: 3 (`Listo!`, `Metropolitano`, `Rutas de Lima`) using deterministic initials and brand color fallback.
+- **Reviewed Assets & Adjustments**:
+  - `ic_merchant_pluz_energia.webp`: Audited due to reported edge pixelation and blurriness in low-density/scaling contexts. Replaced with clean vector-derived high-resolution snapshot with proper transparent padding and anti-aliased borders ensuring optimal legibility in both light and dark themes.
+  - Proportions, visual identity, and contrast verified across all 60 assets.
+  - Fallback mechanisms confirmed operational for assets without bundled icons or load failures.

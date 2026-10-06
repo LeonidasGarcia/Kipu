@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.kipu.app.BuildConfig
+import com.kipu.app.feature.categories.domain.CategoryRules
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.CategoryId
 
@@ -186,7 +187,14 @@ fun MerchantPicker(
     var selectedCategoryId by remember { mutableStateOf<CategoryId?>(null) }
     val availableCategoryIds = state.categoryFilters.mapTo(hashSetOf()) { it.categoryId }
     val activeCategoryId = selectedCategoryId?.takeIf { it in availableCategoryIds }
-    val catalogToDisplay = if (state.query.isBlank()) state.catalogEntries else state.searchResults
+    val catalogToDisplay = remember(state.catalogEntries, state.searchResults, state.query) {
+        if (state.query.isBlank()) {
+            state.catalogEntries
+        } else {
+            val baseList = if (state.catalogEntries.isNotEmpty()) state.catalogEntries else state.searchResults
+            baseList.filter { CategoryRules.matchesNormalized(it.name, state.query) }
+        }
+    }
     val visibleMerchants = remember(catalogToDisplay, activeCategoryId) {
         catalogToDisplay.filter { activeCategoryId == null || it.defaultCategoryId == activeCategoryId }
     }
