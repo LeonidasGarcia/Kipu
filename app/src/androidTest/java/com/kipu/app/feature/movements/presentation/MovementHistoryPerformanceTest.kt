@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.feature.accounts.data.local.AccountEntity
 import com.kipu.app.feature.movements.data.OfflineFirstMovementRepository
 import com.kipu.app.feature.movements.data.local.BalanceProjectionStore
 import com.kipu.app.feature.movements.data.local.MovementLocalDataSource
@@ -110,6 +111,23 @@ class MovementHistoryPerformanceTest {
 
             val userId = "perf-user"
             val now = System.currentTimeMillis()
+            db.accountDao().insert(
+                AccountEntity(
+                    id = "acc-main",
+                    userId = userId,
+                    creationOperationId = "perf-account-create",
+                    alias = "Cuenta principal",
+                    type = "BANK",
+                    currency = "PEN",
+                    presetId = null,
+                    color = null,
+                    icon = null,
+                    initialBalanceMinorUnits = 0L,
+                    openedAt = now,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
             val entities = List(10_000) { i ->
                 TransactionEntity(
                     id = "tx-perf-$i",

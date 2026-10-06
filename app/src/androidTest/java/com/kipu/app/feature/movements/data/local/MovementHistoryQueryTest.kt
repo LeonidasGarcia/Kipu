@@ -284,6 +284,10 @@ class MovementHistoryQueryTest {
         assertEquals(2, resultFood.items.size)
         assertTrue(resultFood.items.any { it.transaction.id == "tx-1" })
         assertTrue(resultFood.items.any { it.transaction.id == "tx-5" })
+
+        // Account aliases are part of the server-side history search, not just the UI filter.
+        val resultAccountAlias = repository.queryHistory(userId, MovementHistoryQuery(queryText = "BBVA Soles"))
+        assertEquals(listOf("tx-2"), resultAccountAlias.items.map { it.transaction.id })
     }
 
     @Test
@@ -359,6 +363,66 @@ class MovementHistoryQueryTest {
         val voidedItem = resultVoided.items.first()
         assertEquals("tx-5", voidedItem.transaction.id)
         assertEquals(com.kipu.app.feature.movements.domain.model.TransactionStatus.VOIDED, voidedItem.transaction.status)
+    }
+
+    @Test
+    fun financialStateFiltersUseTheirDatabaseStateMappings() = runBlocking {
+        dao.insertTransaction(TransactionEntity(
+            id = "tx-revised", userId = userId, type = "EXPENSE", amountMinor = 1L,
+            currencyCode = "PEN", sourceAccountId = bcpAccountId, categoryId = foodCategoryId,
+            occurredAt = 60_000L, status = "REVISED",
+        ))
+        dao.insertTransaction(TransactionEntity(
+            id = "tx-failed", userId = userId, type = "EXPENSE", amountMinor = 1L,
+            currencyCode = "PEN", sourceAccountId = bcpAccountId, categoryId = foodCategoryId,
+            occurredAt = 70_000L, status = "FAILED",
+        ))
+
+        suspend fun query(state: MovementFinancialState) = repository.queryHistory(
+            userId,
+            MovementHistoryQuery(advancedCriteria = AdvancedHistoryCriteria(financialStates = setOf(state))),
+        ).items.map { it.transaction.id }.toSet()
+
+        assertEquals(setOf("tx-1", "tx-2", "tx-3", "tx-4"), query(MovementFinancialState.CONFIRMED))
+        assertEquals(setOf("tx-failed"), query(MovementFinancialState.LEGACY_FAILED))
+        assertEquals(setOf("tx-revised"), query(MovementFinancialState.REVISED))
+        assertEquals(setOf("tx-5"), query(MovementFinancialState.VOIDED))
+    }
+
+    @Test
+    fun historySummaryUsesUnpagedSqlAggregates() = runBlocking {
+        dao.insertTransaction(
+            TransactionEntity(
+                id = "tx-opening",
+                userId = userId,
+                type = "INCOME",
+                amountMinor = 50_000L,
+                currencyCode = "PEN",
+                sourceAccountId = bcpAccountId,
+                legacyKind = "OPENING",
+                occurredAt = 60_000L,
+                status = "ACTIVE",
+            ),
+        )
+        val summary = repository.getHistorySummary(
+            userId,
+            MovementHistoryQuery(limit = 1, cursor = com.kipu.app.feature.movements.domain.model.MovementHistoryCursor(50_000L, "tx-5")),
+        )
+
+        assertEquals(6L, summary.totalCount)
+        assertEquals(java.math.BigInteger.valueOf(293_000L), summary.netByCurrency["PEN"])
+        assertEquals(bcpAccountId, summary.mostUsedAccountId)
+    }
+
+    @Test
+    fun getHistoryItemByIdMapsRelatedPresentationData() = runBlocking {
+        val item = repository.getHistoryItemById(userId, "tx-1")
+
+        assertNotNull(item)
+        assertEquals("BCP Soles", item?.sourceAccountAlias)
+        assertEquals("Alimentación", item?.categoryName)
+        assertEquals("Tambo", item?.merchantName)
+        assertNull(repository.getHistoryItemById(userId, "missing"))
     }
 
     @Test

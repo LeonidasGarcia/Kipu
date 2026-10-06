@@ -71,6 +71,18 @@ data class TransactionEntity(
     @ColumnInfo(name = "source") val source: String? = null,
 )
 
+data class MovementHistoryCountRow(
+    @ColumnInfo(name = "total_count")
+    val totalCount: Long,
+)
+
+data class MovementHistoryNetFlowRow(
+    @ColumnInfo(name = "currency_code")
+    val currencyCode: String,
+    @ColumnInfo(name = "net_amount_minor")
+    val netAmountMinor: Long,
+)
+
 @Entity(
     tableName = "ledger_entries",
     primaryKeys = ["user_id", "id"],

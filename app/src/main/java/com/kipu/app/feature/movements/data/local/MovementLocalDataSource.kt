@@ -14,6 +14,7 @@ import com.kipu.app.feature.plans.data.entitlement.DenyUnverifiedEntitlementEval
 import com.kipu.app.feature.plans.data.entitlement.EffectiveEntitlementEvaluator
 import com.kipu.app.feature.plans.domain.model.OfflineEntitlementLeaseDecision
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -61,6 +62,29 @@ class MovementLocalDataSource @Inject constructor(
 
     suspend fun queryTransactions(query: SupportSQLiteQuery): List<TransactionEntity> {
         return movementDao.queryTransactions(query)
+    }
+
+    suspend fun queryHistoryCount(query: SupportSQLiteQuery): Long {
+        return movementDao.queryHistoryCounts(query).single().totalCount
+    }
+
+    suspend fun queryHistoryNetFlows(query: SupportSQLiteQuery): List<MovementHistoryNetFlowRow> {
+        return movementDao.queryHistoryNetFlows(query)
+    }
+
+    suspend fun getMostUsedSourceAccountId(userId: String): String? {
+        return movementDao.getMostUsedSourceAccountId(userId)
+    }
+
+    fun observeHistoryInvalidations(): Flow<Unit> {
+        return database.invalidationTracker.createFlow(
+            "transactions",
+            "accounts",
+            "cards",
+            "category_presentations",
+            "merchant_catalog_cache",
+            emitInitialState = true,
+        ).map { Unit }
     }
 
     suspend fun commitTransactionAtomic(

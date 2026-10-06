@@ -6,6 +6,7 @@ import com.kipu.app.feature.movements.domain.model.MovementHistoryAccessDecision
 import com.kipu.app.feature.movements.domain.model.MovementHistoryCursor
 import com.kipu.app.feature.movements.domain.model.MovementHistoryPage
 import com.kipu.app.feature.movements.domain.model.MovementHistoryQuery
+import com.kipu.app.feature.movements.domain.model.MovementHistorySummary
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.Transaction
 import com.kipu.app.feature.movements.domain.model.TransactionItem
@@ -15,11 +16,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.math.BigInteger
 
 class QueryMovementHistoryTest {
 
     private class FakeQueryRepository : MovementHistoryQueryRepository {
         var lastExecutedQuery: MovementHistoryQuery? = null
+        var lastSummaryQuery: MovementHistoryQuery? = null
 
         override suspend fun queryHistory(userId: String, query: MovementHistoryQuery): MovementHistoryPage {
             lastExecutedQuery = query
@@ -41,6 +44,15 @@ class QueryMovementHistoryTest {
                 nextCursor = null,
                 hasMore = false,
                 accessDecision = MovementHistoryAccessDecision.Allowed,
+            )
+        }
+
+        override suspend fun getHistorySummary(userId: String, query: MovementHistoryQuery): MovementHistorySummary {
+            lastSummaryQuery = query
+            return MovementHistorySummary(
+                totalCount = 2L,
+                netByCurrency = mapOf("PEN" to BigInteger.TEN),
+                mostUsedAccountId = "account-1",
             )
         }
     }
@@ -96,6 +108,44 @@ class QueryMovementHistoryTest {
         assertNull(repository.lastExecutedQuery?.advancedCriteria)
         assertEquals("Supermercado", repository.lastExecutedQuery?.queryText)
         assertEquals(setOf(MovementType.EXPENSE), repository.lastExecutedQuery?.types)
+    }
+
+    @Test
+    fun advancedQueryFallbackPreservesCursorForLaterPages() = runTest {
+        val repository = FakeQueryRepository()
+        val useCase = QueryMovementHistory(
+            repository = repository,
+            entitlementProvider = FakeEntitlementProvider(null),
+        )
+        val cursor = MovementHistoryCursor(occurredAt = 1_000L, transactionId = "tx-1000")
+
+        useCase(
+            "user-1",
+            MovementHistoryQuery(
+                advancedCriteria = AdvancedHistoryCriteria(accountIds = setOf("account-1")),
+                cursor = cursor,
+            ),
+        )
+
+        assertEquals(cursor, repository.lastExecutedQuery?.cursor)
+        assertNull(repository.lastExecutedQuery?.advancedCriteria)
+    }
+
+    @Test
+    fun summaryUsesFallbackQueryWhenAdvancedAccessIsDenied() = runTest {
+        val repository = FakeQueryRepository()
+        val useCase = QueryMovementHistory(repository, entitlementProvider = FakeEntitlementProvider(null))
+        val query = MovementHistoryQuery(
+            advancedCriteria = AdvancedHistoryCriteria(accountIds = setOf("account-1")),
+            cursor = MovementHistoryCursor(1_000L, "tx-1"),
+        )
+
+        val summary = useCase.getHistorySummary("user-1", query)
+
+        assertEquals(2L, summary?.totalCount)
+        assertEquals(BigInteger.TEN, summary?.netByCurrency?.get("PEN"))
+        assertNull(repository.lastSummaryQuery?.advancedCriteria)
+        assertNull(repository.lastSummaryQuery?.cursor)
     }
 
     @Test

@@ -272,4 +272,21 @@ interface MovementDao {
 
     @RawQuery
     suspend fun queryTransactions(query: SupportSQLiteQuery): List<TransactionEntity>
+
+    @RawQuery
+    suspend fun queryHistoryCounts(query: SupportSQLiteQuery): List<MovementHistoryCountRow>
+
+    @RawQuery
+    suspend fun queryHistoryNetFlows(query: SupportSQLiteQuery): List<MovementHistoryNetFlowRow>
+
+    @Query(
+        """
+        SELECT source_account_id FROM transactions
+        WHERE user_id = :userId AND status = 'ACTIVE' AND source_account_id IS NOT NULL
+        GROUP BY source_account_id
+        ORDER BY COUNT(*) DESC, source_account_id ASC
+        LIMIT 1
+        """
+    )
+    suspend fun getMostUsedSourceAccountId(userId: String): String?
 }
