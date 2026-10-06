@@ -12,6 +12,8 @@
 
 **Input**: Especificar funcionalmente EP-CTA completa, con HU-07 a HU-13 y RF-C01 a RF-C12; Sprint 2 entrega cuentas y registro de tarjetas, y Sprint 3 evoluciona crédito, alertas, tasas, pagos y compras en cuotas.
 
+**Refined**: 2026-10-06 - Validacion PR #23 de #21: aliases explicitos entre presets y catalogo, estados exclusivos de tarjeta/catalogo, reintento sin error residual y borrador de TEA por tarjeta.
+
 ## Control de la Epica
 
 | Campo | Valor |

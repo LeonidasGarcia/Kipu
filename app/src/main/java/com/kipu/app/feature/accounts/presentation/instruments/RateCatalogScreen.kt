@@ -57,6 +57,7 @@ fun RateCatalogScreen(
     products: List<CreditProductReference>,
     catalogError: String?,
     catalogLoading: Boolean,
+    cardLoading: Boolean,
     events: Flow<AccountUiEvent>,
     onLoadCatalog: () -> Unit,
     onUpdatePersonalTea: (CardId, Int?) -> Unit,
@@ -67,13 +68,24 @@ fun RateCatalogScreen(
 
     var personalTeaInput by rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var personalTeaError by rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var initializedCardId by rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val context = remember(creditCard, products) { resolveRateCatalogContext(creditCard, products) }
     val referenceState = rateCatalogReferenceState(catalogLoading, catalogError, context)
+    val cardState = rateCatalogCardState(cardLoading, creditCard)
 
     LaunchedEffect(Unit) { onLoadCatalog() }
-    LaunchedEffect(creditCard?.id, creditCard?.personalTeaBps) {
-        personalTeaInput = creditCard?.personalTeaBps?.let(::formatTeaInput).orEmpty()
-        personalTeaError = null
+    LaunchedEffect(creditCard?.id) {
+        val cardId = creditCard?.id?.value
+        if (cardId != null && initializedCardId != cardId) {
+            personalTeaInput = personalTeaDraft(
+                initializedCardId = initializedCardId,
+                cardId = cardId,
+                restoredDraft = personalTeaInput,
+                persistedTeaBps = creditCard.personalTeaBps,
+            )
+            personalTeaError = null
+            initializedCardId = cardId
+        }
     }
     LaunchedEffect(events) {
         events.collect { event ->
@@ -107,6 +119,14 @@ fun RateCatalogScreen(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            when (cardState) {
+                RateCatalogCardState.LOADING -> item {
+                    Text("Cargando la tarjeta consultada…", style = MaterialTheme.typography.bodyMedium)
+                }
+                RateCatalogCardState.NOT_FOUND -> item {
+                    ContextNotice("Tarjeta no encontrada.")
+                }
+                RateCatalogCardState.AVAILABLE -> {
             item {
                 Spacer(modifier = Modifier.height(4.dp))
                 // Disclaimer Banner
@@ -141,7 +161,6 @@ fun RateCatalogScreen(
                         is RateCatalogContext.Resolved -> resolved.card
                         is RateCatalogContext.NoApplicableReference -> resolved.card
                         is RateCatalogContext.MissingProductIdentity -> resolved.card
-                        else -> error("Unreachable")
                     }
                     item { CardContextHeader(card, (resolved as? RateCatalogContext.Resolved)?.product?.productName ?: (resolved as? RateCatalogContext.NoApplicableReference)?.productName) }
                 item {
@@ -199,9 +218,7 @@ fun RateCatalogScreen(
                     }
                 }
                 }
-                RateCatalogContext.LoadingCard -> item {
-                    Text("Cargando la tarjeta consultada…", style = MaterialTheme.typography.bodyMedium)
-                }
+                RateCatalogContext.LoadingCard -> error("Card content requires a resolved card state")
             }
 
             item {
@@ -271,6 +288,8 @@ fun RateCatalogScreen(
 
             item {
                 Spacer(modifier = Modifier.height(32.dp))
+            }
+                }
             }
         }
     }
@@ -357,5 +376,3 @@ private fun formatTeaRange(minBps: Int?, maxBps: Int?): String = when {
 
 private fun formatCatalogFee(amountMinor: Long?, symbol: String): String =
     amountMinor?.let { "$symbol${"%.2f".format(it / 100.0)}" } ?: "No publicado"
-
-private fun formatTeaInput(teaBps: Int): String = "%.2f".format(teaBps / 100.0)

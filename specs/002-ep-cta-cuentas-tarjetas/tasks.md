@@ -169,6 +169,7 @@ Complete T075 and approve its evidence before any Sprint 3 production implementa
 - [X] T052 [P] [US5] Implement Rate Catalog sheet and personal TEA editor in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/RateCatalogScreen.kt`
 - [X] T053 [US5] Implement Android catalog read-model/repository mapping from canonical `credit_products` and persist per-card `personal_tea_bps`; show source status and caveats without seeding data or creating a parallel rate catalog.
 - [X] T091 [US5] Correct the card-contextual reference view: resolve the persisted card/product, restore its personal TEA, require a unique exact catalog match by product/emitter/network and show loading, error or no-reference states without guessing in `RateCatalogContext.kt`, `RateCatalogScreen.kt` and `AccountsNavigation.kt`.
+- [X] T092 [US5] Apply PR #23 validation: explicit preset/catalog aliases, exclusive card/catalog states, retry error clearing and per-card restored TEA draft tests in the contextual rate view.
 
 **Checkpoint**: Referential rates and personal TEA are manageable and isolated from historical financial records.
 

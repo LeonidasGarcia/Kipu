@@ -143,6 +143,7 @@ class AccountsViewModel @Inject constructor(
     fun loadCreditProductCatalog() {
         viewModelScope.launch {
             _creditCatalogLoading.value = true
+            _creditCatalogError.value = null
             getReferentialRatesUseCase().fold(
                 onSuccess = {
                     _creditProductCatalog.value = it

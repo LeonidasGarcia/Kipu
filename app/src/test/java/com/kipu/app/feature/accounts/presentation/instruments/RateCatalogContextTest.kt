@@ -72,11 +72,79 @@ class RateCatalogContextTest {
         assertEquals(RateCatalogReferenceState.AVAILABLE, rateCatalogReferenceState(false, null, context))
     }
 
-    private fun card(stylePresetId: String?) = CreditCard(
+    @Test
+    fun `resolves the explicit Sapphire canonical catalog name`() {
+        val result = resolveRateCatalogContext(
+            card("bcp-visa-latam-sapphire"),
+            listOf(product("Visa Infinite Sapphire LATAM Pass")),
+        )
+
+        assertTrue(result is RateCatalogContext.Resolved)
+    }
+
+    @Test
+    fun `resolves the explicit American Express canonical catalog name`() {
+        val result = resolveRateCatalogContext(
+            card("interbank-amex-gold", issuer = "Interbank", network = CardNetwork.AMEX),
+            listOf(product("American Express Gold", institutionCode = "INTERBANK", network = "AMEX")),
+        )
+
+        assertTrue(result is RateCatalogContext.Resolved)
+    }
+
+    @Test
+    fun `does not resolve Sapphire as Iridium`() {
+        val result = resolveRateCatalogContext(
+            card("bcp-visa-latam-sapphire"),
+            listOf(product("Visa Infinite Iridium LATAM Pass")),
+        )
+
+        assertTrue(result is RateCatalogContext.NoApplicableReference)
+    }
+
+    @Test
+    fun `keeps a matching product with unpublished tea as a reference without inventing a rate`() {
+        val result = resolveRateCatalogContext(
+            card("bcp-visa-latam-gold"),
+            listOf(product("Visa Oro LATAM Pass", penTeaMinBps = null, penTeaMaxBps = null)),
+        ) as RateCatalogContext.Resolved
+
+        assertEquals(null, result.product.penTeaMinBps)
+        assertEquals(null, result.product.penTeaMaxBps)
+    }
+
+    @Test
+    fun `catalog loading hides a previous error during retry`() {
+        assertEquals(
+            RateCatalogReferenceState.LOADING,
+            rateCatalogReferenceState(true, "Previous error", RateCatalogContext.LoadingCard),
+        )
+    }
+
+    @Test
+    fun `card loading and missing card are distinct states`() {
+        assertEquals(RateCatalogCardState.LOADING, rateCatalogCardState(true, null))
+        assertEquals(RateCatalogCardState.NOT_FOUND, rateCatalogCardState(false, null))
+    }
+
+    @Test
+    fun `restored tea draft is preserved for the same card and isolated for another card`() {
+        val firstCardId = "card-1"
+        val secondCardId = "card-2"
+
+        assertEquals("53.25", personalTeaDraft(firstCardId, firstCardId, "53.25", 4_550))
+        assertEquals("61.00", personalTeaDraft(firstCardId, secondCardId, "53.25", 6_100))
+    }
+
+    private fun card(
+        stylePresetId: String?,
+        issuer: String = "BCP",
+        network: CardNetwork = CardNetwork.VISA,
+    ) = CreditCard(
         id = CardId.generate(),
         userId = UserId.generate(),
-        issuer = "BCP",
-        network = CardNetwork.VISA,
+        issuer = issuer,
+        network = network,
         lastFourDigits = "1234",
         currency = Currency.PEN,
         creditLimitMinorUnits = 1_000_00L,
@@ -86,14 +154,21 @@ class RateCatalogContextTest {
         stylePresetId = stylePresetId,
     )
 
-    private fun product(name: String, id: String = "product") = CreditProductReference(
+    private fun product(
+        name: String,
+        id: String = "product",
+        institutionCode: String = "BCP",
+        network: String = "VISA",
+        penTeaMinBps: Int? = 4_550,
+        penTeaMaxBps: Int? = 4_550,
+    ) = CreditProductReference(
         id = id,
-        institutionCode = "BCP",
-        institutionName = "BCP",
+        institutionCode = institutionCode,
+        institutionName = institutionCode,
         productName = name,
-        cardNetwork = "VISA",
-        penTeaMinBps = 4_550,
-        penTeaMaxBps = 4_550,
+        cardNetwork = network,
+        penTeaMinBps = penTeaMinBps,
+        penTeaMaxBps = penTeaMaxBps,
         usdTeaMinBps = null,
         usdTeaMaxBps = null,
         publishedTeaSummary = null,

@@ -32,6 +32,10 @@ Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconc
 
 **Propagated**: 2026-10-06 — Updated from the #21 contextual-rate refinement in spec.md.
 
+- Validacion PR #23: las equivalencias entre preset y catalogo son una lista explicita; estados de tarjeta y catalogo son excluyentes, el reintento limpia el error y el borrador de TEA se conserva por tarjeta.
+
+**Propagated**: 2026-10-06 - Updated from the #21 PR #23 validation in spec.md.
+
 ## Technical Context
 
 **Language/Version**: Kotlin 2.4.20 y Java 17; SQL PostgreSQL 17; JSON/OpenAPI 3.1 para contratos

@@ -4,6 +4,7 @@ import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.presentation.components.CardStylePresets
 import java.text.Normalizer
+import java.util.Locale
 
 /**
  * Resolves a catalog entry only when the stored visual product identity maps to one exact
@@ -22,6 +23,27 @@ internal enum class RateCatalogReferenceState {
     ABSENT,
     AVAILABLE,
 }
+
+internal enum class RateCatalogCardState {
+    LOADING,
+    NOT_FOUND,
+    AVAILABLE,
+}
+
+internal fun rateCatalogCardState(isCardLoading: Boolean, card: CreditCard?): RateCatalogCardState = when {
+    isCardLoading -> RateCatalogCardState.LOADING
+    card == null -> RateCatalogCardState.NOT_FOUND
+    else -> RateCatalogCardState.AVAILABLE
+}
+
+internal fun personalTeaDraft(
+    initializedCardId: String?,
+    cardId: String,
+    restoredDraft: String,
+    persistedTeaBps: Int?,
+): String = if (initializedCardId == cardId) restoredDraft else persistedTeaBps?.let(::formatTeaDraft).orEmpty()
+
+private fun formatTeaDraft(teaBps: Int): String = String.format(Locale.US, "%.2f", teaBps / 100.0)
 
 internal fun rateCatalogReferenceState(
     isCatalogLoading: Boolean,
@@ -43,16 +65,32 @@ fun resolveRateCatalogContext(
         ?.takeIf { it.institutionCode.isNotBlank() && it.productName.isNotBlank() }
         ?: return RateCatalogContext.MissingProductIdentity(card)
 
+    val canonicalProductName = canonicalProductNamesByPresetId[preset.id] ?: preset.productName
     val matchingProducts = products.filter { product ->
         product.institutionCode.equals(preset.institutionCode, ignoreCase = true) &&
             product.cardNetwork.equals(preset.network, ignoreCase = true) &&
             product.cardNetwork.equals(card.network.name, ignoreCase = true) &&
-            normalizeCatalogIdentity(product.productName) == normalizeCatalogIdentity(preset.productName)
+            normalizeCatalogIdentity(product.productName) == normalizeCatalogIdentity(canonicalProductName)
     }
 
     return matchingProducts.singleOrNull()?.let { RateCatalogContext.Resolved(card, it) }
-        ?: RateCatalogContext.NoApplicableReference(card, preset.productName)
+        ?: RateCatalogContext.NoApplicableReference(card, canonicalProductName)
 }
+
+/** Explicit, reviewed aliases between persisted visual presets and catalog identities. */
+private val canonicalProductNamesByPresetId = mapOf(
+    "bcp-visa-latam-sapphire" to "Visa Infinite Sapphire LATAM Pass",
+    "bcp-visa-latam-iridium" to "Visa Infinite Iridium LATAM Pass",
+    "bcp-amex-latam-classic" to "American Express Clásica LATAM Pass",
+    "bcp-amex-latam-gold" to "American Express Oro LATAM Pass",
+    "bcp-amex-latam-platinum" to "American Express Platinum LATAM Pass",
+    "bcp-amex-latam-black" to "American Express Black LATAM Pass",
+    "interbank-amex-green" to "American Express Green",
+    "interbank-amex-gold" to "American Express Gold",
+    "interbank-amex-platinum" to "American Express Platinum",
+    "interbank-amex-black" to "American Express Black",
+    "interbank-amex-the-platinum-card" to "The Platinum Card American Express",
+)
 
 internal fun normalizeCatalogIdentity(value: String): String = Normalizer
     .normalize(value, Normalizer.Form.NFD)

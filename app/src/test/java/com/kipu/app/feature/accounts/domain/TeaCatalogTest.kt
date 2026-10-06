@@ -4,7 +4,9 @@ import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.feature.accounts.domain.model.PersonalTea
 import com.kipu.app.feature.accounts.domain.model.RateReference
+import com.kipu.app.feature.accounts.domain.usecase.UpdatePersonalTea
 import java.time.LocalDate
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,6 +58,32 @@ class TeaCatalogTest {
             PersonalTea(cardId = cardId, teaBps = 100_001)
         }.exceptionOrNull()
         assertTrue(excessTea is IllegalArgumentException)
+    }
+
+    @Test
+    fun `saves personal tea independently for each card`() = runTest {
+        val savedTeaByCard = mutableMapOf<CardId, Int?>()
+        val repository = object : FakeFinancialInstrumentsRepository() {
+            override suspend fun updatePersonalTea(
+                cardId: CardId,
+                teaBps: Int?,
+                operationId: com.kipu.app.core.finance.domain.model.OperationId,
+            ): Result<Unit> {
+                savedTeaByCard[cardId] = teaBps
+                return Result.success(Unit)
+            }
+        }
+        val updatePersonalTea = UpdatePersonalTea(repository)
+        val firstCard = CardId.generate()
+        val secondCard = CardId.generate()
+
+        val firstResult = updatePersonalTea(firstCard, 4550)
+        val secondResult = updatePersonalTea(secondCard, 6125)
+
+        assertEquals(4550, firstResult.getOrThrow()?.teaBps)
+        assertEquals(6125, secondResult.getOrThrow()?.teaBps)
+        assertEquals(4550, savedTeaByCard[firstCard])
+        assertEquals(6125, savedTeaByCard[secondCard])
     }
 
 }
