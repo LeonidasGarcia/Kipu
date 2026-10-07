@@ -107,6 +107,35 @@ class CategoryRulesTest {
     }
 
     @Test
+    fun `free plan limits active custom roots to five per type with general dual consumption`() {
+        val expenseRoots = (1..5).map {
+            Category(CategoryId.generate(), user1, null, CategoryOrigin.CUSTOM, true, categoryType = CategoryType.EXPENSE)
+        }
+        val incomeRoots = (1..4).map {
+            Category(CategoryId.generate(), user1, null, CategoryOrigin.CUSTOM, true, categoryType = CategoryType.INCOME)
+        }
+        val generalRoot = Category(CategoryId.generate(), user1, null, CategoryOrigin.CUSTOM, true, categoryType = CategoryType.GENERAL)
+
+        val categories = expenseRoots + incomeRoots
+        assertEquals(5, CategoryRules.countActiveCustomExpenseRoots(categories))
+        assertEquals(4, CategoryRules.countActiveCustomIncomeRoots(categories))
+
+        // Expense is full (5/5), so another expense is rejected
+        assertFalse(CategoryRules.canActivateCustomRoot(CategoryType.EXPENSE, categories, isPremium = false))
+        // Income has 1 slot left (4/5), so another income is allowed
+        assertTrue(CategoryRules.canActivateCustomRoot(CategoryType.INCOME, categories, isPremium = false))
+        // General requires a slot in BOTH expense and income. Expense is full, so general is rejected
+        assertFalse(CategoryRules.canActivateCustomRoot(CategoryType.GENERAL, categories, isPremium = false))
+        // Premium bypasses all quota limits
+        assertTrue(CategoryRules.canActivateCustomRoot(CategoryType.EXPENSE, categories, isPremium = true))
+
+        // General root counts towards both expense and income
+        val withGeneral = categories + generalRoot
+        assertEquals(6, CategoryRules.countActiveCustomExpenseRoots(withGeneral))
+        assertEquals(5, CategoryRules.countActiveCustomIncomeRoots(withGeneral))
+    }
+
+    @Test
     fun `free plan limits active custom roots to five`() {
         assertFalse(CategoryRules.canActivateCustomRoot(activeCustomRootCount = 5, isPremium = false))
         assertTrue(CategoryRules.canActivateCustomRoot(activeCustomRootCount = 4, isPremium = false))

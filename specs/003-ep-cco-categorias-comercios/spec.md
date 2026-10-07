@@ -20,6 +20,13 @@
 
 - Aprobación: Las pestañas Gastos e Ingresos filtran categorías por tipo y ambas incluyen las categorías `GENERAL`. Las categorías existentes se migran como `GENERAL` sin inferir su tipo ni cambiar la clasificación histórica. Las raíces nuevas usan el tipo seleccionado; las subcategorías heredan y deben coincidir con su raíz. Las transferencias no llevan categoría.
 
+### Session 2026-10-07 (Resolución de Autoridad sobre Cupo Free de Categorías)
+
+- Aprobación de Autoridad: Conforme a la Arquitectura y Modelado de Datos Kipu V4.2 (sección `categories`) y la resolución del workflow Spec Kit, en plan Free se permiten hasta 5 categorías raíz personalizadas activas de GASTOS (`EXPENSE`) y hasta 5 categorías raíz personalizadas activas de INGRESOS (`INCOME`).
+- Las categorías predeterminadas del sistema (`SYSTEM`, como Alimentación, Transporte, Servicios) y las subcategorías están exentas de cupo (incluso cuando se personaliza su nombre, icono o color).
+- Toda categoría raíz personalizada de tipo `GENERAL` consume 1 cupo en ambos límites (1 en gastos y 1 en ingresos).
+- Al descender de plan (downgrade) o seleccionar cupo (HU-57), el usuario puede elegir hasta 5 raíces de gastos y 5 raíces de ingresos para mantener activas; las excedentes pasan a `LOCKED_BY_PLAN` sin borrarse ni alterar movimientos históricos.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Organizar categorías en dos niveles (Priority: P1)
@@ -34,8 +41,8 @@ Como usuario, creo y organizo categorías raíz y sus subcategorías para clasif
 
 1. **Given** un usuario con permiso para crear categorías raíz personalizadas, **When** crea una categoría raíz y una subcategoría bajo ella, **Then** ambas quedan disponibles para clasificar movimientos y se muestra su relación de dos niveles.
 2. **Given** una subcategoría existente, **When** el usuario intenta asignarle una categoría hija o convertirla en padre de su categoría raíz, **Then** la operación se rechaza y la jerarquía existente no cambia.
-3. **Given** un usuario Free con cinco categorías raíz personalizadas activas, **When** intenta activar o crear una sexta categoría raíz personalizada, **Then** el sistema no permite activarla e informa el límite aplicable.
-4. **Given** una categoría raíz personalizada inactiva de un usuario Free, **When** el usuario crea o activa una nueva categoría raíz personalizada, **Then** se permite la acción solo si el total de categorías raíz personalizadas activas no supera cinco.
+3. **Given** un usuario Free con cinco categorías raíz personalizadas activas de un tipo (`EXPENSE` o `INCOME`), **When** intenta activar o crear una sexta categoría raíz personalizada de ese tipo (o una `GENERAL` sin cupo en ambos), **Then** el sistema no permite activarla e informa el límite aplicable.
+4. **Given** una categoría raíz personalizada inactiva de un usuario Free, **When** el usuario crea o activa una nueva categoría raíz personalizada, **Then** se permite la acción solo si el total de categorías raíz personalizadas activas para su tipo contable no supera cinco.
 
 ---
 
@@ -109,7 +116,7 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - **FR-003**: El sistema DEBE permitir editar libremente el nombre, icono y color de categorías raíz y subcategorías tanto para usuarios Free como Premium.
 - **FR-004**: El sistema DEBE ofrecer desde la primera disponibilidad de la funcionalidad un catálogo inicial activo de categorías predeterminadas que incluya, como mínimo, Alimentación, Transporte y Servicios.
 - **FR-005**: El sistema DEBE permitir que el usuario modifique la presentación visual de una categoría predeterminada sin romper ni reasignar los movimientos históricos vinculados a ella.
-- **FR-006**: Para un usuario Free, el sistema DEBE impedir que el total de categorías raíz personalizadas activas supere cinco.
+- **FR-006**: Para un usuario Free, el sistema DEBE impedir que el total de categorías raíz personalizadas activas supere cinco de gastos (`EXPENSE`) y cinco de ingresos (`INCOME`); las de tipo `GENERAL` consumen un cupo en ambos límites. Las categorías predeterminadas del sistema (`SYSTEM`) y las subcategorías no consumen cupo.
 - **FR-007**: El sistema DEBE permitir las subcategorías de una categoría raíz personalizada conforme a la disponibilidad de su categoría raíz, sin aplicarles un cupo Free independiente.
 - **FR-008**: Cuando una categoría raíz personalizada supere el cupo Free por un cambio de plan, el sistema DEBE preservar la categoría, sus subcategorías y los movimientos existentes, y DEBE bloquear nuevas activaciones o creaciones que mantengan el exceso.
 - **FR-009**: Cuando una categoría raíz se inactiva, el sistema DEBE impedir nuevas asignaciones tanto de la categoría raíz como de todas sus subcategorías, sin alterar su jerarquía ni los movimientos históricos vinculados; al reactivarla, sus subcategorías vuelven a estar disponibles para nuevas asignaciones.

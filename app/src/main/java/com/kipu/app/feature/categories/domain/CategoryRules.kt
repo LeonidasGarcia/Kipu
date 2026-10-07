@@ -10,6 +10,8 @@ import java.util.Locale
 object CategoryRules {
 
     const val MAX_FREE_ACTIVE_CUSTOM_ROOTS = 5
+    const val MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS = 5
+    const val MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS = 5
 
     /**
      * Validates that adding or editing a category does not violate hierarchy constraints:
@@ -97,10 +99,51 @@ object CategoryRules {
     }
 
     /**
+     * Type-aware quota evaluation:
+     * - EXPENSE roots check expense quota (max 5).
+     * - INCOME roots check income quota (max 5).
+     * - GENERAL roots consume a slot in BOTH quotas (both must be < 5).
+     */
+    fun canActivateCustomRoot(
+        candidateType: CategoryType,
+        categories: List<Category>,
+        isPremium: Boolean,
+    ): Boolean {
+        if (isPremium) return true
+        val expenseCount = countActiveCustomExpenseRoots(categories)
+        val incomeCount = countActiveCustomIncomeRoots(categories)
+        return when (candidateType) {
+            CategoryType.EXPENSE -> expenseCount < MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS
+            CategoryType.INCOME -> incomeCount < MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS
+            CategoryType.GENERAL -> expenseCount < MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS && incomeCount < MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS
+        }
+    }
+
+    /**
      * Counts active custom roots from a list of categories.
      */
     fun countActiveCustomRoots(categories: List<Category>): Int {
         return categories.count { it.origin == CategoryOrigin.CUSTOM && it.isRoot && it.isActive }
+    }
+
+    /**
+     * Counts active custom roots that consume EXPENSE quota (EXPENSE + GENERAL).
+     */
+    fun countActiveCustomExpenseRoots(categories: List<Category>): Int {
+        return categories.count {
+            it.origin == CategoryOrigin.CUSTOM && it.isRoot && it.isActive &&
+                (it.categoryType == CategoryType.EXPENSE || it.categoryType == CategoryType.GENERAL)
+        }
+    }
+
+    /**
+     * Counts active custom roots that consume INCOME quota (INCOME + GENERAL).
+     */
+    fun countActiveCustomIncomeRoots(categories: List<Category>): Int {
+        return categories.count {
+            it.origin == CategoryOrigin.CUSTOM && it.isRoot && it.isActive &&
+                (it.categoryType == CategoryType.INCOME || it.categoryType == CategoryType.GENERAL)
+        }
     }
 
     /**

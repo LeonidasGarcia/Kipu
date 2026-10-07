@@ -134,14 +134,28 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         val selectedIds = quotaSelectionDao.observeSelectedResourceIds(userId.value, QuotaGroup.CUSTOM_CATEGORIES.name)
         val access = featureAccessCacheDao.observe(UUID.fromString(userId.value))
         return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access, offlineEntitlementRefreshTicker()) { entities, selected, cache, _ ->
+            val isPremium = entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed
             val activeRoots = entities.filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-            val lockedRoots = quotaPolicy.evaluate(
-                group = QuotaGroup.CUSTOM_CATEGORIES,
-                activeResourceIds = activeRoots.map { it.id },
-                selectedResourceIds = selected,
-                limits = FreePlanLimits(),
-                premiumVerified = entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed,
-            ).planLockedResourceIds
+            val lockedRoots: Set<String> = if (isPremium) {
+                emptySet()
+            } else {
+                val expenseCount = activeRoots.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
+                val incomeCount = activeRoots.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
+                val locked = mutableSetOf<String>()
+                for (root in activeRoots) {
+                    val isExceeded = when (root.categoryType) {
+                        "EXPENSE" -> expenseCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS
+                        "INCOME" -> incomeCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS
+                        "GENERAL" -> expenseCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS ||
+                            incomeCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS
+                        else -> false
+                    }
+                    if (isExceeded && root.id !in selected) {
+                        locked.add(root.id)
+                    }
+                }
+                locked
+            }
             entities.map { entity ->
                 val rootId = entity.parentId ?: entity.id
                 Category(
@@ -168,8 +182,15 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             .filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
         val activeRootIds = activeRoots.mapTo(mutableSetOf()) { it.id }
         require(categoryIds.all { it.value in activeRootIds }) { "Selection includes unavailable categories" }
-        require(categoryIds.size <= FreePlanLimits().customCategories) {
-            "Free category selection exceeds its total limit"
+
+        val selectedEntities = activeRoots.filter { it.id in categoryIds.map { id -> id.value } }
+        val expenseSelected = selectedEntities.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
+        val incomeSelected = selectedEntities.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
+        require(expenseSelected <= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS) {
+            "Free category selection exceeds expense limit (max 5)"
+        }
+        require(incomeSelected <= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS) {
+            "Free category selection exceeds income limit (max 5)"
         }
         quotaSelectionDao.replaceSelection(
             userId = userId.value,
@@ -241,17 +262,21 @@ class OfflineFirstCategoriesRepository @Inject constructor(
 
         // Validate Free quota if custom root
         if (category.isRoot && category.isCustom) {
-            val activeCount = categoryDao.countActiveCustomRoots(userId)
-            val decision = featureAccessPolicy.evaluate(
-                FeatureAccessRequest(
-                    capability = Capability.CustomCategories,
-                    currentUsage = activeCount,
-                    freeLimits = FreePlanLimits(),
-                    effectiveEntitlement = effectiveEntitlement(userId),
-                )
-            )
-            if (decision is FeatureAccessDecision.Denied) {
-                return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom roots"))
+            val isPremium = effectiveEntitlement(userId)?.verified == true
+            if (!isPremium) {
+                val activeRoots = categoryDao.getCategoriesForUser(userId)
+                    .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+                val activeExpenseCount = activeRoots.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
+                val activeIncomeCount = activeRoots.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
+                val affectsExpense = category.categoryType == CategoryType.EXPENSE || category.categoryType == CategoryType.GENERAL
+                val affectsIncome = category.categoryType == CategoryType.INCOME || category.categoryType == CategoryType.GENERAL
+
+                if (affectsExpense && activeExpenseCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS) {
+                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for expenses"))
+                }
+                if (affectsIncome && activeIncomeCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS) {
+                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for income"))
+                }
             }
         }
 
@@ -322,17 +347,21 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             ?: return Result.failure(IllegalArgumentException("Category not found: ${categoryId.value}"))
 
         if (existing.parentId == null && existing.origin == "CUSTOM" && isActive && !existing.isActive) {
-            val activeCount = categoryDao.countActiveCustomRoots(userId)
-            val decision = featureAccessPolicy.evaluate(
-                FeatureAccessRequest(
-                    capability = Capability.CustomCategories,
-                    currentUsage = activeCount,
-                    freeLimits = FreePlanLimits(),
-                    effectiveEntitlement = effectiveEntitlement(userId),
-                )
-            )
-            if (decision is FeatureAccessDecision.Denied) {
-                return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom roots"))
+            val isPremium = effectiveEntitlement(userId)?.verified == true
+            if (!isPremium) {
+                val activeRoots = categoryDao.getCategoriesForUser(userId)
+                    .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+                val activeExpenseCount = activeRoots.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
+                val activeIncomeCount = activeRoots.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
+                val affectsExpense = existing.categoryType == "EXPENSE" || existing.categoryType == "GENERAL"
+                val affectsIncome = existing.categoryType == "INCOME" || existing.categoryType == "GENERAL"
+
+                if (affectsExpense && activeExpenseCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS) {
+                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for expenses"))
+                }
+                if (affectsIncome && activeIncomeCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS) {
+                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for income"))
+                }
             }
         }
 
