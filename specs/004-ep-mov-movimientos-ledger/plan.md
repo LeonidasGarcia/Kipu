@@ -231,3 +231,17 @@ Validation: draft cancel/apply, invalid dates/amounts/currencies, filters remove
 
 
 **Propagated**: 2026-10-03 — Source-provenance baseline finding: T110 resolves the canonical persisted provenance and its authorized query/UI mapping before complete HU-22 acceptance. This is an open baseline dependency, independent of the completed FR-033–FR-039 visual refinement. Do not substitute sync state or account identity for provenance. No provenance schema or historical backfill is approved by this visual change.
+
+## Issue #19 — Corrección de espaciado reportada en dispositivo (2026-10-06)
+
+T111–T113 concretan FR-034/039 dentro de `MovementFiltersSheet.kt` y sus strings: separación vertical en FlowRow y grupos avanzados; cabecera del DateRangePicker con padding y extremos de igual ancho; tarjeta Premium informativa con acción explícita. Mantener entrada manual/calendario, callbacks, Saver, privacidad y validaciones existentes. No editar pantalla, ViewModel, consultas ni componentes globales.
+
+Verificar build y regresión existente de borrador, actualizar la copia de pruebas física y comprobar visualmente los tres hallazgos. Registrar comandos y límites reales en `review-record.md`; las capturas del dispositivo del usuario permanecen locales. T110 continúa fuera del alcance.
+
+### Alcance restante autorizado
+
+El responsable acepta el resumen/retirada de filtros aplicados y el comportamiento de «Limpiar» tal como están. T115–T118 completan errores locales, selectores y entrega sin cambiar esas interacciones. Reutilizar `MovementFilterDraft.validate` para presentar errores por clave (`from`, `to`, `currency`, `min`, `max`), y refrescarlos durante correcciones después de un intento inválido. El selector específico usa búsqueda y `LazyColumn` con claves estables por ID; conserva selecciones ocultas por la búsqueda y permite retirar referencias seleccionadas ausentes del catálogo mediante nombre histórico seguro. Los nombres duplicados no fusionan IDs.
+
+Verificar con la variante aislada `lab` y fixtures sintéticos, preservando la instalación y sesión del usuario. La evidencia versionada compara el panel anterior a T115/T116 con el resultado en igual dispositivo/tema. Registrar explícitamente qué se comprobó por fixture y qué por integración; no certificar compras, consultas ni pendientes de Sprint 4 con pruebas de presentación.
+
+La prueba compacta usa un `ComposeView` con `ContextThemeWrapper` y configuración local (densidad ×1,25; fuente ×1,6), heredada por los diálogos. Un override de `LocalDensity` externo no basta para las ventanas Android. Material3 1.4.0 impone 360 dp al contenedor de `DatePickerDialog`; por debajo de ese ancho usar un contenedor local limitado a la ventana, conservando `DateRangePicker`, estado, validaciones y callbacks. Las acciones pueden pasar a otra fila. El diálogo nativo permanece en anchos de 360 dp o más.

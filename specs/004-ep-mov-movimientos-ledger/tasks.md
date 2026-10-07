@@ -324,3 +324,19 @@ Dependency DAG: T103 → T104; T103 → T105; T104 → T106/T107; T105/T106/T107
 - [ ] T110 [Baseline HU-22] Resolve canonical movement-source provenance with Obsidian Mind and the existing data authorities; refine/propagate the Room/domain/query contract and implement the source selector with authorization/combination tests, preserving unknown historical provenance (FR-017; full HU-22 acceptance remains open; requires a confirmed data contract before implementation).
 
 **Propagated**: 2026-10-03 — T103–T109 completed for the approved UI refinement. T110 is a pre-existing functional gap uncovered by cross-artifact review. EP-PLA T112/T113 retain their baseline/release gates. No statement here closes Sprint 4 as a whole.
+
+## Issue #19 — Corrección visual reportada en dispositivo (2026-10-06)
+
+- [x] T111 Corregir separación vertical entre filas de chips y controles avanzados en `MovementFiltersSheet.kt`, con márgenes coherentes en cabecera, pie y búsqueda (FR-034/039; criterios 1/7 de #19).
+- [x] T112 Corregir margen superior del calendario y ancho/alineación de inicio y fin, conservando rango y alternancia de entrada manual/calendario en `MovementFiltersSheet.kt` y strings específicos (FR-034; criterio 7 de #19).
+- [x] T113 Agrupar título/descripción Premium en tarjeta informativa no clicable con acción explícita, preservando recuperación y bloqueo actual (FR-034/039; criterio 1 de #19).
+- [x] T114 Ejecutar build y regresión aplicable, actualizar la copia física y registrar evidencia/límites de T111–T113 en `review-record.md`; no declarar completo el resto del issue (depende de T111–T113).
+
+## Issue #19 — Alcance restante autorizado (2026-10-06)
+
+El responsable acepta el resumen/retirada de filtros aplicados y el comportamiento actual de «Limpiar» (puntos 3 y 4 de la lista de pendientes conversacional). No modificar `MovementAppliedFilters.kt` ni esas interacciones. T110 sigue fuera de este issue.
+
+- [x] T115 Ubicar errores existentes de inicio/fin, moneda y mínimo/máximo junto a sus controles y actualizar mensajes al corregir el borrador, sin cambiar `MovementFilterDraft.validate` ni firmas públicas (FR-034; criterio 6).
+- [x] T116 Mejorar el selector de referencias con lista perezosa acotada, búsqueda, resumen por nombres y retirada de referencias históricas ausentes del catálogo visible, conservando IDs y selección al buscar (FR-034; criterios 2/3).
+- [x] T117 Verificar T115/T116 en JVM y dispositivo mediante fixtures sintéticos: listas extensas, cancelación, restauración, cambio de propietario/acceso, privacidad, teclado, pantalla reducida y temas; adjuntar comparación visual y registrar comandos/resultados reales (criterios 4/7/8).
+- [x] T118 Realizar commits del alcance, subir `feat/movimientos-filtros-ux` y abrir PR con `Closes #19`, sin merge; excluir carpeta local `Borrar-NoSubir` y configuración privada (depende de T117). Entrega vigente autorizada tras la limpieza: [PR #31](https://github.com/LeonidasGarcia/Kipu/pull/31); PR #30 cerrado sin merge.

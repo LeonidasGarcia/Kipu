@@ -75,7 +75,7 @@ class MovementUxRefinementTest {
         compose.setContent { KipuTheme { MovementFiltersSheet(MovementHistoryUiState(accessStatus = MovementHistoryAccessDecision.Allowed),
             onDismiss = { dismissed = true }, onApply = { applied++; it.validate() }) } }
         compose.onNodeWithTag("input_filter_min_amount").performScrollTo().performTextInput("15,50")
-        compose.onNodeWithText("Cancelar").performScrollTo().performClick()
+        compose.onNodeWithTag("btn_close_filters").performClick()
         assertTrue(dismissed)
         assertEquals(0, applied)
     }
