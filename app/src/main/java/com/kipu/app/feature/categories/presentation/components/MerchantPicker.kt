@@ -66,6 +66,23 @@ import com.kipu.app.feature.categories.domain.CategoryRules
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.CategoryId
 
+// TAXONOMÍA DE INTERFAZ (UI TAXONOMY)
+// Documentado en EP-CCO: Agrupación visual coherente para facilitar la búsqueda
+// independiente de las subcategorías contables de la base de datos.
+enum class UiMerchantGroup(val label: String, val merchants: Set<String>) {
+    RESTAURANTS("Restaurantes y Delivery", setOf("bembos", "burger king", "kfc", "mcdonald's", "mcdonalds", "pedidosya", "pizza hut", "rappi", "starbucks")),
+    ENTERTAINMENT("Entretenimiento y Streaming", setOf("cinemark", "cineplanet", "crunchyroll", "disney+", "joinnus", "max", "netflix", "prime video", "spotify", "teleticket", "youtube premium")),
+    SUPERMARKETS("Supermercados y Tiendas", setOf("mass", "metro", "oxxo", "plaza vea", "tambo+", "tambo", "tottus", "wong", "listo!")),
+    TRANSPORT("Transporte y Viajes", setOf("cabify", "didi", "indrive", "latam", "lima expresa", "línea 1", "linea 1", "uber", "metropolitano", "rutas de lima")),
+    TELECOM("Telecomunicaciones", setOf("bitel", "claro", "entel", "movistar", "win")),
+    TECH("Productividad e IA", setOf("adobe", "canva", "chatgpt", "claude", "google ai pro", "google one", "icloud+", "microsoft 365", "notion", "perplexity")),
+    GAMING("Videojuegos", setOf("playstation", "steam", "xbox")),
+    UTILITIES("Servicios Básicos", setOf("cálidda", "calidda", "luz del sur", "pluz energía", "pluz energia", "sedapal")),
+    GAS("Estaciones de Servicio", setOf("petroperú", "petroperu", "primax", "repsol")),
+    HEALTH("Farmacias y Salud", setOf("inkafarma", "mifarma")),
+    EDUCATION("Educación", setOf("wikipedia"))
+}
+
 data class MerchantVisualProfile(
     val initials: String,
     val backgroundColor: Color,
@@ -184,9 +201,7 @@ fun MerchantPicker(
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedCategoryId by remember { mutableStateOf<CategoryId?>(null) }
-    val availableCategoryIds = state.categoryFilters.mapTo(hashSetOf()) { it.categoryId }
-    val activeCategoryId = selectedCategoryId?.takeIf { it in availableCategoryIds }
+    var selectedUiGroup by remember { mutableStateOf<UiMerchantGroup?>(null) }
 
     val catalogToDisplay = remember(state.catalogEntries, state.searchResults, state.query) {
         if (state.query.isBlank()) {
@@ -197,9 +212,16 @@ fun MerchantPicker(
         }
     }
     
-    // Una vez obtenida la lista de coincidencias correcta, aplicamos el filtro de categoría.
-    val visibleMerchants = remember(catalogToDisplay, activeCategoryId) {
-        catalogToDisplay.filter { activeCategoryId == null || it.defaultCategoryId == activeCategoryId }
+    // Una vez obtenida la lista de coincidencias correcta, aplicamos el filtro de taxonomía UI.
+    val visibleMerchants = remember(catalogToDisplay, selectedUiGroup) {
+        if (selectedUiGroup == null) {
+            catalogToDisplay
+        } else {
+            catalogToDisplay.filter { merchant ->
+                val normalizedName = merchant.name.lowercase().trim()
+                selectedUiGroup!!.merchants.any { normalizedName.contains(it) }
+            }
+        }
     }
 
     Column(
@@ -246,15 +268,15 @@ fun MerchantPicker(
                 .testTag("merchant_search_input"),
         )
 
-        // Chips de filtro
+        // Chips de filtro UI (Taxonomía Visual)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
             item {
                 FilterChip(
-                    selected = activeCategoryId == null,
-                    onClick = { selectedCategoryId = null },
+                    selected = selectedUiGroup == null,
+                    onClick = { selectedUiGroup = null },
                     label = { Text("Todos", fontSize = 12.sp) },
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
@@ -264,13 +286,20 @@ fun MerchantPicker(
                     ),
                 )
             }
-            items(state.categoryFilters, key = { it.categoryId.value }) { category ->
+            // Mostrar solo los grupos de la taxonomía visual que tengan al menos 1 comercio coincidente en el catálogo total
+            val availableGroups = UiMerchantGroup.entries.filter { group -> 
+                state.catalogEntries.any { merchant -> 
+                    group.merchants.any { merchant.name.lowercase().trim().contains(it) } 
+                } 
+            }
+            
+            items(availableGroups, key = { it.name }) { group ->
                 FilterChip(
-                    selected = activeCategoryId == category.categoryId,
+                    selected = selectedUiGroup == group,
                     onClick = {
-                        selectedCategoryId = if (activeCategoryId == category.categoryId) null else category.categoryId
+                        selectedUiGroup = if (selectedUiGroup == group) null else group
                     },
-                    label = { Text(category.name, fontSize = 12.sp) },
+                    label = { Text(group.label, fontSize = 12.sp) },
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
