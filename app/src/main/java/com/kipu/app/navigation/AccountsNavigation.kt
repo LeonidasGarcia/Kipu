@@ -15,6 +15,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
+import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.presentation.dashboard.DashboardScreen
 import com.kipu.app.feature.accounts.presentation.detail.AccountDetailScreen
 import com.kipu.app.feature.notifications.presentation.NotificationBadgeViewModel
@@ -140,10 +141,17 @@ fun NavGraphBuilder.accountsDestinations(
         val viewModel: AccountsViewModel = hiltViewModel()
         val products = viewModel.creditProductCatalog.collectAsStateWithLifecycle().value
         val catalogError = viewModel.creditCatalogError.collectAsStateWithLifecycle().value
+        val catalogLoading = viewModel.creditCatalogLoading.collectAsStateWithLifecycle().value
+        val instruments = viewModel.instrumentsUiState.collectAsStateWithLifecycle().value
+        val creditCard = (instruments.activeCards + instruments.archivedCards)
+            .filterIsInstance<CreditCard>()
+            .firstOrNull { it.id == cardId }
         RateCatalogScreen(
-            cardId = cardId,
+            creditCard = creditCard,
             products = products,
             catalogError = catalogError,
+            catalogLoading = catalogLoading,
+            cardLoading = instruments.isLoading,
             events = viewModel.events,
             onLoadCatalog = viewModel::loadCreditProductCatalog,
             onUpdatePersonalTea = viewModel::updatePersonalTea,

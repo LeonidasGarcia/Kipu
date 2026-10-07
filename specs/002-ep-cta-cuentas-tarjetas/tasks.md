@@ -6,7 +6,7 @@
 **Feature Branch**: `002-ep-cta-cuentas-tarjetas`
 **Date**: 2026-09-24
 **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md) | **Data Model**: [data-model.md](data-model.md)
-**Sprint 3 Status**: 90/90 tasks completed (2026-09-26), based on the user's direct verification of accounting, synchronization, and credit flows on Galaxy S24+ (SM-S926B, API 36), plus reported green suites: 234/234 unit tests, 125/125 instrumented tests, and 319/319 local pgTAP tests.
+**Sprint 3 Status**: 91/91 tasks completed (2026-10-06). Existing device and suite evidence remains historical; correction #21 requires its own current verification evidence.
 
 ## Phase 1: Setup (Shared Infrastructure)
 
@@ -168,8 +168,12 @@ Complete T075 and approve its evidence before any Sprint 3 production implementa
 - [X] T051 [US5] Implement `UpdatePersonalTea` and `GetReferentialRates` use cases in `app/src/main/java/com/kipu/app/feature/accounts/domain/usecase/TeaCatalogUseCases.kt`
 - [X] T052 [P] [US5] Implement Rate Catalog sheet and personal TEA editor in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/RateCatalogScreen.kt`
 - [X] T053 [US5] Implement Android catalog read-model/repository mapping from canonical `credit_products` and persist per-card `personal_tea_bps`; show source status and caveats without seeding data or creating a parallel rate catalog.
+- [X] T091 [US5] Correct the card-contextual reference view: resolve the persisted card/product, restore its personal TEA, require a unique exact catalog match by product/emitter/network and show loading, error or no-reference states without guessing in `RateCatalogContext.kt`, `RateCatalogScreen.kt` and `AccountsNavigation.kt`.
+- [X] T092 [US5] Apply PR #23 validation: explicit preset/catalog aliases, exclusive card/catalog states, retry error clearing and per-card restored TEA draft tests in the contextual rate view.
 
 **Checkpoint**: Referential rates and personal TEA are manageable and isolated from historical financial records.
+
+**Propagated**: 2026-10-06 — Updated from the #21 contextual-rate refinement in spec.md.
 
 ---
 
