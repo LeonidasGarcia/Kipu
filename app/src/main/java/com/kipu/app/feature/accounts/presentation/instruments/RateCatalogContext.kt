@@ -3,13 +3,11 @@ package com.kipu.app.feature.accounts.presentation.instruments
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.presentation.components.CardStylePresets
-import java.text.Normalizer
+import com.kipu.app.feature.accounts.presentation.components.OfficialCreditProductMappings
+import com.kipu.app.feature.accounts.presentation.components.normalizeOfficialProductName
 import java.util.Locale
 
-/**
- * Resolves a catalog entry only when the stored visual product identity maps to one exact
- * catalog product. Issuer or card network alone are deliberately insufficient.
- */
+/** Resolves a rate only from a unique, explicit product identity. */
 sealed interface RateCatalogContext {
     data object LoadingCard : RateCatalogContext
     data class MissingProductIdentity(val card: CreditCard) : RateCatalogContext
@@ -17,18 +15,8 @@ sealed interface RateCatalogContext {
     data class Resolved(val card: CreditCard, val product: CreditProductReference) : RateCatalogContext
 }
 
-internal enum class RateCatalogReferenceState {
-    LOADING,
-    ERROR,
-    ABSENT,
-    AVAILABLE,
-}
-
-internal enum class RateCatalogCardState {
-    LOADING,
-    NOT_FOUND,
-    AVAILABLE,
-}
+internal enum class RateCatalogReferenceState { LOADING, ERROR, ABSENT, AVAILABLE }
+internal enum class RateCatalogCardState { LOADING, NOT_FOUND, AVAILABLE }
 
 internal fun rateCatalogCardState(isCardLoading: Boolean, card: CreditCard?): RateCatalogCardState = when {
     isCardLoading -> RateCatalogCardState.LOADING
@@ -61,40 +49,19 @@ fun resolveRateCatalogContext(
     products: List<CreditProductReference>,
 ): RateCatalogContext {
     if (card == null) return RateCatalogContext.LoadingCard
-    val preset = CardStylePresets.byId(card.stylePresetId)
+    val preset = (CardStylePresets.byId(card.stylePresetId)
+        ?: card.alias?.let { CardStylePresets.forProduct(card.issuer, it, card.network.name) })
         ?.takeIf { it.institutionCode.isNotBlank() && it.productName.isNotBlank() }
         ?: return RateCatalogContext.MissingProductIdentity(card)
 
-    val canonicalProductName = canonicalProductNamesByPresetId[preset.id] ?: preset.productName
+    val canonicalProductName = OfficialCreditProductMappings.canonicalCatalogNameFor(preset.id) ?: preset.productName
     val matchingProducts = products.filter { product ->
         product.institutionCode.equals(preset.institutionCode, ignoreCase = true) &&
             product.cardNetwork.equals(preset.network, ignoreCase = true) &&
             product.cardNetwork.equals(card.network.name, ignoreCase = true) &&
-            normalizeCatalogIdentity(product.productName) == normalizeCatalogIdentity(canonicalProductName)
+            normalizeOfficialProductName(product.productName) == normalizeOfficialProductName(canonicalProductName)
     }
 
     return matchingProducts.singleOrNull()?.let { RateCatalogContext.Resolved(card, it) }
         ?: RateCatalogContext.NoApplicableReference(card, canonicalProductName)
 }
-
-/** Explicit, reviewed aliases between persisted visual presets and catalog identities. */
-private val canonicalProductNamesByPresetId = mapOf(
-    "bcp-visa-latam-sapphire" to "Visa Infinite Sapphire LATAM Pass",
-    "bcp-visa-latam-iridium" to "Visa Infinite Iridium LATAM Pass",
-    "bcp-amex-latam-classic" to "American Express Clásica LATAM Pass",
-    "bcp-amex-latam-gold" to "American Express Oro LATAM Pass",
-    "bcp-amex-latam-platinum" to "American Express Platinum LATAM Pass",
-    "bcp-amex-latam-black" to "American Express Black LATAM Pass",
-    "interbank-amex-green" to "American Express Green",
-    "interbank-amex-gold" to "American Express Gold",
-    "interbank-amex-platinum" to "American Express Platinum",
-    "interbank-amex-black" to "American Express Black",
-    "interbank-amex-the-platinum-card" to "The Platinum Card American Express",
-)
-
-internal fun normalizeCatalogIdentity(value: String): String = Normalizer
-    .normalize(value, Normalizer.Form.NFD)
-    .replace("\\p{Mn}+".toRegex(), "")
-    .lowercase()
-    .replace("[^a-z0-9]+".toRegex(), " ")
-    .trim()

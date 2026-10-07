@@ -166,27 +166,20 @@ object CardStylePresets {
             it.selectable && it.institutionCode.equals(institutionCode, ignoreCase = true) && it.cardType == cardType
         }
 
-    /** Matches only an exact normalized catalog name or an explicit alias; ambiguous matches are rejected. */
-    fun forProduct(institutionCode: String, productName: String): CardStylePreset? {
-        val normalized = normalize(productName)
-        val candidates = all.filter { it.institutionCode.equals(institutionCode, ignoreCase = true) && it.selectable }
+    /** Matches only an exact normalized name or an explicitly published official mapping. */
+    fun forProduct(institutionCode: String, productName: String, network: String? = null): CardStylePreset? {
+        val candidates = all.filter {
+            it.institutionCode.equals(institutionCode, ignoreCase = true) &&
+                it.selectable && (network == null || it.network.equals(network, ignoreCase = true))
+        }
+        val explicit = network?.let { OfficialCreditProductMappings.presetIdFor(institutionCode, it, productName) }
+        if (explicit != null) return byId(explicit)
         val exact = candidates.filter { preset ->
-            normalize(preset.productName) == normalized || preset.aliases.any { normalize(it) == normalized }
+            normalizeOfficialProductName(preset.productName) == normalizeOfficialProductName(productName) ||
+                preset.aliases.any { normalizeOfficialProductName(it) == normalizeOfficialProductName(productName) }
         }
-        if (exact.size == 1) return exact.single()
-        val contained = candidates.filter { preset ->
-            normalize(preset.productName).contains(normalized) || normalized.contains(normalize(preset.productName)) ||
-                preset.aliases.any { normalize(it).contains(normalized) || normalized.contains(normalize(it)) }
-        }
-        return contained.singleOrNull()
+        return exact.singleOrNull()
     }
-
-    private fun normalize(value: String): String = java.text.Normalizer
-        .normalize(value, java.text.Normalizer.Form.NFD)
-        .replace("\\p{Mn}+".toRegex(), "")
-        .lowercase()
-        .replace("[^a-z0-9]+".toRegex(), " ")
-        .trim()
 
 }
 

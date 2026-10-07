@@ -168,12 +168,15 @@ Complete T075 and approve its evidence before any Sprint 3 production implementa
 - [X] T051 [US5] Implement `UpdatePersonalTea` and `GetReferentialRates` use cases in `app/src/main/java/com/kipu/app/feature/accounts/domain/usecase/TeaCatalogUseCases.kt`
 - [X] T052 [P] [US5] Implement Rate Catalog sheet and personal TEA editor in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/RateCatalogScreen.kt`
 - [X] T053 [US5] Implement Android catalog read-model/repository mapping from canonical `credit_products` and persist per-card `personal_tea_bps`; show source status and caveats without seeding data or creating a parallel rate catalog.
-- [X] T091 [US5] Correct the card-contextual reference view: resolve the persisted card/product, restore its personal TEA, require a unique exact catalog match by product/emitter/network and show loading, error or no-reference states without guessing in `RateCatalogContext.kt`, `RateCatalogScreen.kt` and `AccountsNavigation.kt`.
+- [X] T093 [US5] Correct the card-contextual reference view: resolve the persisted card/product, restore its personal TEA, require a unique exact catalog match by product/emitter/network and show loading, error or no-reference states without guessing in `RateCatalogContext.kt`, `RateCatalogScreen.kt` and `AccountsNavigation.kt`. Renumbered from duplicate T091; the historical convergence T091 remains unchanged.
 - [X] T092 [US5] Apply PR #23 validation: explicit preset/catalog aliases, exclusive card/catalog states, retry error clearing and per-card restored TEA draft tests in the contextual rate view.
+- [X] T094 [US5] Apply issue #25 follow-up: share official product mappings between catalog selection and rate lookup; recover existing cards only from a unique exact identity; test BCP/Interbank Amex, Sapphire/Iridium, PEN/USD, duplicates, unpublished rates and TEA isolation. Evidence: `validation/issue25-rate-catalog-followup.md`.
 
 **Checkpoint**: Referential rates and personal TEA are manageable and isolated from historical financial records.
 
 **Propagated**: 2026-10-06 — Updated from the #21 contextual-rate refinement in spec.md.
+
+**Propagated**: 2026-10-06 — Updated from the #25 official-product identity refinement in spec.md.
 
 ---
 
@@ -333,7 +336,7 @@ These tasks complete only HU-09..HU-13 and their explicitly required integration
 
 ## Phase 13: Convergence
 
-Convergence review (2026-09-26): the user directly verified accounting, synchronization, and credit flows on Galaxy S24+ (SM-S926B, API 36), and reported all 234 unit tests, 125 instrumented tests, and 319 local pgTAP tests passing. Based on that verification, all three convergence validation tasks are complete; total is 90 tasks, 90 complete and 0 open.
+Convergence review (2026-09-26): the user directly verified accounting, synchronization, and credit flows on Galaxy S24+ (SM-S926B, API 36), and reported all 234 unit tests, 125 instrumented tests, and 319 local pgTAP tests passing. The historical convergence tasks remain complete. After reconciling the duplicate T091 and adding T092-T094, the artifact contains 93 unique completed tasks and 0 open tasks; the current issue #25 evidence is recorded separately and does not rely on that historical Sprint 3 evidence.
 
 - [X] T089 [US1-US7] Add and run a deterministic 100-case accounting-replay matrix for account creation/correction/archive, card linkage, purchases, payments, reversals and retries; compare reproduced balances with auditable ledger effects to the cent [HIGH] per SC-002. Evidence: user directly verified accounting flows on Galaxy S24+ (SM-S926B, API 36); user reports 234/234 unit, 125/125 instrumented, and 319/319 local pgTAP tests green.
 - [X] T090 [US1-US7] Add and run 100 deterministic offline, close/restart, retry, delayed or reordered sync, and reconnect sequences; assert every confirmed operation is preserved exactly once with no duplicate financial effects [HIGH] per SC-011. Evidence: user directly verified synchronization flows on Galaxy S24+ (SM-S926B, API 36); user reports 234/234 unit, 125/125 instrumented, and 319/319 local pgTAP tests green.

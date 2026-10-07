@@ -419,7 +419,7 @@ fun UnifiedInstrumentFormScreen(
                             name = product.productName,
                             network = productNetwork,
                             reference = product,
-                            stylePreset = CardStylePresets.forProduct(bank.code, product.productName),
+                            stylePreset = CardStylePresets.forProduct(bank.code, product.productName, product.cardNetwork),
                         )
                     }
                 if (remote.isNotEmpty()) remote

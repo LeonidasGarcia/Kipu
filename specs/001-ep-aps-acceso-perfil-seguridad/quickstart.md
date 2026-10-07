@@ -1,4 +1,4 @@
-D# Quickstart Validation: EP-APS
+# Quickstart Validation: EP-APS
 
 ## Prerequisites
 

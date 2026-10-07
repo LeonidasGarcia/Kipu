@@ -93,6 +93,53 @@ class RateCatalogContextTest {
     }
 
     @Test
+    fun `catalog selection persists BCP Amex identity through the rate lookup`() {
+        val preset = com.kipu.app.feature.accounts.presentation.components.CardStylePresets
+            .forProduct("BCP", "American Express Oro LATAM Pass", "AMEX")
+
+        val result = resolveRateCatalogContext(
+            card(preset?.id, network = CardNetwork.AMEX),
+            listOf(product("American Express Oro LATAM Pass", institutionCode = "BCP", network = "AMEX")),
+        )
+
+        assertTrue(result is RateCatalogContext.Resolved)
+    }
+
+    @Test
+    fun `catalog selection persists Interbank Amex identity through the rate lookup`() {
+        val preset = com.kipu.app.feature.accounts.presentation.components.CardStylePresets
+            .forProduct("INTERBANK", "American Express Gold", "AMEX")
+
+        val result = resolveRateCatalogContext(
+            card(preset?.id, issuer = "INTERBANK", network = CardNetwork.AMEX),
+            listOf(product("American Express Gold", institutionCode = "INTERBANK", network = "AMEX", penTeaMinBps = null, penTeaMaxBps = null)),
+        )
+
+        assertTrue(result is RateCatalogContext.Resolved)
+    }
+
+    @Test
+    fun `existing card is recovered only from an exact official identity`() {
+        val legacyCard = card(stylePresetId = null, issuer = "INTERBANK", network = CardNetwork.AMEX)
+            .copy(alias = "American Express Gold")
+
+        val result = resolveRateCatalogContext(
+            legacyCard,
+            listOf(product("American Express Gold", institutionCode = "INTERBANK", network = "AMEX")),
+        )
+
+        assertTrue(result is RateCatalogContext.Resolved)
+    }
+
+    @Test
+    fun `existing card without an exact product identity remains unresolved`() {
+        val legacyCard = card(stylePresetId = null, issuer = "INTERBANK", network = CardNetwork.AMEX)
+            .copy(alias = "American Express")
+
+        assertTrue(resolveRateCatalogContext(legacyCard, emptyList()) is RateCatalogContext.MissingProductIdentity)
+    }
+
+    @Test
     fun `does not resolve Sapphire as Iridium`() {
         val result = resolveRateCatalogContext(
             card("bcp-visa-latam-sapphire"),
@@ -111,6 +158,18 @@ class RateCatalogContextTest {
 
         assertEquals(null, result.product.penTeaMinBps)
         assertEquals(null, result.product.penTeaMaxBps)
+    }
+
+    @Test
+    fun `matches the official product for a USD card without changing its published ranges`() {
+        val usdCard = card("bcp-amex-latam-gold", network = CardNetwork.AMEX).copy(currency = Currency.USD)
+        val usdProduct = product("American Express Oro LATAM Pass", institutionCode = "BCP", network = "AMEX")
+            .copy(usdTeaMinBps = 6500, usdTeaMaxBps = 7690)
+
+        val result = resolveRateCatalogContext(usdCard, listOf(usdProduct)) as RateCatalogContext.Resolved
+
+        assertEquals(6500, result.product.usdTeaMinBps)
+        assertEquals(7690, result.product.usdTeaMaxBps)
     }
 
     @Test
