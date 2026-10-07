@@ -413,10 +413,6 @@ fun CategoriesScreen(
                         activeCount = state.activeCustomRootsCount,
                         maxCount = state.maxCustomRoots,
                         isLimitReached = state.isFreeLimitReached,
-                        typeLabel = when (state.selectedTab) {
-                            CategoryTab.INCOME -> "Ingresos"
-                            else -> "Gastos"
-                        },
                         onOpenQuotaSelection = if (state.activeCustomRootsCount > state.maxCustomRoots) {
                             viewModel::openQuotaSelection
                         } else null,
@@ -524,7 +520,7 @@ fun CategoriesScreen(
             text = {
                 Column {
                     Text(
-                        text = "Elige hasta 5 categorías de gastos y 5 de ingresos (hasta 10 en total). Las demás conservarán su historial y quedarán bloqueadas por el plan; su estado activo no cambia.",
+                        text = "Elige hasta 5 categorías personalizadas en total. Las demás conservarán su historial y quedarán bloqueadas por el plan; su estado activo no cambia.",
                         color = colors.inkSecondary,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -592,7 +588,6 @@ fun CategoriesScreen(
 
     // Diálogo de Límite Superado
     if (state.showQuotaExceededDialog) {
-        val typeName = if (state.selectedTab == CategoryTab.INCOME) "ingresos" else "gastos"
         AlertDialog(
             onDismissRequest = viewModel::dismissQuotaDialog,
             title = {
@@ -604,7 +599,7 @@ fun CategoriesScreen(
             },
             text = {
                 Text(
-                    text = "Has alcanzado el límite de 5 categorías personalizadas de $typeName en tu plan gratuito. Conserva el historial y elige cuáles quieres seguir usando o inactiva una para crear otra.",
+                    text = "Has alcanzado el límite de 5 categorías personalizadas en tu plan gratuito. Conserva el historial y elige cuáles quieres seguir usando o inactiva una para crear otra.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
                 )
@@ -663,7 +658,6 @@ fun QuotaBanner(
     maxCount: Int,
     isLimitReached: Boolean,
     modifier: Modifier = Modifier,
-    typeLabel: String = "Gastos",
     onOpenQuotaSelection: (() -> Unit)? = null,
 ) {
     val colors = rememberKipuColors()
@@ -700,7 +694,7 @@ fun QuotaBanner(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Categorías de $typeLabel (Plan Free)",
+                        text = "Categorías personalizadas (Plan Free)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = colors.inkPrimary,
@@ -850,13 +844,17 @@ fun CategoryRootCard(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // Badge Pill: Personalizada vs Predeterminada
+                        // The quota label makes the SYSTEM/CUSTOM distinction explicit in the list.
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = if (item.category.isCustom) colors.positiveContainer else colors.surfaceVariant,
                         ) {
                             Text(
-                                text = if (item.category.isCustom) "Personalizada" else "Predeterminada",
+                                text = if (item.category.isCustom) {
+                                    "Personalizada · consume cupo Free"
+                                } else {
+                                    "Predeterminada · no consume cupo Free"
+                                },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,

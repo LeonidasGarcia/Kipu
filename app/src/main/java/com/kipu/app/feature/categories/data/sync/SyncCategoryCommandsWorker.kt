@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.kipu.app.core.logging.SecureLog
+import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.categories.data.local.CategoryConflictEntity
 import com.kipu.app.feature.categories.data.local.CategoryDao
@@ -52,6 +53,11 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
+        val access = sessionCoordinator.localAccess.value as? LocalAccess.Available
+        if (access?.userId != userId) {
+            SecureLog.w("SyncCategoryCommandsWorker", "Skipping category sync for an inactive owner")
+            return Result.success()
+        }
 
         // Fill missing server categories without overwriting pending local edits.
         hydrateCategories(userId)

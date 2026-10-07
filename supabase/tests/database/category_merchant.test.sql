@@ -20,9 +20,15 @@ SELECT table_privs_are(
 
 -- Test 9: Initial category catalog seed exists
 SELECT is(
-    (SELECT COUNT(*)::integer FROM public.categories WHERE origin = 'SYSTEM' AND is_active = true),
+    (SELECT COUNT(*)::integer FROM public.categories
+        WHERE origin = 'SYSTEM' AND is_active = true
+          AND id IN (
+              '00000000-0000-0000-0000-000000000001',
+              '00000000-0000-0000-0000-000000000002',
+              '00000000-0000-0000-0000-000000000003'
+          )),
     3,
-    'Predetermined system categories Alimentación, Transporte, and Servicios are seeded'
+    'The required predetermined categories Alimentación, Transporte, and Servicios are seeded'
 );
 
 -- Setup test users

@@ -6,6 +6,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.work.ListenableWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.kipu.app.core.session.LocalAccess
+import com.kipu.app.core.session.RemoteSession
 import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.categories.data.local.CategoryDao
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
@@ -19,6 +21,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import java.util.UUID
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -41,6 +44,9 @@ class SyncCategoryCommandsWorkerTest {
     fun setup() {
         io.mockk.every { workerParams.inputData } returns workDataOf(
             SyncCategoryCommandsWorker.KEY_USER_ID to testUserId
+        )
+        io.mockk.every { sessionCoordinator.localAccess } returns MutableStateFlow(
+            LocalAccess.Available(testUserId, RemoteSession.Absent),
         )
     }
 
@@ -70,14 +76,22 @@ class SyncCategoryCommandsWorkerTest {
                 MerchantCatalogItemDto("m1", "Tambo", "tambo", true, 1L)
             )
         )
-        coEvery { api.fetchCategories() } returns CategoryApiResponse.Success(listOf(
-            CategoryCatalogItemDto(
-                id = "00000000-0000-0000-0000-000000000001",
-                name = "Alimentación", origin = "SYSTEM", isActive = true,
-                remoteRevision = 1L,
-                createdAt = "2026-09-23T00:00:00Z", updatedAt = "2026-09-23T00:00:00Z",
+        coEvery { api.fetchCategories() } returns CategoryApiResponse.Success(
+            listOf(
+                CategoryCatalogItemDto(
+                    id = "00000000-0000-0000-0000-000000000001", name = "Alimentación", origin = "SYSTEM",
+                    isActive = true, remoteRevision = 1L, createdAt = "2026-09-23T00:00:00Z", updatedAt = "2026-09-23T00:00:00Z",
+                ),
+                CategoryCatalogItemDto(
+                    id = "00000000-0000-0000-0000-000000000002", name = "Transporte", origin = "SYSTEM",
+                    isActive = true, remoteRevision = 1L, createdAt = "2026-09-23T00:00:00Z", updatedAt = "2026-09-23T00:00:00Z",
+                ),
+                CategoryCatalogItemDto(
+                    id = "00000000-0000-0000-0000-000000000003", name = "Servicios", origin = "SYSTEM",
+                    isActive = true, remoteRevision = 1L, createdAt = "2026-09-23T00:00:00Z", updatedAt = "2026-09-23T00:00:00Z",
+                ),
             ),
-        ))
+        )
         coEvery { api.fetchCategoryPresentations() } returns CategoryApiResponse.Success(emptyList())
 
         val worker = SyncCategoryCommandsWorker(
@@ -94,7 +108,19 @@ class SyncCategoryCommandsWorkerTest {
 
         coVerify { categoryDao.updateOutboxCommand(match { it.state == "COMPLETED" }) }
         coVerify { merchantDao.insertMerchants(match { it.size == 1 && it.first().id == "m1" }) }
-        coVerify { categoryDao.insertCategoriesIfAbsent(match { it.size == 1 && it.first().id == "00000000-0000-0000-0000-000000000001" }) }
-        coVerify { categoryDao.insertPresentationsIfAbsent(match { it.size == 1 && it.first().name == "Alimentación" }) }
+        coVerify { categoryDao.insertCategoriesIfAbsent(match { it.map { category -> category.id }.toSet().size == 3 }) }
+        coVerify { categoryDao.insertPresentationsIfAbsent(match { it.map { presentation -> presentation.name }.toSet() == setOf("Alimentación", "Transporte", "Servicios") }) }
+    }
+
+    @Test
+    fun workerSkipsPersistedWorkForAnInactiveOwner() = runTest {
+        io.mockk.every { sessionCoordinator.localAccess } returns MutableStateFlow(LocalAccess.NoOwner)
+        val worker = SyncCategoryCommandsWorker(context, workerParams, categoryDao, merchantDao, api, sessionCoordinator)
+
+        val result = worker.doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        coVerify(exactly = 0) { api.fetchCategories() }
+        coVerify(exactly = 0) { api.fetchMerchantCatalog(any()) }
     }
 }

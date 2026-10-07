@@ -18,6 +18,7 @@ import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
+import com.kipu.app.feature.categories.domain.usecase.EnsureInitialCategoryCatalog
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.movements.domain.RegisterTransaction
@@ -105,6 +106,7 @@ class QuickMovementViewModel @Inject constructor(
     private val observeFinancialDashboard: ObserveFinancialDashboard,
     private val observeCategories: ObserveCategories,
     private val createCategoryUseCase: CreateCategory,
+    private val ensureInitialCategoryCatalog: EnsureInitialCategoryCatalog,
     private val categorySyncScheduler: CategorySyncScheduler,
     private val sessionCoordinator: SessionCoordinator,
 ) : ViewModel() {
@@ -121,8 +123,9 @@ class QuickMovementViewModel @Inject constructor(
     init {
         val ownerId = getUserId()
         if (ownerId != null) {
-            categorySyncScheduler.scheduleSync(ownerId)
             viewModelScope.launch {
+                ensureInitialCategoryCatalog(UserId(ownerId))
+                categorySyncScheduler.scheduleSync(ownerId)
                 observeCategories(UserId(ownerId))
                     .catch {
                         _uiState.update { current ->

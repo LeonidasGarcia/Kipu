@@ -95,7 +95,7 @@ class CategoriesScreenTest {
 
         composeTestRule.onNodeWithText("Alimentación").assertIsDisplayed()
         composeTestRule.onNodeWithText("Restaurantes").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Personalizada").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Personalizada · consume cupo Free").assertIsDisplayed()
         composeTestRule.onNodeWithText("Activa").assertIsDisplayed()
         composeTestRule.onNodeWithText("Agregar subcategoría").assertIsDisplayed()
     }

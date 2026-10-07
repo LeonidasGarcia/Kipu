@@ -7,6 +7,4 @@ data class FreePlanLimits(
     val debts: Int = 2,
     val goals: Int = 2,
     val budgets: Int = 2,
-    val customExpenseCategories: Int = 5,
-    val customIncomeCategories: Int = 5,
 )

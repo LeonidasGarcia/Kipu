@@ -69,9 +69,6 @@ class FakeCategoryDao : CategoryDao {
     override suspend fun countActiveCustomRoots(userId: String): Int =
         categories.values.count { it.userId == userId && it.origin == "CUSTOM" && it.parentId == null && it.isActive }
 
-    override suspend fun countActiveCustomRootsByType(userId: String, categoryType: String): Int =
-        categories.values.count { it.userId == userId && it.origin == "CUSTOM" && it.parentId == null && it.isActive && it.categoryType == categoryType }
-
     override suspend fun insertPresentation(presentation: CategoryPresentationEntity) {
         presentations["${presentation.userId}_${presentation.categoryId}"] = presentation
     }
@@ -314,7 +311,37 @@ class OfflineFirstCategoriesRepositoryTest {
     }
 
     @Test
-    fun `createCategory fails when free quota of 5 active custom roots is reached`() = runTest {
+    fun `initial catalog is available from an empty local cache and preserves existing presentations`() = runTest {
+        sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
+
+        repository.ensureInitialCatalog(testUserId).getOrThrow()
+        assertEquals(
+            setOf("Alimentación", "Transporte", "Servicios"),
+            categoryDao.presentations.values
+                .filter { it.userId == testUserId.value }
+                .map { it.name }
+                .toSet(),
+        )
+        categoryDao.insertPresentation(
+            CategoryPresentationEntity(
+                categoryId = "00000000-0000-0000-0000-000000000001",
+                userId = testUserId.value,
+                name = "Comida",
+                icon = "restaurant",
+                color = "#0F766E",
+                remoteRevision = 2L,
+                updatedAt = 2L,
+            ),
+        )
+        repository.ensureInitialCatalog(testUserId).getOrThrow()
+
+        val categories = categoryDao.getCategoriesForUser(testUserId.value)
+        assertEquals(3, categories.count { it.origin == "SYSTEM" })
+        assertEquals("Comida", categoryDao.getPresentation(testUserId.value, "00000000-0000-0000-0000-000000000001")?.name)
+    }
+
+    @Test
+    fun `createCategory fails when five active custom roots across types are reached`() = runTest {
         sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
 
         // Seed 5 active custom roots
@@ -325,6 +352,7 @@ class OfflineFirstCategoriesRepositoryTest {
                 parentId = null,
                 origin = "CUSTOM",
                 isActive = true,
+                categoryType = if (i <= 3) "EXPENSE" else "INCOME",
                 remoteRevision = 1L,
                 createdAt = 1000L,
                 updatedAt = 1000L,
@@ -338,6 +366,7 @@ class OfflineFirstCategoriesRepositoryTest {
             parentId = null,
             origin = CategoryOrigin.CUSTOM,
             isActive = true,
+            categoryType = com.kipu.app.feature.categories.domain.model.CategoryType.INCOME,
         )
         val presentation = CategoryPresentation(
             categoryId = category.id,
@@ -445,10 +474,10 @@ class OfflineFirstCategoriesRepositoryTest {
     }
 
     @Test
-    fun `free category selection allows five per type but rejects a sixth of one type`() = runTest {
+    fun `free category selection allows five roots total and rejects a sixth across types`() = runTest {
         sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
-        val expenseIds = (1..6).map { CategoryId.generate() }
-        val incomeIds = (1..5).map { CategoryId.generate() }
+        val expenseIds = (1..3).map { CategoryId.generate() }
+        val incomeIds = (1..3).map { CategoryId.generate() }
 
         expenseIds.forEachIndexed { index, id ->
             categoryDao.insertCategory(
@@ -477,10 +506,10 @@ class OfflineFirstCategoriesRepositoryTest {
             )
         }
 
-        repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.take(5).toSet() + incomeIds.toSet()).getOrThrow()
-        val overExpenseLimit = repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet())
+        repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet() + incomeIds.take(2).toSet()).getOrThrow()
+        val overLimit = repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet() + incomeIds.toSet())
 
-        assertTrue(overExpenseLimit.isFailure)
-        assertEquals(10, quotaSelectionDao.getSelectedResourceIds(testUserId.value, "CUSTOM_CATEGORIES").size)
+        assertTrue(overLimit.isFailure)
+        assertEquals(5, quotaSelectionDao.getSelectedResourceIds(testUserId.value, "CUSTOM_CATEGORIES").size)
     }
 }

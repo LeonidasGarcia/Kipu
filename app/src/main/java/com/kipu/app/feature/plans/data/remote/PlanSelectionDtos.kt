@@ -135,8 +135,6 @@ fun FreeLimitsDto.toDomain() = FreePlanLimits(
     debts = debts,
     goals = goals,
     budgets = budgets,
-    customExpenseCategories = customCategories,
-    customIncomeCategories = customCategories,
 )
 
 fun TrialEligibilityResponseDto.toDomain(): TrialEligibilitySnapshot = when (status) {

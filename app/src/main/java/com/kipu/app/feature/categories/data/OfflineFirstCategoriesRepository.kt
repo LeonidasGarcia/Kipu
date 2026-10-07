@@ -74,6 +74,19 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     private val entitlementEvaluator: EffectiveEntitlementEvaluator = DenyUnverifiedEntitlementEvaluator,
 ) : CategoriesRepository {
 
+    private data class InitialSystemCategory(
+        val id: String,
+        val name: String,
+    )
+
+    private companion object {
+        val initialSystemCategories = listOf(
+            InitialSystemCategory("00000000-0000-0000-0000-000000000001", "Alimentación"),
+            InitialSystemCategory("00000000-0000-0000-0000-000000000002", "Transporte"),
+            InitialSystemCategory("00000000-0000-0000-0000-000000000003", "Servicios"),
+        )
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun sha256(content: String): String {
@@ -86,22 +99,49 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         return (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId
     }
 
+    override suspend fun ensureInitialCatalog(userId: UserId): Result<Unit> = runCatching {
+        require(currentUserId() == userId.value) { "No active owner session" }
+        val now = System.currentTimeMillis()
+        transactionRunner {
+            categoryDao.insertCategoriesIfAbsent(initialSystemCategories.map { category ->
+                CategoryEntity(
+                    id = category.id,
+                    userId = null,
+                    parentId = null,
+                    origin = "SYSTEM",
+                    categoryType = CategoryType.GENERAL.name,
+                    isActive = true,
+                    remoteRevision = 1L,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+            })
+            categoryDao.insertPresentationsIfAbsent(initialSystemCategories.map { category ->
+                CategoryPresentationEntity(
+                    categoryId = category.id,
+                    userId = userId.value,
+                    name = category.name,
+                    icon = "category",
+                    color = "#757575",
+                    remoteRevision = 1L,
+                    updatedAt = now,
+                )
+            })
+        }
+    }
+
     override fun observeCategories(userId: UserId): Flow<List<Category>> {
         val selectedIds = quotaSelectionDao.observeSelectedResourceIds(userId.value, QuotaGroup.CUSTOM_CATEGORIES.name)
         val access = featureAccessCacheDao.observe(UUID.fromString(userId.value))
         return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access, offlineEntitlementRefreshTicker()) { entities, selected, cache, _ ->
             val activeRoots = entities.filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-            val groupedRoots = activeRoots.groupBy { it.categoryType }
-            val lockedRoots = groupedRoots.flatMap { (_, roots) ->
-                val quota = quotaPolicy.evaluate(
-                    group = QuotaGroup.CUSTOM_CATEGORIES,
-                    activeResourceIds = roots.map { it.id },
-                    selectedResourceIds = selected,
-                    limits = FreePlanLimits(customCategories = 5),
-                    premiumVerified = entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed,
-                )
-                quota.planLockedResourceIds
-            }.toSet()
+            val lockedRoots = quotaPolicy.evaluate(
+                group = QuotaGroup.CUSTOM_CATEGORIES,
+                activeResourceIds = activeRoots.map { it.id },
+                selectedResourceIds = selected,
+                limits = FreePlanLimits(),
+                premiumVerified = entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed,
+            ).planLockedResourceIds
             entities.map { entity ->
                 val rootId = entity.parentId ?: entity.id
                 Category(
@@ -126,13 +166,10 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         require(currentUserId() == userId.value) { "No active owner session" }
         val activeRoots = categoryDao.getCategoriesForUser(userId.value)
             .filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-        val activeRootTypes = activeRoots.associate { it.id to it.categoryType }
-        require(categoryIds.map { it.value }.all(activeRootTypes::containsKey)) { "Selection includes unavailable categories" }
-        require(categoryIds.size <= FreePlanLimits().customExpenseCategories + FreePlanLimits().customIncomeCategories) {
+        val activeRootIds = activeRoots.mapTo(mutableSetOf()) { it.id }
+        require(categoryIds.all { it.value in activeRootIds }) { "Selection includes unavailable categories" }
+        require(categoryIds.size <= FreePlanLimits().customCategories) {
             "Free category selection exceeds its total limit"
-        }
-        require(categoryIds.groupingBy { activeRootTypes[it.value] }.eachCount().values.all { it <= FreePlanLimits().customExpenseCategories }) {
-            "Free category selection exceeds its per-type limit"
         }
         quotaSelectionDao.replaceSelection(
             userId = userId.value,
@@ -204,21 +241,12 @@ class OfflineFirstCategoriesRepository @Inject constructor(
 
         // Validate Free quota if custom root
         if (category.isRoot && category.isCustom) {
-            val limit = if (category.categoryType == CategoryType.INCOME) {
-                FreePlanLimits().customIncomeCategories
-            } else {
-                FreePlanLimits().customExpenseCategories
-            }
-            val activeCount = if (category.categoryType == CategoryType.GENERAL) {
-                categoryDao.countActiveCustomRoots(userId)
-            } else {
-                categoryDao.countActiveCustomRootsByType(userId, category.categoryType.name)
-            }
+            val activeCount = categoryDao.countActiveCustomRoots(userId)
             val decision = featureAccessPolicy.evaluate(
                 FeatureAccessRequest(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
-                    freeLimits = FreePlanLimits(customCategories = limit),
+                    freeLimits = FreePlanLimits(),
                     effectiveEntitlement = effectiveEntitlement(userId),
                 )
             )
@@ -294,22 +322,12 @@ class OfflineFirstCategoriesRepository @Inject constructor(
             ?: return Result.failure(IllegalArgumentException("Category not found: ${categoryId.value}"))
 
         if (existing.parentId == null && existing.origin == "CUSTOM" && isActive && !existing.isActive) {
-            val type = existing.categoryType ?: CategoryType.EXPENSE.name
-            val limit = if (type == CategoryType.INCOME.name) {
-                FreePlanLimits().customIncomeCategories
-            } else {
-                FreePlanLimits().customExpenseCategories
-            }
-            val activeCount = if (type == CategoryType.GENERAL.name) {
-                categoryDao.countActiveCustomRoots(userId)
-            } else {
-                categoryDao.countActiveCustomRootsByType(userId, type)
-            }
+            val activeCount = categoryDao.countActiveCustomRoots(userId)
             val decision = featureAccessPolicy.evaluate(
                 FeatureAccessRequest(
                     capability = Capability.CustomCategories,
                     currentUsage = activeCount,
-                    freeLimits = FreePlanLimits(customCategories = limit),
+                    freeLimits = FreePlanLimits(),
                     effectiveEntitlement = effectiveEntitlement(userId),
                 )
             )
@@ -599,15 +617,13 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         }
         val selected = quotaSelectionDao.getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
         val premiumVerified = entitlementEvaluator.evaluate(userId, featureAccessCacheDao.get(UUID.fromString(userId))) is OfflineEntitlementLeaseDecision.Allowed
-        return roots.groupBy { it.categoryType }.values.flatMap { rootsByType ->
-            quotaPolicy.evaluate(
-                group = QuotaGroup.CUSTOM_CATEGORIES,
-                activeResourceIds = rootsByType.map { it.id },
-                selectedResourceIds = selected,
-                limits = FreePlanLimits(),
-                premiumVerified = premiumVerified,
-            ).planLockedResourceIds
-        }.toSet()
+        return quotaPolicy.evaluate(
+            group = QuotaGroup.CUSTOM_CATEGORIES,
+            activeResourceIds = roots.map { it.id },
+            selectedResourceIds = selected,
+            limits = FreePlanLimits(),
+            premiumVerified = premiumVerified,
+        ).planLockedResourceIds
     }
 
     private suspend fun effectiveEntitlement(userId: String): EffectiveEntitlement? {
