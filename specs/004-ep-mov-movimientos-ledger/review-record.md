@@ -174,3 +174,54 @@ Con esos prerrequisitos, la validación transaccional de **todas las migraciones
 ### Refine status and semantic cross-check
 
 Both feature directories contain spec, plan, tasks, research, data-model and contracts. Refinement/propagation entries are current and no artifact-warning **STALE** marker remains. Requirement IDs and existing financial contracts are preserved. Source provenance is explicitly mapped to open T110; all new visual requirements have implementation tasks and evidence. Marker synchronization does not mean whole-sprint functional acceptance. The remaining high-priority finding is the pre-existing FR-017 source contract gap, with explicit task coverage and no inferred replacement.
+
+## Issue #19 — Espaciado, calendario y tarjeta Premium (2026-10-06)
+
+Alcance solicitado por el responsable tras probar la copia física: separar botones/filas de chips; corregir margen superior y compresión del extremo final del calendario; agrupar título/descripción Premium en tarjeta informativa. Se implementó en `MovementFiltersSheet.kt` y strings locales (FR-034/039), sin cambios en firmas, modelos, validaciones, ViewModel, pantalla, consultas ni componentes globales. Se conserva alternancia calendario/entrada manual y el callback Premium.
+
+Validación ejecutada:
+
+```powershell
+.\gradlew.bat --init-script Borrar-NoSubir/preview-device.init.gradle :app:assembleDebug :app:testDebugUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
+```
+
+- **BUILD SUCCESSFUL**, 1m36s. `MovementFilterDraftTest`: 4 pruebas; `MovementHistoryViewModelTest`: 17 pruebas. Total **21, 0 fallos, 0 errores**. Reportes en `app/build/test-results/testDebugUnitTest/`. Advertencias de pruebas existentes no bloquean compilación.
+- APK actualizado con `adb install -r` y abierto mediante `am start -W`: instalación **Success**, inicio **Status: ok**. La configuración de Supabase permanece en `local.properties`, excluido de Git.
+- El init script local cambia únicamente el applicationId de debug a `com.kipu.app.preview`, permitiendo probar junto a otra instalación con firma distinta. No es un cambio de producción ni parte versionable de este issue; para un build debug normal omitir `--init-script`.
+- Dispositivo físico: modelo 23129RA5FL, Android 15/API 35, 1080×2400, densidad 440 dpi, font_scale 1.0. Capturas anteriores inspeccionadas: filas de chips pegadas y texto «Fecha de finalización» comprimido en múltiples líneas. Las capturas se conservan localmente en `Borrar-NoSubir/filter-panel-before.png` y `filter-calendar-before.png`.
+- Calendario posterior inspeccionado en el dispositivo: título con margen superior, inicio/fin alineados y valores de rango legibles; no hay compresión del extremo final. Evidencia local: `Borrar-NoSubir/filter-calendar-after.png`. Las capturas antes/después usan el mismo dispositivo/tema/escala; el usuario seleccionó un rango en la posterior.
+- Panel posterior inspeccionado: filas de chips separadas y título/descripción/acción Premium agrupados con padding propio. Evidencia local: `Borrar-NoSubir/filter-panel-after.png`. Al detectar que el fondo de la tarjeta se distinguía poco, se añadió borde de 1 dp con `outlineVariant`; ese ajuste compiló correctamente en 9s, fue reinstalado y se verificó en `Borrar-NoSubir/filter-panel-outlined.png`.
+- Al revisar la tarjeta con borde, el responsable pidió un fondo un poco más oscuro. Se cambió únicamente su color a `surfaceContainerHighest` del tema compartido, preservando el borde y el comportamiento. Build final **SUCCESSFUL en 11s**, actualización **Success** e inicio **Status: ok**. La revisión del tono final queda a disposición del responsable en la copia instalada; no se dispone aún de captura de ese último tono.
+- No se ejecutó instrumentación ni se certifican aún temas oscuro, teclado, texto ampliado o toda la matriz del issue. Las 21 pruebas JVM no son prueba de layout; se ejecutaron antes de los ajustes finales exclusivamente visuales del borde/fondo.
+- Obsidian Mind no está disponible en esta sesión; se usaron constitución y contratos locales. No se cambian reglas de producto. T110 y los restantes criterios del issue #19 siguen pendientes.
+
+## Issue #19 — Errores, selectores y validación final (2026-10-07)
+
+El responsable aceptó el resultado visual anterior, incluido el fondo de la tarjeta, y autorizó resolver los pendientes **excepto** el resumen/retirada de filtros aplicados y «Limpiar», ya aceptados. Se conservan esas implementaciones. El issue vigente se verificó mediante GitHub API con la autenticación Git local; el conector no tiene acceso a este repositorio. Obsidian Mind continúa indisponible, por lo que no se atribuye una consulta de producto inexistente.
+
+- Errores existentes por clave junto a fechas, moneda y cada importe; mensajes específicos para rango de fechas e importes. Tras un intento inválido, corregir actualiza errores mediante `MovementFilterDraft.validate`, sin aplicar ni cambiar el validador.
+- Selector específico con nombres/resumen, búsqueda, `LazyColumn` de altura acotada y claves por ID. Preserva selecciones ocultas, nombres duplicados y referencias históricas ausentes, que se pueden retirar sin mostrar IDs. Distingue catálogo vacío de búsqueda sin coincidencias; pérdida de acceso cierra el selector.
+- La inspección de la configuración compacta detectó el ancho obligatorio de 360 dp de `DatePickerDialog` en Material3 1.4.0. Se agregó un contenedor local para ventanas menores de 360 dp, con acciones que cambian de fila; conserva el `DateRangePicker`, estado y callbacks. En ancho normal se mantiene el diálogo nativo.
+
+Build final ejecutado:
+
+```powershell
+.\gradlew.bat --init-script Borrar-NoSubir/preview-device.init.gradle -PisolatedAndroidTests=true :app:assembleLab :app:assembleLabAndroidTest :app:assembleDebug :app:testLabUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
+```
+
+**BUILD SUCCESSFUL**, 28 s. El init script solo mantiene la copia de prueba `com.kipu.app.preview`; no se versiona. Build reproducible de la variante aislada: omitir `--init-script` y `:app:assembleDebug`.
+
+| Validación final | Resultado |
+|---|---|
+| JVM `MovementFilterDraftTest` | 4 pruebas, 0 fallos/errores |
+| JVM `MovementHistoryViewModelTest` | 17 pruebas, 0 fallos/errores |
+| `MovementFiltersIssue19Test` | 10 pruebas instrumentadas PASS |
+| Cancelar, restaurar borrador y «Limpiar» existentes | 3 pruebas instrumentadas PASS |
+
+La corrida final conjunta es **OK (13 tests)**; [salida del runner](validation/ui/issue-19/instrumentation.txt). Se verifican corrección sin aplicar, selección entre 1.000 referencias, búsquedas, duplicados, retirada histórica, cambio de propietario/acceso, Free con criterios avanzados retenidos y enmascaramiento. El test de cancelación anterior se actualizó para usar el cierre actual del panel, conservando su assertion de cero aplicaciones.
+
+Dispositivo 23129RA5FL, Android 15/API 35. La prueba compacta usa configuración Android local al fixture (densidad ×1,25, fuente ×1,6, aproximadamente 314 dp) y entrada real de teclado; los diálogos heredan el contexto y se comprueba su ancho. El override inicial de `LocalDensity` no escalaba los diálogos y se sustituyó; no cuenta como evidencia de texto ampliado. Los intentos afectados por instalación rechazada/arranque MIUI/actividad vacía y los errores iniciales de fixtures/assertions no son PASS. En la corrida aceptada, se abrió la actividad de pruebas con el intent de `ActivityScenario` cuando MIUI impedía su arranque en segundo plano; no se cambiaron ajustes del dispositivo.
+
+[Comparación visual y reproducción](validation/ui/issue-19/README.md): fixtures sintéticos, temas claro/oscuro, calendario y configuración compacta. «Antes» incluye las correcciones visuales previamente aceptadas y precede a errores/selectores; no se presenta como captura de `main`. Las capturas personales permanecen locales. La instrumentación verifica presentación con estado `Allowed` explícito, no compras reales, backend ni rendimiento de consultas.
+
+Firmas públicas, modelos, Saver, validaciones de dominio, `MovementAppliedFilters.kt`, pantalla, ViewModel, repositorios, DAOs y componentes globales permanecen sin modificaciones de este issue. T115–T117 completan el alcance autorizado de implementación/validación; entrega en T118. T110 y gates ajenos de Sprint 4 conservan su estado anterior.

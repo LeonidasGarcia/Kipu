@@ -1,16 +1,18 @@
 package com.kipu.app.feature.movements.presentation
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.res.stringResource
 import com.kipu.app.ui.component.LocalBalanceMasked
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -25,6 +27,8 @@ import java.time.ZoneOffset
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.Alignment
 import com.kipu.app.ui.component.KipuBottomSheet
 import com.kipu.app.ui.component.KipuFilterChip
@@ -48,18 +52,24 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
         mutableStateOf(MovementFilterDraft.fromApplied(state.appliedFilters))
     }
     var errors by remember { mutableStateOf(emptyMap<String, FilterDraftError>()) }
+    var validationAttempted by remember { mutableStateOf(false) }
     var dates by remember { mutableStateOf(false) }
     var showPremiumOptions by rememberSaveable { mutableStateOf(false) }
     val allowed = state.accessStatus == MovementHistoryAccessDecision.Allowed
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    fun updateDraft(updated: MovementFilterDraft) {
+        draft = updated
+        if (validationAttempted) errors = updated.validate().errors
+    }
+
     val rows = state.allTransactions
-    val accounts = rows.flatMap { listOfNotNull(
+    val accounts = remember(rows) { rows.flatMap { listOfNotNull(
         it.transaction.sourceAccountId?.let { id -> MovementReferenceOption(id, it.sourceAccountAlias ?: "Cuenta histórica") },
-        it.transaction.destinationAccountId?.let { id -> MovementReferenceOption(id, it.destinationAccountAlias ?: "Cuenta histórica") }) }.distinctBy { it.id }
-    val categories = rows.mapNotNull { row -> row.transaction.categoryId?.let { MovementReferenceOption(it, row.categoryName ?: "Categoría histórica") } }.distinctBy { it.id }
-    val cards = rows.mapNotNull { row -> row.transaction.cardId?.let { MovementReferenceOption(it, row.cardAlias ?: "Tarjeta histórica") } }.distinctBy { it.id }
-    val merchants = rows.mapNotNull { row -> row.transaction.merchantId?.let { MovementReferenceOption(it, row.merchantName ?: "Comercio histórico") } }.distinctBy { it.id }
+        it.transaction.destinationAccountId?.let { id -> MovementReferenceOption(id, it.destinationAccountAlias ?: "Cuenta histórica") }) }.distinctBy { it.id } }
+    val categories = remember(rows) { rows.mapNotNull { row -> row.transaction.categoryId?.let { MovementReferenceOption(it, row.categoryName ?: "Categoría histórica") } }.distinctBy { it.id } }
+    val cards = remember(rows) { rows.mapNotNull { row -> row.transaction.cardId?.let { MovementReferenceOption(it, row.cardAlias ?: "Tarjeta histórica") } }.distinctBy { it.id } }
+    val merchants = remember(rows) { rows.mapNotNull { row -> row.transaction.merchantId?.let { MovementReferenceOption(it, row.merchantName ?: "Comercio histórico") } }.distinctBy { it.id } }
 
     KipuBottomSheet(
         onDismissRequest = onDismiss,
@@ -86,7 +96,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     "Personaliza los movimientos que ves",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp)
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
                 )
             }
         }
@@ -99,16 +109,19 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 // Free basics first: Dates
                 Text("Periodo y Fecha", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     KipuFilterChip(selected = draft.fromDate.isBlank() && draft.toDate.isBlank(), onClick = {
-                        draft = draft.copy(fromDate = "", toDate = "")
+                        updateDraft(draft.copy(fromDate = "", toDate = ""))
                     }, label = { Text(stringResource(R.string.history_all_dates)) })
                     KipuFilterChip(selected = draft.fromDate == LocalDate.now().toString() && draft.toDate == draft.fromDate, onClick = {
-                        draft = draft.copy(fromDate = LocalDate.now().toString(), toDate = LocalDate.now().toString())
+                        updateDraft(draft.copy(fromDate = LocalDate.now().toString(), toDate = LocalDate.now().toString()))
                     }, label = { Text(stringResource(R.string.history_today)) })
                     val today = LocalDate.now()
                     listOf(
@@ -117,16 +130,20 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                         Triple("Año", today.withDayOfYear(1), today.withMonth(12).withDayOfMonth(31)),
                     ).forEach { (label, from, to) ->
                         KipuFilterChip(selected = draft.fromDate == from.toString() && draft.toDate == to.toString(),
-                            onClick = { draft = draft.copy(fromDate = from.toString(), toDate = to.toString()) },
+                            onClick = { updateDraft(draft.copy(fromDate = from.toString(), toDate = to.toString())) },
                             label = { Text(label) })
                     }
                 }
                 val from = runCatching { LocalDate.parse(draft.fromDate) }.getOrNull()
                 val to = runCatching { LocalDate.parse(draft.toDate) }.getOrNull()
                 val dateFormat = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
-                OutlinedButton(onClick = { dates = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-                    Text(if (from == null && to == null) stringResource(R.string.history_custom_dates)
-                        else "${from?.format(dateFormat) ?: "…"} — ${to?.format(dateFormat) ?: "…"}")
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    OutlinedButton(onClick = { dates = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_filter_dates")) {
+                        Text(if (from == null && to == null) stringResource(R.string.history_custom_dates)
+                            else "${from?.format(dateFormat) ?: "…"} — ${to?.format(dateFormat) ?: "…"}")
+                    }
+                    FilterFieldError("from", errors["from"])
+                    FilterFieldError("to", errors["to"])
                 }
                 if (from != null && to != null && !to.isBefore(from)) {
                     Text("${java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1} días",
@@ -135,13 +152,30 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
 
                 // Advanced / Premium sections
                 if (!allowed) {
-                    Text("Filtros avanzados · Premium", style = MaterialTheme.typography.titleSmall)
-                    Text("Cuenta · Tarjeta · Categoría · Importe · Comercio", style = MaterialTheme.typography.bodyMedium)
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("card_advanced_filters_info"),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(stringResource(R.string.history_filter_advanced), style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                stringResource(R.string.history_filter_premium_summary),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (!state.fallbackUsed && state.recovery == HistoryAccessRecovery.IDLE &&
+                                state.accessStatus !is MovementHistoryAccessDecision.RevalidationRequired) {
+                                TextButton(onClick = onViewPlans, modifier = Modifier.heightIn(min = 48.dp)) { Text("Ver Premium") }
+                            }
+                        }
+                    }
                     if (state.fallbackUsed || state.recovery != HistoryAccessRecovery.IDLE ||
                         state.accessStatus is MovementHistoryAccessDecision.RevalidationRequired) {
                         MovementAccessCard(state, onViewPlans, onVerify, onDismissRecovery)
-                    } else {
-                        TextButton(onClick = onViewPlans, modifier = Modifier.heightIn(min = 48.dp)) { Text("Ver Premium") }
                     }
                     OutlinedButton(
                         onClick = { showPremiumOptions = !showPremiumOptions },
@@ -152,7 +186,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     if (showPremiumOptions) {
                         AdvancedFiltersControls(
                             draft = draft,
-                            onDraftChange = { draft = it },
+                            onDraftChange = ::updateDraft,
                             errors = errors,
                             allowed = false,
                             accounts = accounts,
@@ -165,7 +199,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     Text(stringResource(R.string.history_filter_advanced), style = MaterialTheme.typography.titleSmall)
                     AdvancedFiltersControls(
                         draft = draft,
-                        onDraftChange = { draft = it },
+                        onDraftChange = ::updateDraft,
                         errors = errors,
                         allowed = true,
                         accounts = accounts,
@@ -173,16 +207,6 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                         cards = cards,
                         merchants = merchants
                     )
-                }
-
-                // Errors
-                errors.values.distinct().forEach { error ->
-                    Text(stringResource(when (error) {
-                        FilterDraftError.AMOUNT -> R.string.history_filter_invalid_amount
-                        FilterDraftError.CURRENCY -> R.string.history_filter_missing_currency
-                        FilterDraftError.DATE -> R.string.history_filter_invalid_date
-                        FilterDraftError.RANGE -> R.string.history_filter_invalid_range
-                    }), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
 
                 Spacer(Modifier.height(8.dp))
@@ -200,10 +224,10 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     TextButton(
-                        onClick = { draft = MovementFilterDraft(); errors = emptyMap() },
+                        onClick = { draft = MovementFilterDraft(); errors = emptyMap(); validationAttempted = false },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_reset_advanced_filters")
                     ) {
                         Text("Limpiar")
@@ -229,6 +253,7 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                                 draft
                             }
                             val validation = onApply(draftToApply)
+                            validationAttempted = true
                             errors = validation.errors
                         },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_apply_filters")
@@ -253,13 +278,52 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
     if (dates) {
         fun String.utc(): Long? = runCatching { LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
         val picker = rememberDateRangePickerState(initialSelectedStartDateMillis = draft.fromDate.utc(), initialSelectedEndDateMillis = draft.toDate.utc())
-        DatePickerDialog(onDismissRequest = { dates = false }, confirmButton = {
+        MovementDateRangeDialog(onDismissRequest = { dates = false }, confirmButton = {
             TextButton(onClick = {
                 fun Long?.date() = this?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate().toString() }.orEmpty()
-                draft = draft.copy(fromDate = picker.selectedStartDateMillis.date(), toDate = picker.selectedEndDateMillis.date()); dates = false
+                updateDraft(draft.copy(fromDate = picker.selectedStartDateMillis.date(), toDate = picker.selectedEndDateMillis.date())); dates = false
             }) { Text(stringResource(R.string.history_filter_apply)) }
         }, dismissButton = { TextButton(onClick = { dates = false }) { Text(stringResource(R.string.history_filter_cancel)) } }) {
-            DateRangePicker(state = picker, modifier = Modifier.heightIn(max = 500.dp))
+            DateRangePicker(
+                state = picker,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 500.dp),
+                title = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                stringResource(R.string.history_filter_select_dates),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = {
+                                picker.displayMode = if (picker.displayMode == DisplayMode.Picker) DisplayMode.Input else DisplayMode.Picker
+                            }, modifier = Modifier.size(48.dp)) {
+                                Icon(
+                                    imageVector = if (picker.displayMode == DisplayMode.Picker) Icons.Default.Edit else Icons.Default.DateRange,
+                                    contentDescription = stringResource(if (picker.displayMode == DisplayMode.Picker)
+                                        R.string.history_filter_date_input_mode else R.string.history_filter_date_calendar_mode),
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            FilterDateEndpoint(stringResource(R.string.history_filter_date_start), picker.selectedStartDateMillis, Modifier.weight(1f))
+                            FilterDateEndpoint(stringResource(R.string.history_filter_date_end), picker.selectedEndDateMillis, Modifier.weight(1f))
+                        }
+                    }
+                },
+                headline = null,
+                showModeToggle = false,
+            )
         }
     }
 }
@@ -276,58 +340,100 @@ private fun AdvancedFiltersControls(
     cards: List<MovementReferenceOption>,
     merchants: List<MovementReferenceOption>,
 ) {
-    ReferenceSelector(stringResource(R.string.history_accounts), accounts, draft.accountIds, allowed) { onDraftChange(draft.copy(accountIds = it)) }
-    ReferenceSelector(stringResource(R.string.history_categories), categories, draft.categoryIds, allowed) { onDraftChange(draft.copy(categoryIds = it)) }
-    ReferenceSelector(stringResource(R.string.history_cards), cards, draft.cardIds, allowed) { onDraftChange(draft.copy(cardIds = it)) }
-    ReferenceSelector(stringResource(R.string.history_merchants), merchants, draft.merchantIds, allowed) { onDraftChange(draft.copy(merchantIds = it)) }
-    Text(stringResource(R.string.history_amount), style = MaterialTheme.typography.titleSmall)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf("PEN", "USD").forEach { currency -> KipuFilterChip(selected = draft.currency == currency, enabled = allowed,
-            onClick = { onDraftChange(draft.copy(currency = currency)) }, label = { Text(currency) }) }
-    }
-    OutlinedTextField(draft.minAmount, { onDraftChange(draft.copy(minAmount = it)) }, enabled = allowed,
-        label = { Text(stringResource(R.string.movements_filter_min_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
-        isError = errors.containsKey("min"), modifier = Modifier.fillMaxWidth().testTag("input_filter_min_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe mínimo oculto") { onDraftChange(draft.copy(minAmount = it)) })
-    OutlinedTextField(draft.maxAmount, { onDraftChange(draft.copy(maxAmount = it)) }, enabled = allowed,
-        label = { Text(stringResource(R.string.movements_filter_max_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
-        isError = errors.containsKey("max"), modifier = Modifier.fillMaxWidth().testTag("input_filter_max_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe máximo oculto") { onDraftChange(draft.copy(maxAmount = it)) })
-    Text("Estado del movimiento", style = MaterialTheme.typography.titleSmall)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MovementFinancialState.entries.forEach { value -> KipuFilterChip(selected = value in draft.financialStates,
-            enabled = allowed, onClick = { onDraftChange(draft.copy(financialStates = draft.financialStates.toggle(value))) },
-            label = { Text(value.uiLabel()) }, modifier = Modifier.testTag("chip_filter_${value.name.lowercase()}")) }
-    }
-    Text(stringResource(R.string.history_sync_state), style = MaterialTheme.typography.titleSmall)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MovementSyncStatus.entries.forEach { value -> KipuFilterChip(selected = value in draft.syncStatuses, enabled = allowed,
-            onClick = { onDraftChange(draft.copy(syncStatuses = draft.syncStatuses.toggle(value))) }, label = { Text(value.uiLabel()) }) }
+    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ReferenceSelector(stringResource(R.string.history_accounts), accounts, draft.accountIds, allowed) { onDraftChange(draft.copy(accountIds = it)) }
+        ReferenceSelector(stringResource(R.string.history_categories), categories, draft.categoryIds, allowed) { onDraftChange(draft.copy(categoryIds = it)) }
+        ReferenceSelector(stringResource(R.string.history_cards), cards, draft.cardIds, allowed) { onDraftChange(draft.copy(cardIds = it)) }
+        ReferenceSelector(stringResource(R.string.history_merchants), merchants, draft.merchantIds, allowed) { onDraftChange(draft.copy(merchantIds = it)) }
+        Text(stringResource(R.string.history_amount), style = MaterialTheme.typography.titleSmall)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.history_currency), style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("PEN", "USD").forEach { currency -> KipuFilterChip(selected = draft.currency == currency, enabled = allowed,
+                    onClick = { onDraftChange(draft.copy(currency = currency)) }, label = { Text(currency) }) }
+            }
+            FilterFieldError("currency", errors["currency"])
+        }
+        OutlinedTextField(draft.minAmount, { onDraftChange(draft.copy(minAmount = it)) }, enabled = allowed,
+            label = { Text(stringResource(R.string.movements_filter_min_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
+            supportingText = if (errors.containsKey("min")) { { FilterFieldError("min", errors["min"]) } } else null,
+            isError = errors.containsKey("min"), modifier = Modifier.fillMaxWidth().testTag("input_filter_min_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe mínimo oculto") { onDraftChange(draft.copy(minAmount = it)) })
+        OutlinedTextField(draft.maxAmount, { onDraftChange(draft.copy(maxAmount = it)) }, enabled = allowed,
+            label = { Text(stringResource(R.string.movements_filter_max_amount)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            visualTransformation = if (LocalBalanceMasked.current) PasswordVisualTransformation() else VisualTransformation.None,
+            supportingText = if (errors.containsKey("max")) { { FilterFieldError("max", errors["max"]) } } else null,
+            isError = errors.containsKey("max"), modifier = Modifier.fillMaxWidth().testTag("input_filter_max_amount").privateAmount(LocalBalanceMasked.current, allowed, "Importe máximo oculto") { onDraftChange(draft.copy(maxAmount = it)) })
+        Text("Estado del movimiento", style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MovementFinancialState.entries.forEach { value -> KipuFilterChip(selected = value in draft.financialStates,
+                enabled = allowed, onClick = { onDraftChange(draft.copy(financialStates = draft.financialStates.toggle(value))) },
+                label = { Text(value.uiLabel()) }, modifier = Modifier.testTag("chip_filter_${value.name.lowercase()}")) }
+        }
+        Text(stringResource(R.string.history_sync_state), style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            MovementSyncStatus.entries.forEach { value -> KipuFilterChip(selected = value in draft.syncStatuses, enabled = allowed,
+                onClick = { onDraftChange(draft.copy(syncStatuses = draft.syncStatuses.toggle(value))) }, label = { Text(value.uiLabel()) }) }
+        }
     }
 }
 
 @Composable
-private fun ReferenceSelector(title: String, options: List<MovementReferenceOption>, selected: Set<String>, enabled: Boolean, onChange: (Set<String>) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    var search by remember { mutableStateOf("") }
-    OutlinedButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
-        Text("$title · ${selected.size}")
+private fun FilterDateEndpoint(label: String, dateMillis: Long?, modifier: Modifier = Modifier) {
+    val date = dateMillis?.let {
+        Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+            .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
     }
-    LaunchedEffect(enabled) { if (!enabled) open = false }
-    if (open && enabled) AlertDialog(onDismissRequest = { open = false }, title = { Text(title) }, text = {
-        Column {
-            OutlinedTextField(search, { search = it }, label = { Text(stringResource(R.string.history_filter_search)) }, modifier = Modifier.fillMaxWidth())
-            Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
-                val visible = options.filter { it.label.contains(search, ignoreCase = true) }.sortedBy { it.label }
-                if (visible.isEmpty()) Text(stringResource(R.string.history_filter_none), modifier = Modifier.padding(vertical = 12.dp))
-                visible.forEach { option -> Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                    .toggleable(value = option.id in selected, role = Role.Checkbox, onValueChange = { onChange(selected.toggle(option.id)) }), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Checkbox(checked = option.id in selected, onCheckedChange = null)
-                    Text(option.label, modifier = Modifier.weight(1f).padding(vertical = 12.dp))
-                } }
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(date ?: stringResource(R.string.history_filter_date_unselected), style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@Composable
+private fun FilterFieldError(field: String, error: FilterDraftError?) {
+    if (error == null) return
+    val message = when (field) {
+        "from" -> R.string.history_filter_invalid_start_date
+        "to" -> if (error == FilterDraftError.RANGE) R.string.history_filter_invalid_date_range else R.string.history_filter_invalid_end_date
+        "max" -> if (error == FilterDraftError.RANGE) R.string.history_filter_invalid_amount_range else R.string.history_filter_invalid_amount
+        "currency" -> R.string.history_filter_missing_currency
+        else -> R.string.history_filter_invalid_amount
+    }
+    Text(stringResource(message), color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("error_filter_$field"))
+}
+
+/** Material's date dialog requires 360 dp; bound only the compact variant to its window. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun MovementDateRangeDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    dismissButton: @Composable () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    if (LocalConfiguration.current.screenWidthDp >= 360) {
+        DatePickerDialog(onDismissRequest = onDismissRequest, confirmButton = confirmButton,
+            dismissButton = dismissButton, content = content)
+    } else {
+        Dialog(onDismissRequest, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp),
+                shape = DatePickerDefaults.shape,
+                color = DatePickerDefaults.colors().containerColor,
+                tonalElevation = DatePickerDefaults.TonalElevation) {
+                Column {
+                    Box(Modifier.weight(1f, fill = false)) { Column(content = content) }
+                    FlowRow(modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        dismissButton()
+                        confirmButton()
+                    }
+                }
             }
         }
-    }, confirmButton = { TextButton(onClick = { open = false }) { Text("Listo") } })
+    }
 }
 
 private fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value

@@ -160,3 +160,17 @@ Propietarios A/B, dos cuentas propias PEN y otra ajena; montos enteros en cénti
 ### Refine status and semantic cross-check
 
 Both feature directories contain spec, plan, tasks, research, data-model and contracts. Refinement/propagation entries are current and no artifact-warning **STALE** marker remains. Requirement IDs and existing financial contracts are preserved. Source provenance is explicitly mapped to open T110; all new visual requirements have implementation tasks and evidence. Marker synchronization does not mean whole-sprint functional acceptance. The remaining high-priority finding is the pre-existing FR-017 source contract gap, with explicit task coverage and no inferred replacement.
+
+## Issue #19 — Verificación dirigida de filtros (2026-10-07)
+
+Build aislado y regresión:
+
+```powershell
+.\gradlew.bat -PisolatedAndroidTests=true :app:assembleLab :app:assembleLabAndroidTest :app:testLabUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
+```
+
+Instalar las APK `lab` y `lab-androidTest`, y ejecutar con `am instrument` la clase `MovementFiltersIssue19Test` y los métodos `MovementUxRefinementTest#closingFilterDraftDoesNotApplyIt`, `MovementUxRefinementTest#filterDraftSurvivesUiRestorationWithoutApplyingOrGrantingAccess` y `MovementHistoryScreenTest#filterSheetResetOnlyChangesDraftUntilApply`. Resultado de la corrida final física: **13/13 PASS**, más **21/21 JVM**. Son pruebas de presentación/regresión de filtros; no certifican concesión Premium real ni rendimiento de consultas.
+
+Comprobar que cada error acompaña su control y desaparece al corregirlo sin aplicar; buscar/seleccionar/retirar entre 1.000 opciones sin perder otras selecciones; cambiar propietario/acceso; cerrar sin aplicar y restaurar borrador; preservar privacidad y los criterios Premium retenidos en Free. El fixture compacto aplica una configuración Android propia para que los diálogos también usen aproximadamente 314 dp y fuente ×1,6, sin cambiar ajustes globales del dispositivo.
+
+[Capturas, comandos de reproducción y particularidad de arranque MIUI](validation/ui/issue-19/README.md). El responsable acepta el resumen de filtros aplicados y «Limpiar» existentes; no se rediseñan. T110 permanece fuera del alcance.

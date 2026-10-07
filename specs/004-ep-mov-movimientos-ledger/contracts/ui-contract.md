@@ -112,3 +112,19 @@ Prevalece para HU-20/21/22; conserva tokens, navegación y accesibilidad S2. Con
 Tocar una fila abre detalle de lectura, también para VOIDED; las acciones explícitas siguen sujetas a elegibilidad y no resucitan movimientos. Filtros editan un borrador: aplicar valida montos en unidades mayores/moneda y fechas; cerrar/cancelar no modifica criterios aplicados. Referencias históricas se presentan por nombre. Estado financiero, sincronización, criterios efectivos y criterios retenidos sin acceso tienen etiquetas distintas. Todo importe respeta el enmascaramiento visual y semántico global.
 
 Edición compara cada cambio Antes/Después y confirma persistencia local/pending sync; anulación conserva consecuencias por cuenta y no ofrece undo. Avisos, resúmenes y feedback usan tokens/reduced motion; no animar resultados protegidos de salida tras caducidad. Vacío inicial ofrece registrar, cero resultados ofrece retirar/limpiar, fallo ofrece reintentar. Targets 48 dp, layout adaptable, tonos semánticos y anuncios discretos.
+
+### Corrección visual del issue #19 — 2026-10-06
+
+Hallazgos reportados por el responsable durante prueba física del panel (FR-034/039): los botones y filas de chips deben tener separación vertical explícita; el calendario debe dejar margen superior al título y asignar igual espacio a inicio/fin. Las etiquetas compactas «Inicio» y «Fin» conservan el significado del rango. El cambio de calendario a entrada manual sigue disponible en la cabecera.
+
+El aviso «Filtros avanzados · Premium» y su descripción forman una tarjeta informativa no clicable, con borde tonal y fondo `surfaceContainerHighest` para distinguirla del panel (ajuste de contraste solicitado al revisar el dispositivo). «Ver Premium» conserva su callback explícito; recuperación y controles deshabilitados siguen sujetos al acceso existente. Esta corrección no cambia aplicar/cancelar/limpiar, fechas, modelos ni autorización, y no cierra los restantes criterios del issue ni T110.
+
+### Errores y selectores del issue #19
+
+Los errores se muestran junto a fechas, moneda y cada límite de importe, distinguiendo fin anterior al inicio de máximo menor al mínimo. Corregir el borrador refresca los errores tras un intento inválido sin aplicar filtros ni modificar validación del dominio. Los mensajes no incluyen valores privados.
+
+Cada selector presenta nombres/resumen de selección y abre búsqueda con lista acotada y composición perezosa por ID. Buscar no elimina selecciones ni modifica filtros aplicados. Referencias seleccionadas ausentes del catálogo actual conservan su ID y ofrecen una etiqueta histórica segura para retirarlas; nunca se muestra el ID. Diferenciar catálogo vacío de búsqueda sin coincidencias. Cerrar el selector conserva sus cambios en el borrador; cerrar el panel conserva filtros aplicados. La pérdida de acceso cierra el selector y bloquea controles, sin conceder acceso por restauración de UI.
+
+El responsable confirmó que el resumen de filtros aplicados y «Limpiar» ya cumplen lo esperado; esas implementaciones se conservan.
+
+En ventanas menores de 360 dp, el contenedor local del calendario se limita al ancho disponible y sus acciones se ajustan a varias filas. Conserva `DateRangePicker` y su modo manual/calendario; no sustituye la validación ni agrega criterios. En anchos mayores se conserva el diálogo nativo.
