@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.core.session.LocalAccess
 import com.kipu.app.core.session.SessionCoordinator
+import com.kipu.app.feature.categories.domain.CategoryRules
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.Category
@@ -19,6 +20,10 @@ import com.kipu.app.feature.categories.domain.usecase.SetCategoryActive
 import com.kipu.app.feature.categories.domain.usecase.UpdateCategoryPresentation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +58,7 @@ data class CategoriesUiState(
     val activeCustomExpenseRootsCount: Int = 0,
     val activeCustomIncomeRootsCount: Int = 0,
     val maxCustomRoots: Int = 5,
+    val isPremiumVerified: Boolean = false,
     val isCreateDialogOpen: Boolean = false,
     val editingCategoryId: CategoryId? = null,
     val editingRevision: Long = 1L,
@@ -70,11 +76,16 @@ data class CategoriesUiState(
     val isQuotaSelectionOpen: Boolean = false,
 ) {
     val isFreeLimitReached: Boolean
-        get() = when (createCategoryType) {
+        get() = isFreeLimitReachedFor(createCategoryType)
+
+    fun isFreeLimitReachedFor(categoryType: CategoryType): Boolean {
+        if (isPremiumVerified) return false
+        return when (categoryType) {
             CategoryType.EXPENSE -> activeCustomExpenseRootsCount >= maxCustomRoots
             CategoryType.INCOME -> activeCustomIncomeRootsCount >= maxCustomRoots
             CategoryType.GENERAL -> activeCustomExpenseRootsCount >= maxCustomRoots || activeCustomIncomeRootsCount >= maxCustomRoots
         }
+    }
     val isEditing: Boolean get() = editingCategoryId != null
 }
 
@@ -96,6 +107,8 @@ class CategoriesViewModel @Inject constructor(
 
     private var currentUserId: UserId? = null
     private var observedOwnerId: String? = null
+    private var ownerEpoch = 0L
+    private val ownerCommandJobs = mutableSetOf<Job>()
 
     init {
         viewModelScope.launch {
@@ -103,6 +116,11 @@ class CategoriesViewModel @Inject constructor(
                 .map { access -> (access as? LocalAccess.Available)?.userId }
                 .distinctUntilChanged()
                 .collectLatest { ownerId ->
+                    if (observedOwnerId != ownerId) {
+                        ownerEpoch += 1
+                        ownerCommandJobs.toList().forEach(Job::cancel)
+                        ownerCommandJobs.clear()
+                    }
                     observedOwnerId?.takeIf { it != ownerId }?.let(syncScheduler::cancelSync)
                     observedOwnerId = ownerId
                     if (ownerId == null) {
@@ -133,7 +151,9 @@ class CategoriesViewModel @Inject constructor(
                     kotlinx.coroutines.flow.combine(
                         observeCategories(userId),
                         observeSelectedFreeCategoryRoots(userId),
-                    ) { items, selected -> items to selected }.collect { (items, selected) ->
+                        observeCategories.observePremiumVerified(userId),
+                    ) { items, selected, premiumVerified -> Triple(items, selected, premiumVerified) }
+                        .collect { (items, selected, premiumVerified) ->
                         val activeRoots = items.count {
                             it.category.isRoot && it.category.isCustom && it.category.isActive
                         }
@@ -153,6 +173,7 @@ class CategoriesViewModel @Inject constructor(
                                 activeCustomExpenseRootsCount = activeExpense,
                                 activeCustomIncomeRootsCount = activeIncome,
                                 selectedFreeCategoryRootIds = selected,
+                                isPremiumVerified = premiumVerified,
                             )
                         }
                     }
@@ -180,11 +201,22 @@ class CategoriesViewModel @Inject constructor(
     fun toggleQuotaSelection(categoryId: CategoryId) {
         _uiState.update { state ->
             if (categoryId in state.quotaSelectionDraft) {
-                state.copy(quotaSelectionDraft = state.quotaSelectionDraft - categoryId)
-            } else if (state.quotaSelectionDraft.size < state.maxCustomRoots) {
-                state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
+                state.copy(quotaSelectionDraft = state.quotaSelectionDraft - categoryId, errorMessage = null)
             } else {
-                state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRoots} categorías personalizadas")
+                val newDraft = state.quotaSelectionDraft + categoryId
+                val quota = CategoryRules.evaluateCustomRootQuota(
+                    categories = state.categories.map { it.category },
+                    selectedRootIds = newDraft,
+                    limitPerType = state.maxCustomRoots,
+                    premiumVerified = state.isPremiumVerified,
+                )
+                if (!state.isPremiumVerified && quota.selectedCounts.expenseRoots > state.maxCustomRoots) {
+                    state.copy(errorMessage = "Solo puedes seleccionar hasta ${state.maxCustomRoots} categorías de gasto en el plan Free")
+                } else if (!state.isPremiumVerified && quota.selectedCounts.incomeRoots > state.maxCustomRoots) {
+                    state.copy(errorMessage = "Solo puedes seleccionar hasta ${state.maxCustomRoots} categorías de ingreso en el plan Free")
+                } else {
+                    state.copy(quotaSelectionDraft = newDraft, errorMessage = null)
+                }
             }
         }
     }
@@ -193,10 +225,10 @@ class CategoriesViewModel @Inject constructor(
         val initiatingOwner = currentUserId ?: return
         val state = _uiState.value
         val selected = state.quotaSelectionDraft
-        viewModelScope.launch {
+        launchForOwner(initiatingOwner) { epoch ->
             saveSelectedFreeCategoryRoots(initiatingOwner, selected).fold(
                 onSuccess = {
-                    if (currentUserId != initiatingOwner) return@launch
+                    if (!isOwnerActive(initiatingOwner, epoch)) return@launchForOwner
                     _uiState.update {
                         it.copy(
                             isQuotaSelectionOpen = false,
@@ -207,7 +239,7 @@ class CategoriesViewModel @Inject constructor(
                     }
                 },
                 onFailure = { error ->
-                    if (currentUserId != initiatingOwner) return@launch
+                    if (!isOwnerActive(initiatingOwner, epoch)) return@launchForOwner
                     _uiState.update { it.copy(errorMessage = error.message ?: "No se pudo guardar la selección") }
                 },
             )
@@ -220,17 +252,17 @@ class CategoriesViewModel @Inject constructor(
 
     fun openCreateDialog(parentId: CategoryId? = null) {
         val state = _uiState.value
-        // If user is Free and already has 5 active custom roots and tries to create another root
-        if (parentId == null && state.isFreeLimitReached) {
-            _uiState.update { it.copy(showQuotaExceededDialog = true) }
-            return
-        }
         val parentCategoryType = parentId?.let { requestedParentId ->
             state.categories.asSequence()
                 .flatMap { root -> sequenceOf(root) + root.subcategories.asSequence() }
                 .firstOrNull { it.category.id == requestedParentId }
                 ?.category
                 ?.categoryType
+        }
+        val proposedType = parentCategoryType ?: state.selectedTab.categoryType
+        if (parentId == null && state.isFreeLimitReachedFor(proposedType)) {
+            _uiState.update { it.copy(showQuotaExceededDialog = true) }
+            return
         }
         _uiState.update {
             it.copy(
@@ -290,10 +322,10 @@ class CategoriesViewModel @Inject constructor(
     fun confirmDeleteCategory() {
         val initiatingOwner = currentUserId ?: return
         val item = _uiState.value.categoryToDelete ?: return
-        viewModelScope.launch {
+        launchForOwner(initiatingOwner) { epoch ->
             // Inactivating a category acts as deleting/disabling it per domain rules
             val result = setCategoryActive(item.category.id, false)
-            if (currentUserId != initiatingOwner) return@launch
+            if (!isOwnerActive(initiatingOwner, epoch)) return@launchForOwner
             result.fold(
                 onSuccess = {
                     _uiState.update {
@@ -351,12 +383,19 @@ class CategoriesViewModel @Inject constructor(
 
         val state = _uiState.value
         val name = state.createCategoryName.trim()
+        val submittedType = state.createParentId?.let { parentId ->
+            state.categories.asSequence()
+                .flatMap { root -> sequenceOf(root) + root.subcategories.asSequence() }
+                .firstOrNull { it.category.id == parentId }
+                ?.category
+                ?.categoryType
+        } ?: state.createCategoryType
         if (name.isBlank()) {
             _uiState.update { it.copy(errorMessage = "El nombre de la categoría no puede estar vacío") }
             return
         }
 
-        viewModelScope.launch {
+        launchForOwner(initiatingOwner) { epoch ->
             if (state.isEditing) {
                 val editingId = state.editingCategoryId!!
                 val result = updateCategoryPresentation(
@@ -370,7 +409,7 @@ class CategoriesViewModel @Inject constructor(
                     ),
                     expectedRevision = state.editingRevision,
                 )
-                if (currentUserId != initiatingOwner) return@launch
+                if (!isOwnerActive(initiatingOwner, epoch)) return@launchForOwner
                 result.fold(
                     onSuccess = {
                         closeCreateDialog()
@@ -381,9 +420,9 @@ class CategoriesViewModel @Inject constructor(
                     }
                 )
             } else {
-                if (state.createParentId == null && state.isFreeLimitReached) {
+                if (state.createParentId == null && state.isFreeLimitReachedFor(submittedType)) {
                     _uiState.update { it.copy(showQuotaExceededDialog = true) }
-                    return@launch
+                    return@launchForOwner
                 }
                 val result = createCategory(
                     ownerId = initiatingOwner,
@@ -391,9 +430,9 @@ class CategoriesViewModel @Inject constructor(
                     icon = state.createCategoryIcon,
                     color = state.createCategoryColor,
                     parentId = state.createParentId,
-                    categoryType = state.createCategoryType,
+                    categoryType = submittedType,
                 )
-                if (currentUserId != initiatingOwner) return@launch
+                if (!isOwnerActive(initiatingOwner, epoch)) return@launchForOwner
                 result.fold(
                     onSuccess = {
                         closeCreateDialog()
@@ -409,10 +448,10 @@ class CategoriesViewModel @Inject constructor(
 
     fun toggleCategoryActive(categoryId: CategoryId, currentActive: Boolean) {
         val initiatingOwner = currentUserId ?: return
-        viewModelScope.launch {
+        launchForOwner(initiatingOwner) { epoch ->
             val targetState = !currentActive
             val result = setCategoryActive(categoryId, targetState)
-            if (currentUserId != initiatingOwner) return@launch
+            if (!isOwnerActive(initiatingOwner, epoch)) return@launchForOwner
             result.onFailure { error ->
                 _uiState.update { it.copy(errorMessage = error.message ?: "Error al actualizar estado") }
             }
@@ -425,5 +464,24 @@ class CategoriesViewModel @Inject constructor(
 
     fun clearSuccessMessage() {
         _uiState.update { it.copy(successMessage = null) }
+    }
+
+    private fun launchForOwner(owner: UserId, action: suspend (Long) -> Unit) {
+        val epoch = ownerEpoch
+        val job = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                if (isOwnerActive(owner, epoch)) action(epoch)
+            } finally {
+                ownerCommandJobs.remove(currentCoroutineContext()[Job])
+            }
+        }
+        ownerCommandJobs += job
+        job.start()
+    }
+
+    private suspend fun isOwnerActive(owner: UserId, epoch: Long): Boolean {
+        currentCoroutineContext().ensureActive()
+        return ownerEpoch == epoch && currentUserId == owner &&
+            (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId == owner.value
     }
 }

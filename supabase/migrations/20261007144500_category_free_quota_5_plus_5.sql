@@ -3,8 +3,45 @@
 -- - Free plan allows up to 5 active custom roots for EXPENSE and 5 active custom roots for INCOME.
 -- - Subcategories and SYSTEM categories are exempt (even if customized).
 -- - Each active custom root of type GENERAL consumes 1 slot in BOTH quotas (1 in expense, 1 in income).
--- - Replaces missing public.v_feature_access reference with entitlement checks via billing_purchases.
--- - Ensures idempotent retries for create_category_v1 and protects SYSTEM categories in set_category_active_v1.
+-- - Premium eligibility matches persist_verified_billing_purchase authority (20260927003156_billing_purchase_verification_s3.sql lines 279-286).
+-- - Contractual idempotency for create_category_v1 and set_category_active_v1 via internal.command_receipts.
+-- - Safe concurrency preventing owner collisions and race conditions.
+
+CREATE OR REPLACE FUNCTION private.is_user_pro(p_user_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+    v_is_pro boolean := false;
+BEGIN
+    IF p_user_id IS NULL THEN
+        RETURN false;
+    END IF;
+
+    IF to_regclass('public.billing_purchases') IS NOT NULL AND to_regclass('public.billing_products') IS NOT NULL THEN
+        SELECT EXISTS (
+            SELECT 1 FROM public.billing_purchases p
+            JOIN public.billing_products prod ON prod.id = p.product_id
+            WHERE p.user_id = p_user_id
+              AND (
+                  (p.purchase_state = 'PURCHASED' AND prod.plan_type = 'PRO_LIFETIME'
+                   AND p.entitlement_state = 'ACTIVE' AND p.expires_at IS NULL)
+                  OR
+                  (p.purchase_state = 'PURCHASED' AND p.entitlement_state IN ('ACTIVE', 'IN_GRACE_PERIOD')
+                   AND p.expires_at IS NOT NULL AND p.expires_at > clock_timestamp())
+                  OR
+                  (p.purchase_state = 'CANCELLED' AND p.entitlement_state = 'CANCELED_ACTIVE'
+                   AND p.expires_at IS NOT NULL AND p.expires_at > clock_timestamp())
+              )
+        ) INTO v_is_pro;
+    END IF;
+
+    RETURN v_is_pro;
+END;
+$function$;
 
 CREATE OR REPLACE FUNCTION public.create_category_v1(p_payload jsonb)
 RETURNS jsonb
@@ -19,14 +56,20 @@ DECLARE
     v_requested_type text := NULLIF(upper(trim(p_payload->>'category_type')), '');
     v_category_type text;
     v_name text := trim(p_payload->>'name');
-    v_icon text := p_payload->>'icon';
-    v_color text := p_payload->>'color';
+    v_icon text := COALESCE(p_payload->>'icon', 'category');
+    v_color text := COALESCE(p_payload->>'color', '#0F766E');
+    v_operation_id uuid := NULLIF(p_payload->>'operation_id', '')::uuid;
+    v_canonical_payload jsonb;
+    v_request_hash text;
+    v_receipt internal.command_receipts%ROWTYPE;
     v_parent public.categories%ROWTYPE;
-    v_is_pro boolean := false;
     v_expense_count integer;
     v_income_count integer;
     v_general_count integer;
     v_existing public.categories%ROWTYPE;
+    v_pres public.category_presentations%ROWTYPE;
+    v_response jsonb;
+    v_is_pro boolean;
 BEGIN
     IF v_user_id IS NULL THEN
         RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '28000';
@@ -35,87 +78,138 @@ BEGIN
         RAISE EXCEPTION 'Category id and name are required' USING ERRCODE = '22023';
     END IF;
 
-    -- Idempotent retry check: if category already exists under same owner, return success
-    SELECT * INTO v_existing FROM public.categories WHERE id = v_category_id;
-    IF FOUND THEN
-        IF v_existing.user_id = v_user_id THEN
-            RETURN jsonb_build_object('success', true, 'category_id', v_category_id);
-        ELSE
-            RAISE EXCEPTION 'Category already exists under another owner' USING ERRCODE = '23505';
-        END IF;
+    -- Strict Lock Hierarchy: 1) Operation -> 2) Quota -> 3) IDs (parent, child) -> 4) Rows (parent, child)
+    IF v_operation_id IS NOT NULL THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('kipu:op:' || v_user_id::text || ':' || v_operation_id::text, 0)
+        );
     END IF;
 
-    IF v_parent_id IS NULL THEN
-        v_category_type := COALESCE(v_requested_type, 'GENERAL');
-        IF v_category_type NOT IN ('EXPENSE', 'INCOME', 'GENERAL') THEN
-            RAISE EXCEPTION 'Invalid category type: %', v_category_type USING ERRCODE = '22023';
-        END IF;
+    v_is_pro := private.is_user_pro(v_user_id);
+    IF NOT v_is_pro THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('kipu:category-root-quota:' || v_user_id::text, 0)
+        );
+    END IF;
 
-        -- Check PRO entitlement via billing_purchases or legacy v_feature_access if present
-        IF to_regclass('public.v_feature_access') IS NOT NULL THEN
-            BEGIN
-                EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.v_feature_access WHERE user_id = $1 AND plan_tier = ''PRO'')'
-                INTO v_is_pro
-                USING v_user_id;
-            EXCEPTION WHEN OTHERS THEN
-                v_is_pro := false;
-            END;
-        END IF;
+    IF v_parent_id IS NOT NULL THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('kipu:category-id:' || v_parent_id::text, 0)
+        );
+    END IF;
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended('kipu:category-id:' || v_category_id::text, 0)
+    );
 
-        IF NOT v_is_pro AND to_regclass('public.billing_purchases') IS NOT NULL THEN
-            SELECT EXISTS (
-                SELECT 1 FROM public.billing_purchases p
-                JOIN public.billing_products prod ON prod.id = p.product_id
-                WHERE p.user_id = v_user_id
-                  AND prod.plan_type IN ('PRO_MONTHLY', 'PRO_ANNUAL', 'PRO_LIFETIME')
-                  AND (
-                      (p.purchase_state = 'PURCHASED' AND prod.plan_type = 'PRO_LIFETIME'
-                       AND p.entitlement_state = 'ACTIVE' AND p.expires_at IS NULL)
-                      OR (p.purchase_state = 'PURCHASED' AND p.entitlement_state IN ('ACTIVE', 'IN_GRACE_PERIOD')
-                          AND (p.expires_at IS NULL OR p.expires_at > clock_timestamp()))
-                      OR (p.purchase_state = 'CANCELLED' AND p.entitlement_state = 'CANCELED_ACTIVE'
-                          AND (p.expires_at IS NULL OR p.expires_at > clock_timestamp()))
-                  )
-            ) INTO v_is_pro;
-        END IF;
-
-        IF NOT v_is_pro THEN
-            PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('kipu:category-root-quota:' || v_user_id::text, 0));
-
-            SELECT
-                count(*) FILTER (WHERE category_type = 'EXPENSE'),
-                count(*) FILTER (WHERE category_type = 'INCOME'),
-                count(*) FILTER (WHERE category_type = 'GENERAL')
-            INTO v_expense_count, v_income_count, v_general_count
-            FROM public.categories
-            WHERE user_id = v_user_id AND origin = 'CUSTOM' AND parent_id IS NULL AND is_active;
-
-            IF (v_category_type = 'EXPENSE' AND (v_expense_count + v_general_count) >= 5) OR
-               (v_category_type = 'INCOME' AND (v_income_count + v_general_count) >= 5) OR
-               (v_category_type = 'GENERAL' AND ((v_expense_count + v_general_count) >= 5 OR (v_income_count + v_general_count) >= 5)) THEN
-                RAISE EXCEPTION 'Free plan limit reached: maximum 5 active custom root categories per type' USING ERRCODE = 'P0001';
-            END IF;
-        END IF;
-    ELSE
+    IF v_parent_id IS NOT NULL THEN
         SELECT * INTO v_parent FROM public.categories
-        WHERE id = v_parent_id AND (user_id = v_user_id OR user_id IS NULL) FOR KEY SHARE;
+        WHERE id = v_parent_id AND (user_id = v_user_id OR user_id IS NULL)
+        FOR KEY SHARE;
         IF NOT FOUND THEN RAISE EXCEPTION 'Parent category not found' USING ERRCODE = 'P0002'; END IF;
         IF v_parent.parent_id IS NOT NULL THEN RAISE EXCEPTION 'Category hierarchy cannot exceed two levels' USING ERRCODE = 'P0001'; END IF;
         IF v_requested_type IS NOT NULL AND v_requested_type <> v_parent.category_type THEN
             RAISE EXCEPTION 'Subcategory type must match its root category' USING ERRCODE = '23514';
         END IF;
         v_category_type := v_parent.category_type;
+    ELSE
+        v_category_type := COALESCE(v_requested_type, 'GENERAL');
+        IF v_category_type NOT IN ('EXPENSE', 'INCOME', 'GENERAL') THEN
+            RAISE EXCEPTION 'Invalid category type: %', v_category_type USING ERRCODE = '22023';
+        END IF;
+    END IF;
+
+    -- Build canonical payload strictly on server (client payload_hash is never trusted)
+    v_canonical_payload := jsonb_build_object(
+        'category_id', v_category_id,
+        'parent_id', v_parent_id,
+        'category_type', v_category_type,
+        'name', v_name,
+        'icon', v_icon,
+        'color', v_color
+    );
+    v_request_hash := encode(extensions.digest(v_canonical_payload::text, 'sha256'), 'hex');
+
+    -- Revalidate receipt inside operation lock
+    IF v_operation_id IS NOT NULL THEN
+        SELECT * INTO v_receipt FROM internal.command_receipts
+        WHERE user_id = v_user_id AND idempotency_key = v_operation_id::text;
+        IF FOUND THEN
+            IF v_receipt.command_type = 'CREATE_CATEGORY'
+               AND v_receipt.command_payload = v_canonical_payload THEN
+                RETURN v_receipt.response_payload;
+            ELSE
+                RAISE EXCEPTION 'Operation ID reused with differing payload or command type' USING ERRCODE = '23505';
+            END IF;
+        END IF;
+    END IF;
+
+    -- Row lock and existing category validation
+    SELECT * INTO v_existing FROM public.categories WHERE id = v_category_id FOR UPDATE;
+    IF FOUND THEN
+        IF v_existing.user_id = v_user_id THEN
+            SELECT * INTO v_pres FROM public.category_presentations WHERE category_id = v_category_id AND user_id = v_user_id;
+            IF v_existing.name = v_name
+               AND (v_existing.parent_id IS NOT DISTINCT FROM v_parent_id)
+               AND v_existing.category_type = v_category_type
+               AND (v_pres.icon IS NOT DISTINCT FROM v_icon)
+               AND (v_pres.color IS NOT DISTINCT FROM v_color) THEN
+                v_response := jsonb_build_object('success', true, 'category_id', v_category_id);
+                IF v_operation_id IS NOT NULL THEN
+                    INSERT INTO internal.command_receipts (user_id, idempotency_key, command_type, request_hash, response_payload, status, command_payload)
+                    VALUES (v_user_id, v_operation_id::text, 'CREATE_CATEGORY', v_request_hash, v_response, 'APPLIED', v_canonical_payload)
+                    ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+                END IF;
+                RETURN v_response;
+            ELSE
+                RAISE EXCEPTION 'Category ID collision with differing payload' USING ERRCODE = '23505';
+            END IF;
+        ELSE
+            RAISE EXCEPTION 'Category already exists under another owner' USING ERRCODE = '23505';
+        END IF;
+    END IF;
+
+    -- Quota check under quota lock
+    IF v_parent_id IS NULL AND NOT v_is_pro THEN
+        SELECT
+            count(*) FILTER (WHERE category_type = 'EXPENSE'),
+            count(*) FILTER (WHERE category_type = 'INCOME'),
+            count(*) FILTER (WHERE category_type = 'GENERAL')
+        INTO v_expense_count, v_income_count, v_general_count
+        FROM public.categories
+        WHERE user_id = v_user_id AND origin = 'CUSTOM' AND parent_id IS NULL AND is_active AND deleted_at IS NULL;
+
+        IF (v_category_type = 'EXPENSE' AND (v_expense_count + v_general_count) >= 5) OR
+           (v_category_type = 'INCOME' AND (v_income_count + v_general_count) >= 5) OR
+           (v_category_type = 'GENERAL' AND ((v_expense_count + v_general_count) >= 5 OR (v_income_count + v_general_count) >= 5)) THEN
+            RAISE EXCEPTION 'Free plan limit reached: maximum 5 active custom root categories per type' USING ERRCODE = 'P0001';
+        END IF;
     END IF;
 
     INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active, remote_revision, category_type)
     VALUES (v_category_id, v_user_id, v_parent_id, v_name, 'CUSTOM', true, 1, v_category_type)
     ON CONFLICT (id) DO NOTHING;
 
+    SELECT * INTO v_existing FROM public.categories WHERE id = v_category_id;
+    IF NOT FOUND OR v_existing.user_id <> v_user_id THEN
+        RAISE EXCEPTION 'Category already exists under another owner' USING ERRCODE = '23505';
+    END IF;
+
     INSERT INTO public.category_presentations (category_id, user_id, name, icon, color, remote_revision)
     VALUES (v_category_id, v_user_id, v_name, v_icon, v_color, 1)
-    ON CONFLICT (category_id, user_id) DO NOTHING;
+    ON CONFLICT (category_id, user_id) DO UPDATE SET
+        name = EXCLUDED.name,
+        icon = EXCLUDED.icon,
+        color = EXCLUDED.color;
 
-    RETURN jsonb_build_object('success', true, 'category_id', v_category_id);
+    v_response := jsonb_build_object('success', true, 'category_id', v_category_id);
+
+    IF v_operation_id IS NOT NULL THEN
+        INSERT INTO internal.command_receipts (user_id, idempotency_key, command_type, request_hash, response_payload, status, command_payload)
+        VALUES (v_user_id, v_operation_id::text, 'CREATE_CATEGORY', v_request_hash, v_response, 'APPLIED', v_canonical_payload)
+        ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+    END IF;
+
+    RETURN v_response;
 END;
 $function$;
 
@@ -130,67 +224,107 @@ DECLARE
     v_category_id uuid := (p_payload->>'category_id')::uuid;
     v_is_active boolean := (p_payload->>'is_active')::boolean;
     v_expected_revision bigint := (p_payload->>'expected_revision')::bigint;
+    v_operation_id uuid := NULLIF(p_payload->>'operation_id', '')::uuid;
+    v_canonical_payload jsonb;
+    v_request_hash text;
+    v_receipt internal.command_receipts%ROWTYPE;
     v_current_category record;
-    v_is_pro boolean := false;
     v_expense_count integer;
     v_income_count integer;
     v_general_count integer;
+    v_response jsonb;
+    v_is_pro boolean;
 BEGIN
     IF v_user_id IS NULL THEN RAISE EXCEPTION 'Not authenticated' USING ERRCODE = '28000'; END IF;
+    IF v_category_id IS NULL OR v_is_active IS NULL THEN
+        RAISE EXCEPTION 'category_id and is_active are required' USING ERRCODE = '22023';
+    END IF;
+
+    -- Strict Lock Hierarchy: 1) Operation -> 2) Quota -> 3) IDs -> 4) Rows
+    IF v_operation_id IS NOT NULL THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('kipu:op:' || v_user_id::text || ':' || v_operation_id::text, 0)
+        );
+    END IF;
+
+    v_is_pro := private.is_user_pro(v_user_id);
+    IF NOT v_is_pro THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            pg_catalog.hashtextextended('kipu:category-root-quota:' || v_user_id::text, 0)
+        );
+    END IF;
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended('kipu:category-id:' || v_category_id::text, 0)
+    );
+
+    -- Build canonical payload strictly on server (client payload_hash is never trusted)
+    v_canonical_payload := jsonb_build_object(
+        'category_id', v_category_id,
+        'is_active', v_is_active,
+        'expected_revision', v_expected_revision
+    );
+    v_request_hash := encode(extensions.digest(v_canonical_payload::text, 'sha256'), 'hex');
+
+    -- Revalidate receipt inside operation lock
+    IF v_operation_id IS NOT NULL THEN
+        SELECT * INTO v_receipt FROM internal.command_receipts
+        WHERE user_id = v_user_id AND idempotency_key = v_operation_id::text;
+        IF FOUND THEN
+            IF v_receipt.command_type = 'SET_CATEGORY_ACTIVE'
+               AND v_receipt.command_payload = v_canonical_payload THEN
+                RETURN v_receipt.response_payload;
+            ELSE
+                RAISE EXCEPTION 'Operation ID reused with differing payload or command type' USING ERRCODE = '23505';
+            END IF;
+        END IF;
+    END IF;
+
+    -- Row lock and category validation
     SELECT * INTO v_current_category FROM public.categories
-    WHERE id = v_category_id AND (user_id = v_user_id OR user_id IS NULL);
+    WHERE id = v_category_id AND (user_id = v_user_id OR user_id IS NULL)
+    FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Category not found' USING ERRCODE = 'P0002'; END IF;
 
     IF v_current_category.user_id IS NULL AND v_current_category.origin = 'SYSTEM' THEN
         RAISE EXCEPTION 'Cannot modify system category lifecycle directly' USING ERRCODE = '42501';
     END IF;
 
-    IF v_current_category.remote_revision <> v_expected_revision THEN
+    -- Revision check: a new operation with stale revision must report CONFLICT (even if current state matches)
+    IF v_expected_revision IS NOT NULL AND v_current_category.remote_revision <> v_expected_revision THEN
+        v_response := jsonb_build_object('success', false, 'status', 'CONFLICT');
         INSERT INTO public.category_conflicts (category_id, user_id, conflict_type, local_version, remote_version, status)
         VALUES (v_category_id, v_user_id, 'LIFECYCLE', p_payload::text, row_to_json(v_current_category)::text, 'OPEN');
-        RETURN jsonb_build_object('success', false, 'status', 'CONFLICT');
+        IF v_operation_id IS NOT NULL THEN
+            INSERT INTO internal.command_receipts (user_id, idempotency_key, command_type, request_hash, response_payload, status, command_payload)
+            VALUES (v_user_id, v_operation_id::text, 'SET_CATEGORY_ACTIVE', v_request_hash, v_response, 'APPLIED', v_canonical_payload)
+            ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+        END IF;
+        RETURN v_response;
     END IF;
 
+    -- Idempotent check: if already in requested state and revision is current, return success without revision increment
+    IF v_current_category.is_active = v_is_active THEN
+        v_response := jsonb_build_object('success', true, 'status', 'UPDATED');
+        IF v_operation_id IS NOT NULL THEN
+            INSERT INTO internal.command_receipts (user_id, idempotency_key, command_type, request_hash, response_payload, status, command_payload)
+            VALUES (v_user_id, v_operation_id::text, 'SET_CATEGORY_ACTIVE', v_request_hash, v_response, 'APPLIED', v_canonical_payload)
+            ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+        END IF;
+        RETURN v_response;
+    END IF;
+
+    -- Quota check when activating an inactive root category
     IF v_current_category.parent_id IS NULL AND v_current_category.origin = 'CUSTOM'
        AND v_is_active AND NOT v_current_category.is_active THEN
-
-        IF to_regclass('public.v_feature_access') IS NOT NULL THEN
-            BEGIN
-                EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.v_feature_access WHERE user_id = $1 AND plan_tier = ''PRO'')'
-                INTO v_is_pro
-                USING v_user_id;
-            EXCEPTION WHEN OTHERS THEN
-                v_is_pro := false;
-            END;
-        END IF;
-
-        IF NOT v_is_pro AND to_regclass('public.billing_purchases') IS NOT NULL THEN
-            SELECT EXISTS (
-                SELECT 1 FROM public.billing_purchases p
-                JOIN public.billing_products prod ON prod.id = p.product_id
-                WHERE p.user_id = v_user_id
-                  AND prod.plan_type IN ('PRO_MONTHLY', 'PRO_ANNUAL', 'PRO_LIFETIME')
-                  AND (
-                      (p.purchase_state = 'PURCHASED' AND prod.plan_type = 'PRO_LIFETIME'
-                       AND p.entitlement_state = 'ACTIVE' AND p.expires_at IS NULL)
-                      OR (p.purchase_state = 'PURCHASED' AND p.entitlement_state IN ('ACTIVE', 'IN_GRACE_PERIOD')
-                          AND (p.expires_at IS NULL OR p.expires_at > clock_timestamp()))
-                      OR (p.purchase_state = 'CANCELLED' AND p.entitlement_state = 'CANCELED_ACTIVE'
-                          AND (p.expires_at IS NULL OR p.expires_at > clock_timestamp()))
-                  )
-            ) INTO v_is_pro;
-        END IF;
-
         IF NOT v_is_pro THEN
-            PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('kipu:category-root-quota:' || v_user_id::text, 0));
-
             SELECT
                 count(*) FILTER (WHERE category_type = 'EXPENSE'),
                 count(*) FILTER (WHERE category_type = 'INCOME'),
                 count(*) FILTER (WHERE category_type = 'GENERAL')
             INTO v_expense_count, v_income_count, v_general_count
             FROM public.categories
-            WHERE user_id = v_user_id AND origin = 'CUSTOM' AND parent_id IS NULL AND is_active;
+            WHERE user_id = v_user_id AND origin = 'CUSTOM' AND parent_id IS NULL AND is_active AND deleted_at IS NULL;
 
             IF (v_current_category.category_type = 'EXPENSE' AND (v_expense_count + v_general_count) >= 5) OR
                (v_current_category.category_type = 'INCOME' AND (v_income_count + v_general_count) >= 5) OR
@@ -201,10 +335,20 @@ BEGIN
     END IF;
 
     UPDATE public.categories
-    SET is_active = v_is_active, remote_revision = v_current_category.remote_revision + 1, updated_at = now()
+    SET is_active = v_is_active,
+        remote_revision = v_current_category.remote_revision + 1,
+        updated_at = now()
     WHERE id = v_category_id AND user_id = v_user_id;
 
-    RETURN jsonb_build_object('success', true, 'status', 'UPDATED');
+    v_response := jsonb_build_object('success', true, 'status', 'UPDATED');
+
+    IF v_operation_id IS NOT NULL THEN
+        INSERT INTO internal.command_receipts (user_id, idempotency_key, command_type, request_hash, response_payload, status, command_payload)
+        VALUES (v_user_id, v_operation_id::text, 'SET_CATEGORY_ACTIVE', v_request_hash, v_response, 'APPLIED', v_canonical_payload)
+        ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+    END IF;
+
+    RETURN v_response;
 END;
 $function$;
 
@@ -347,6 +491,7 @@ DECLARE
     resource_active boolean;
     root_id uuid;
     root_type text;
+    root_origin text;
     expense_count integer;
     income_count integer;
     general_count integer;
@@ -376,13 +521,13 @@ BEGIN
         RETURN NOT selected;
 
     ELSIF feature = 'CUSTOM_CATEGORIES' THEN
-        SELECT COALESCE(c.parent_id, c.id), root.category_type::text
-        INTO root_id, root_type
+        SELECT COALESCE(c.parent_id, c.id), root.category_type::text, root.origin::text
+        INTO root_id, root_type, root_origin
         FROM public.categories c
         JOIN public.categories root ON root.id = COALESCE(c.parent_id, c.id)
         WHERE c.id = target_id AND (c.user_id = p_user_id OR c.user_id IS NULL);
 
-        IF root_id IS NULL THEN RETURN false; END IF;
+        IF root_id IS NULL OR root_origin <> 'CUSTOM' THEN RETURN false; END IF;
 
         SELECT EXISTS (SELECT 1 FROM public.categories c WHERE c.id = root_id AND c.user_id = p_user_id
             AND c.parent_id IS NULL AND c.origin = 'CUSTOM' AND c.is_active AND c.deleted_at IS NULL) INTO resource_active;

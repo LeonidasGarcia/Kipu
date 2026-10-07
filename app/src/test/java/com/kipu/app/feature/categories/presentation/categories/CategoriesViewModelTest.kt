@@ -30,6 +30,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -60,6 +61,8 @@ class CategoriesViewModelTest {
         val ensureInitialCatalog = mockk<EnsureInitialCategoryCatalog>()
         every { observeCategories.invoke(firstUser) } returns categoryFlows.getValue(firstUser.value)
         every { observeCategories.invoke(secondUser) } returns categoryFlows.getValue(secondUser.value)
+        every { observeCategories.observePremiumVerified(firstUser) } returns MutableStateFlow(false)
+        every { observeCategories.observePremiumVerified(secondUser) } returns MutableStateFlow(false)
         every { observeSelectedRoots.invoke(firstUser) } returns selectionFlows.getValue(firstUser.value)
         every { observeSelectedRoots.invoke(secondUser) } returns selectionFlows.getValue(secondUser.value)
         coEvery { ensureInitialCatalog.invoke(firstUser) } returns Result.success(Unit)
@@ -115,6 +118,69 @@ class CategoriesViewModelTest {
 
         assertEquals(2, viewModel.uiState.value.activeCustomRootsCount)
         assertTrue(!viewModel.uiState.value.isFreeLimitReached)
+    }
+
+    @Test
+    fun `toggleQuotaSelection allows up to 5 expense and 5 income roots (10 total)`() = runTest {
+        val expenseRoots = (1..6).map {
+            categoryItem(firstUser, "Expense $it", com.kipu.app.feature.categories.domain.model.CategoryType.EXPENSE)
+        }
+        val incomeRoots = (1..6).map {
+            categoryItem(firstUser, "Income $it", com.kipu.app.feature.categories.domain.model.CategoryType.INCOME)
+        }
+        categoryFlows.getValue(firstUser.value).value = expenseRoots + incomeRoots
+        session.localAccess.value = LocalAccess.Available(firstUser.value, RemoteSession.Absent)
+        advanceUntilIdle()
+
+        viewModel.openQuotaSelection()
+        assertTrue(viewModel.uiState.value.isQuotaSelectionOpen)
+
+        // Select 5 expense roots successfully
+        for (i in 0 until 5) {
+            viewModel.toggleQuotaSelection(expenseRoots[i].category.id)
+        }
+        assertEquals(5, viewModel.uiState.value.quotaSelectionDraft.size)
+        assertTrue(viewModel.uiState.value.errorMessage == null)
+
+        // 6th expense root is rejected
+        viewModel.toggleQuotaSelection(expenseRoots[5].category.id)
+        assertEquals(5, viewModel.uiState.value.quotaSelectionDraft.size)
+        assertEquals("Solo puedes seleccionar hasta 5 categorías de gasto en el plan Free", viewModel.uiState.value.errorMessage)
+
+        // Now select 5 income roots successfully (reaching 10 total)
+        for (i in 0 until 5) {
+            viewModel.toggleQuotaSelection(incomeRoots[i].category.id)
+        }
+        assertEquals(10, viewModel.uiState.value.quotaSelectionDraft.size)
+
+        // 6th income root is rejected
+        viewModel.toggleQuotaSelection(incomeRoots[5].category.id)
+        assertEquals(10, viewModel.uiState.value.quotaSelectionDraft.size)
+        assertEquals("Solo puedes seleccionar hasta 5 categorías de ingreso en el plan Free", viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun `toggleQuotaSelection with GENERAL category consumes both expense and income quota`() = runTest {
+        val expenseRoots = (1..5).map {
+            categoryItem(firstUser, "Expense $it", com.kipu.app.feature.categories.domain.model.CategoryType.EXPENSE)
+        }
+        val generalRoot = categoryItem(firstUser, "General", com.kipu.app.feature.categories.domain.model.CategoryType.GENERAL)
+        categoryFlows.getValue(firstUser.value).value = expenseRoots + generalRoot
+        session.localAccess.value = LocalAccess.Available(firstUser.value, RemoteSession.Absent)
+        advanceUntilIdle()
+
+        viewModel.openQuotaSelection()
+
+        // Select 5 expense roots
+        for (item in expenseRoots) {
+            viewModel.toggleQuotaSelection(item.category.id)
+        }
+        assertEquals(5, viewModel.uiState.value.quotaSelectionDraft.size)
+
+        // Selecting general root is blocked because expense quota is already full
+        viewModel.toggleQuotaSelection(generalRoot.category.id)
+        assertEquals(5, viewModel.uiState.value.quotaSelectionDraft.size)
+        assertEquals("Solo puedes seleccionar hasta 5 categorías de gasto en el plan Free", viewModel.uiState.value.errorMessage)
     }
 
     private fun categoryItem(

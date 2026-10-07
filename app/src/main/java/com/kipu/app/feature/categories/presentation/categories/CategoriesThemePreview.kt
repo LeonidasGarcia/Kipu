@@ -124,7 +124,8 @@ private fun CategoriesThemePreviewContent() {
     ) {
         // Quota Card Preview
         QuotaBanner(
-            activeCount = 2,
+            expenseCount = 2,
+            incomeCount = 1,
             maxCount = 5,
             isLimitReached = false,
         )

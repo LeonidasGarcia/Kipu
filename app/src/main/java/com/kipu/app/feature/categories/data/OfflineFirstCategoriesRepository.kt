@@ -55,6 +55,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -135,27 +136,16 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         val access = featureAccessCacheDao.observe(UUID.fromString(userId.value))
         return combine(categoryDao.observeCategoriesForUser(userId.value), selectedIds, access, offlineEntitlementRefreshTicker()) { entities, selected, cache, _ ->
             val isPremium = entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed
-            val activeRoots = entities.filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-            val lockedRoots: Set<String> = if (isPremium) {
-                emptySet()
-            } else {
-                val expenseCount = activeRoots.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
-                val incomeCount = activeRoots.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
-                val locked = mutableSetOf<String>()
-                for (root in activeRoots) {
-                    val isExceeded = when (root.categoryType) {
-                        "EXPENSE" -> expenseCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS
-                        "INCOME" -> incomeCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS
-                        "GENERAL" -> expenseCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS ||
-                            incomeCount > CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS
-                        else -> false
-                    }
-                    if (isExceeded && root.id !in selected) {
-                        locked.add(root.id)
-                    }
-                }
-                locked
-            }
+            val quota = CategoryRules.evaluateCustomRootQuota(
+                categories = entities.asSequence()
+                    .filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
+                    .map { it.toDomainCategory() }
+                    .toList(),
+                selectedRootIds = selected.mapTo(mutableSetOf()) { CategoryId(it) },
+                limitPerType = FreePlanLimits().customCategories,
+                premiumVerified = isPremium,
+            )
+            val lockedRoots = quota.planLockedRootIds.mapTo(mutableSetOf()) { it.value }
             entities.map { entity ->
                 val rootId = entity.parentId ?: entity.id
                 Category(
@@ -172,6 +162,13 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         }
     }
 
+    override fun observePremiumVerified(userId: UserId): Flow<Boolean> = combine(
+        featureAccessCacheDao.observe(UUID.fromString(userId.value)),
+        offlineEntitlementRefreshTicker(),
+    ) { cache, _ ->
+        entitlementEvaluator.evaluate(userId.value, cache) is OfflineEntitlementLeaseDecision.Allowed
+    }.distinctUntilChanged()
+
     override fun observeSelectedFreeCategoryRoots(userId: UserId): Flow<Set<CategoryId>> =
         quotaSelectionDao.observeSelectedResourceIds(userId.value, QuotaGroup.CUSTOM_CATEGORIES.name)
             .map { ids -> ids.mapTo(linkedSetOf(), ::CategoryId) }
@@ -180,25 +177,27 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         require(currentUserId() == userId.value) { "No active owner session" }
         val activeRoots = categoryDao.getCategoriesForUser(userId.value)
             .filter { it.userId == userId.value && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-        val activeRootIds = activeRoots.mapTo(mutableSetOf()) { it.id }
-        require(categoryIds.all { it.value in activeRootIds }) { "Selection includes unavailable categories" }
-
-        val selectedEntities = activeRoots.filter { it.id in categoryIds.map { id -> id.value } }
-        val expenseSelected = selectedEntities.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
-        val incomeSelected = selectedEntities.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
-        require(expenseSelected <= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS) {
-            "Free category selection exceeds expense limit (max 5)"
-        }
-        require(incomeSelected <= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS) {
-            "Free category selection exceeds income limit (max 5)"
-        }
-        quotaSelectionDao.replaceSelection(
-            userId = userId.value,
-            featureKey = QuotaGroup.CUSTOM_CATEGORIES.name,
-            resourceType = "CATEGORY_ROOT",
-            resourceIds = categoryIds.map { it.value },
-            now = System.currentTimeMillis(),
+        require(currentUserId() == userId.value) { "Owner changed while loading categories" }
+        val evaluation = CategoryRules.evaluateCustomRootQuota(
+            categories = activeRoots.map { it.toDomainCategory() },
+            selectedRootIds = categoryIds,
+            limitPerType = FreePlanLimits().customCategories,
         )
+        require(evaluation.selectedRootIds == categoryIds) { "Selection includes unavailable categories" }
+        require(evaluation.selectedWithinLimit) {
+            "Free category selection exceeds the per-type limit (max ${evaluation.limitPerType} each)"
+        }
+        transactionRunner {
+            require(currentUserId() == userId.value) { "Owner changed before saving category selection" }
+            quotaSelectionDao.replaceSelection(
+                userId = userId.value,
+                featureKey = QuotaGroup.CUSTOM_CATEGORIES.name,
+                resourceType = "CATEGORY_ROOT",
+                resourceIds = categoryIds.map { it.value },
+                now = System.currentTimeMillis(),
+            )
+            require(currentUserId() == userId.value) { "Owner changed while saving category selection" }
+        }
         planQuotaSyncScheduler?.scheduleSync(userId.value)
     }
 
@@ -236,49 +235,14 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         presentation: CategoryPresentation
     ): Result<Category> {
         val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
+        if (category.ownerId?.value != userId || presentation.ownerId.value != userId) {
+            return Result.failure(IllegalStateException("Category owner does not match the active owner"))
+        }
+        if (!category.isCustom) {
+            return Result.failure(IllegalArgumentException("Only custom categories can be created locally"))
+        }
         val now = System.currentTimeMillis()
         val operationId = UUID.randomUUID().toString()
-
-        // Validate hierarchy
-        val existing = categoryDao.getCategoriesForUser(userId).associate {
-            CategoryId(it.id) to Category(
-                id = CategoryId(it.id),
-                ownerId = it.userId?.let { uid -> UserId(uid) },
-                parentId = it.parentId?.let { pid -> CategoryId(pid) },
-                origin = CategoryOrigin.valueOf(it.origin),
-                isActive = it.isActive,
-                revision = it.remoteRevision,
-                categoryType = CategoryType.fromStorage(it.categoryType),
-            )
-        }
-        val hierarchyCheck = CategoryRules.validateHierarchy(category.id, category.parentId, existing)
-        if (hierarchyCheck.isFailure) {
-            return Result.failure(hierarchyCheck.exceptionOrNull()!!)
-        }
-        val typeCheck = CategoryRules.validateCategoryType(category.categoryType, category.parentId, existing)
-        if (typeCheck.isFailure) {
-            return Result.failure(typeCheck.exceptionOrNull()!!)
-        }
-
-        // Validate Free quota if custom root
-        if (category.isRoot && category.isCustom) {
-            val isPremium = effectiveEntitlement(userId)?.verified == true
-            if (!isPremium) {
-                val activeRoots = categoryDao.getCategoriesForUser(userId)
-                    .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-                val activeExpenseCount = activeRoots.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
-                val activeIncomeCount = activeRoots.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
-                val affectsExpense = category.categoryType == CategoryType.EXPENSE || category.categoryType == CategoryType.GENERAL
-                val affectsIncome = category.categoryType == CategoryType.INCOME || category.categoryType == CategoryType.GENERAL
-
-                if (affectsExpense && activeExpenseCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS) {
-                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for expenses"))
-                }
-                if (affectsIncome && activeIncomeCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS) {
-                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for income"))
-                }
-            }
-        }
 
         val payloadDto = CreateCategoryRequestDto(
             operationId = operationId,
@@ -292,49 +256,87 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         )
         val payloadJson = json.encodeToString(payloadDto)
 
-        transactionRunner {
-            categoryDao.insertCategory(
-                CategoryEntity(
-                    id = category.id.value,
-                    userId = userId,
-                    parentId = category.parentId?.value,
-                    origin = category.origin.name,
-                    categoryType = category.categoryType.name,
-                    isActive = category.isActive,
-                    remoteRevision = 1L,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            )
+        val writeFailure = try {
+            transactionRunner {
+                require(currentUserId() == userId) { "Owner changed before creating category" }
+                val entities = categoryDao.getCategoriesForUser(userId)
+                require(currentUserId() == userId) { "Owner changed while loading categories" }
+                require(categoryDao.getCategoryById(category.id.value) == null) { "Category already exists" }
+                require(currentUserId() == userId) { "Owner changed while checking category ID" }
 
-            categoryDao.insertPresentation(
-                CategoryPresentationEntity(
-                    categoryId = category.id.value,
-                    userId = userId,
-                    name = presentation.name,
-                    icon = presentation.icon,
-                    color = presentation.color,
-                    remoteRevision = 1L,
-                    updatedAt = now
-                )
-            )
+                val existing = entities.associate { CategoryId(it.id) to it.toDomainCategory() }
+                CategoryRules.validateHierarchy(category.id, category.parentId, existing).getOrThrow()
+                CategoryRules.validateCategoryType(category.categoryType, category.parentId, existing).getOrThrow()
 
-            categoryDao.insertOutboxCommand(
-                CategorySyncOutboxEntity(
-                    operationId = operationId,
-                    userId = userId,
-                    commandType = "CREATE_CATEGORY",
-                    aggregateType = "CATEGORY",
-                    aggregateId = category.id.value,
-                    payloadJson = payloadJson,
-                    payloadHash = payloadDto.payloadHash,
-                    createdAt = now,
-                    updatedAt = now
+                if (category.isRoot) {
+                    val cache = featureAccessCacheDao.get(UUID.fromString(userId))
+                    require(currentUserId() == userId) { "Owner changed while checking entitlement" }
+                    val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
+                    val quota = CategoryRules.evaluateCustomRootQuota(
+                        categories = entities.map { it.toDomainCategory() },
+                        selectedRootIds = emptySet(),
+                        limitPerType = FreePlanLimits().customCategories,
+                        premiumVerified = premiumVerified,
+                    )
+                    check(quota.canAdd(category.categoryType)) {
+                        "Free plan limit reached: maximum ${quota.limitPerType} active custom roots per category type"
+                    }
+                }
+
+                require(currentUserId() == userId) { "Owner changed before writing category" }
+                categoryDao.insertCategory(
+                    CategoryEntity(
+                        id = category.id.value,
+                        userId = userId,
+                        parentId = category.parentId?.value,
+                        origin = category.origin.name,
+                        categoryType = category.categoryType.name,
+                        isActive = category.isActive,
+                        remoteRevision = 1L,
+                        createdAt = now,
+                        updatedAt = now
+                    )
                 )
-            )
+                require(currentUserId() == userId) { "Owner changed while writing category" }
+
+                categoryDao.insertPresentation(
+                    CategoryPresentationEntity(
+                        categoryId = category.id.value,
+                        userId = userId,
+                        name = presentation.name,
+                        icon = presentation.icon,
+                        color = presentation.color,
+                        remoteRevision = 1L,
+                        updatedAt = now
+                    )
+                )
+                require(currentUserId() == userId) { "Owner changed while writing category presentation" }
+
+                categoryDao.insertOutboxCommand(
+                    CategorySyncOutboxEntity(
+                        operationId = operationId,
+                        userId = userId,
+                        commandType = "CREATE_CATEGORY",
+                        aggregateType = "CATEGORY",
+                        aggregateId = category.id.value,
+                        payloadJson = payloadJson,
+                        payloadHash = payloadDto.payloadHash,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+                require(currentUserId() == userId) { "Owner changed while writing category command" }
+            }
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            error
         }
 
-        syncScheduler.scheduleSync(userId)
+        writeFailure?.let { return Result.failure(it) }
+
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
         return Result.success(category)
     }
 
@@ -345,24 +347,8 @@ class OfflineFirstCategoriesRepository @Inject constructor(
 
         val existing = categoryDao.getCategoryById(categoryId.value)
             ?: return Result.failure(IllegalArgumentException("Category not found: ${categoryId.value}"))
-
-        if (existing.parentId == null && existing.origin == "CUSTOM" && isActive && !existing.isActive) {
-            val isPremium = effectiveEntitlement(userId)?.verified == true
-            if (!isPremium) {
-                val activeRoots = categoryDao.getCategoriesForUser(userId)
-                    .filter { it.userId == userId && it.parentId == null && it.origin == "CUSTOM" && it.isActive }
-                val activeExpenseCount = activeRoots.count { it.categoryType == "EXPENSE" || it.categoryType == "GENERAL" }
-                val activeIncomeCount = activeRoots.count { it.categoryType == "INCOME" || it.categoryType == "GENERAL" }
-                val affectsExpense = existing.categoryType == "EXPENSE" || existing.categoryType == "GENERAL"
-                val affectsIncome = existing.categoryType == "INCOME" || existing.categoryType == "GENERAL"
-
-                if (affectsExpense && activeExpenseCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS) {
-                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for expenses"))
-                }
-                if (affectsIncome && activeIncomeCount >= CategoryRules.MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS) {
-                    return Result.failure(IllegalStateException("Free plan limit reached: maximum 5 active custom root categories for income"))
-                }
-            }
+        if (existing.userId != userId) {
+            return Result.failure(IllegalStateException("Category does not belong to the active owner"))
         }
 
         val payloadDto = SetCategoryActiveRequestDto(
@@ -374,31 +360,59 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         )
         val payloadJson = json.encodeToString(payloadDto)
 
-        transactionRunner {
-            categoryDao.updateCategory(
-                existing.copy(
-                    isActive = isActive,
-                    updatedAt = now
-                )
-            )
+        val writeFailure = try {
+            transactionRunner {
+                require(currentUserId() == userId) { "Owner changed before updating category" }
+                val current = categoryDao.getCategoryById(categoryId.value)
+                    ?: error("Category not found: ${categoryId.value}")
+                require(currentUserId() == userId) { "Owner changed while loading category" }
+                require(current.userId == userId) { "Category does not belong to the active owner" }
 
-            categoryDao.insertOutboxCommand(
-                CategorySyncOutboxEntity(
-                    operationId = operationId,
-                    userId = userId,
-                    commandType = "SET_CATEGORY_ACTIVE",
-                    aggregateType = "CATEGORY",
-                    aggregateId = categoryId.value,
-                    expectedRevision = existing.remoteRevision,
-                    payloadJson = payloadJson,
-                    payloadHash = payloadDto.payloadHash,
-                    createdAt = now,
-                    updatedAt = now
+                if (current.parentId == null && current.origin == "CUSTOM" && isActive && !current.isActive) {
+                    val cache = featureAccessCacheDao.get(UUID.fromString(userId))
+                    require(currentUserId() == userId) { "Owner changed while checking entitlement" }
+                    val premiumVerified = entitlementEvaluator.evaluate(userId, cache) is OfflineEntitlementLeaseDecision.Allowed
+                    val categories = categoryDao.getCategoriesForUser(userId)
+                    require(currentUserId() == userId) { "Owner changed while counting active categories" }
+                    val quota = CategoryRules.evaluateCustomRootQuota(
+                        categories = categories.map { it.toDomainCategory() },
+                        selectedRootIds = emptySet(),
+                        limitPerType = FreePlanLimits().customCategories,
+                        premiumVerified = premiumVerified,
+                    )
+                    check(quota.canAdd(CategoryType.fromStorage(current.categoryType))) {
+                        "Free plan limit reached: maximum ${quota.limitPerType} active custom roots per category type"
+                    }
+                }
+
+                require(currentUserId() == userId) { "Owner changed before writing category status" }
+                categoryDao.updateCategory(current.copy(isActive = isActive, updatedAt = now))
+                require(currentUserId() == userId) { "Owner changed while writing category status" }
+                categoryDao.insertOutboxCommand(
+                    CategorySyncOutboxEntity(
+                        operationId = operationId,
+                        userId = userId,
+                        commandType = "SET_CATEGORY_ACTIVE",
+                        aggregateType = "CATEGORY",
+                        aggregateId = categoryId.value,
+                        expectedRevision = current.remoteRevision,
+                        payloadJson = payloadJson,
+                        payloadHash = payloadDto.payloadHash,
+                        createdAt = now,
+                        updatedAt = now
+                    )
                 )
-            )
+                require(currentUserId() == userId) { "Owner changed while writing category command" }
+            }
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            error
         }
 
-        syncScheduler.scheduleSync(userId)
+        writeFailure?.let { return Result.failure(it) }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
         return Result.success(Unit)
     }
 
@@ -407,10 +421,11 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         expectedRevision: Long
     ): Result<Unit> {
         val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
+        if (presentation.ownerId.value != userId) {
+            return Result.failure(IllegalStateException("Presentation owner does not match the active owner"))
+        }
         val now = System.currentTimeMillis()
         val operationId = UUID.randomUUID().toString()
-
-        val existing = categoryDao.getPresentation(userId, presentation.categoryId.value)
 
         val payloadDto = UpdateCategoryPresentationRequestDto(
             operationId = operationId,
@@ -423,52 +438,70 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         )
         val payloadJson = json.encodeToString(payloadDto)
 
-        transactionRunner {
-            if (existing != null && existing.remoteRevision != expectedRevision) {
-                // Conflict: save conflict record
-                categoryDao.insertConflict(
-                    CategoryConflictEntity(
-                        id = UUID.randomUUID().toString(),
-                        categoryId = presentation.categoryId.value,
-                        userId = userId,
-                        conflictType = "PRESENTATION",
-                        localVersion = payloadJson,
-                        remoteVersion = json.encodeToString(existing),
-                        status = "OPEN",
-                        createdAt = now
+        val writeFailure = try {
+            transactionRunner {
+                require(currentUserId() == userId) { "Owner changed before updating presentation" }
+                val category = categoryDao.getCategoryById(presentation.categoryId.value)
+                    ?: error("Category not found: ${presentation.categoryId.value}")
+                require(currentUserId() == userId) { "Owner changed while loading category" }
+                require(category.userId == null || category.userId == userId) {
+                    "Category does not belong to the active owner"
+                }
+                val existing = categoryDao.getPresentation(userId, presentation.categoryId.value)
+                require(currentUserId() == userId) { "Owner changed while loading presentation" }
+
+                if (existing != null && existing.remoteRevision != expectedRevision) {
+                    categoryDao.insertConflict(
+                        CategoryConflictEntity(
+                            id = UUID.randomUUID().toString(),
+                            categoryId = presentation.categoryId.value,
+                            userId = userId,
+                            conflictType = "PRESENTATION",
+                            localVersion = payloadJson,
+                            remoteVersion = json.encodeToString(existing),
+                            status = "OPEN",
+                            createdAt = now
+                        )
                     )
-                )
-            } else {
-                categoryDao.insertPresentation(
-                    CategoryPresentationEntity(
-                        categoryId = presentation.categoryId.value,
+                } else {
+                    categoryDao.insertPresentation(
+                        CategoryPresentationEntity(
+                            categoryId = presentation.categoryId.value,
+                            userId = userId,
+                            name = presentation.name,
+                            icon = presentation.icon,
+                            color = presentation.color,
+                            remoteRevision = expectedRevision + 1,
+                            updatedAt = now
+                        )
+                    )
+                }
+                require(currentUserId() == userId) { "Owner changed while writing presentation" }
+                categoryDao.insertOutboxCommand(
+                    CategorySyncOutboxEntity(
+                        operationId = operationId,
                         userId = userId,
-                        name = presentation.name,
-                        icon = presentation.icon,
-                        color = presentation.color,
-                        remoteRevision = expectedRevision + 1,
+                        commandType = "UPDATE_PRESENTATION",
+                        aggregateType = "CATEGORY_PRESENTATION",
+                        aggregateId = presentation.categoryId.value,
+                        expectedRevision = expectedRevision,
+                        payloadJson = payloadJson,
+                        payloadHash = payloadDto.payloadHash,
+                        createdAt = now,
                         updatedAt = now
                     )
                 )
+                require(currentUserId() == userId) { "Owner changed while writing presentation command" }
             }
-
-            categoryDao.insertOutboxCommand(
-                CategorySyncOutboxEntity(
-                    operationId = operationId,
-                    userId = userId,
-                    commandType = "UPDATE_PRESENTATION",
-                    aggregateType = "CATEGORY_PRESENTATION",
-                    aggregateId = presentation.categoryId.value,
-                    expectedRevision = expectedRevision,
-                    payloadJson = payloadJson,
-                    payloadHash = payloadDto.payloadHash,
-                    createdAt = now,
-                    updatedAt = now
-                )
-            )
+            null
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            error
         }
 
-        syncScheduler.scheduleSync(userId)
+        writeFailure?.let { return Result.failure(it) }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
         return Result.success(Unit)
     }
 
@@ -519,13 +552,20 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         classification.categoryId?.let { categoryId ->
             val category = categoryDao.getCategoryById(categoryId.value)
                 ?: return Result.failure(IllegalArgumentException("Category is unavailable"))
-            if (!category.isActive) return Result.failure(IllegalStateException("Inactive category cannot be assigned"))
+            if (category.userId != null && category.userId != userId) {
+                return Result.failure(IllegalStateException("Category does not belong to the active owner"))
+            }
+            val parent = category.parentId?.let { parentId -> categoryDao.getCategoryById(parentId) }
+            if (!CategoryRules.isEligibleForAssignment(category.toDomainCategory(), parent?.toDomainCategory())) {
+                return Result.failure(IllegalStateException("Inactive category or root cannot be assigned"))
+            }
             val lockedRootIds = planLockedCategoryRootIds(userId)
             val rootId = category.parentId ?: category.id
             if (rootId in lockedRootIds) {
                 return Result.failure(IllegalStateException("Category is blocked by the Free plan selection"))
             }
         }
+        if (currentUserId() != userId) return Result.failure(IllegalStateException("Owner changed while validating classification"))
         val now = System.currentTimeMillis()
         val operationId = UUID.randomUUID().toString()
 
@@ -540,6 +580,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         val payloadJson = json.encodeToString(payloadDto)
 
         transactionRunner {
+            require(currentUserId() == userId) { "Owner changed before saving classification" }
             categoryDao.updateMovementClassification(
                 movementId = classification.movementId.value,
                 userId = userId,
@@ -547,6 +588,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                 merchantId = classification.merchantId?.value,
                 provisionalText = classification.merchantProvisionalText
             )
+            require(currentUserId() == userId) { "Owner changed while saving classification" }
 
             categoryDao.insertOutboxCommand(
                 CategorySyncOutboxEntity(
@@ -561,9 +603,10 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     updatedAt = now
                 )
             )
+            require(currentUserId() == userId) { "Owner changed while saving classification command" }
         }
 
-        syncScheduler.scheduleSync(userId)
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
         return Result.success(Unit)
     }
 
@@ -603,6 +646,9 @@ class OfflineFirstCategoriesRepository @Inject constructor(
 
         val conflict = categoryDao.getConflict(conflictId.value)
             ?: return Result.failure(IllegalArgumentException("Conflict not found"))
+        if (conflict.userId != userId) {
+            return Result.failure(IllegalStateException("Conflict does not belong to the active owner"))
+        }
 
         val payloadDto = ResolveCategoryConflictRequestDto(
             operationId = operationId,
@@ -613,12 +659,18 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         val payloadJson = json.encodeToString(payloadDto)
 
         transactionRunner {
+            require(currentUserId() == userId) { "Owner changed before resolving conflict" }
+            val currentConflict = categoryDao.getConflict(conflictId.value)
+                ?: error("Conflict not found: ${conflictId.value}")
+            require(currentUserId() == userId) { "Owner changed while loading conflict" }
+            require(currentConflict.userId == userId) { "Conflict does not belong to the active owner" }
             categoryDao.updateConflict(
-                conflict.copy(
+                currentConflict.copy(
                     status = "RESOLVED",
                     resolutionOperationId = operationId
                 )
             )
+            require(currentUserId() == userId) { "Owner changed while writing conflict" }
 
             categoryDao.insertOutboxCommand(
                 CategorySyncOutboxEntity(
@@ -633,9 +685,10 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     updatedAt = now
                 )
             )
+            require(currentUserId() == userId) { "Owner changed while writing conflict command" }
         }
 
-        syncScheduler.scheduleSync(userId)
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
         return Result.success(Unit)
     }
 
@@ -646,14 +699,23 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         }
         val selected = quotaSelectionDao.getSelectedResourceIds(userId, QuotaGroup.CUSTOM_CATEGORIES.name)
         val premiumVerified = entitlementEvaluator.evaluate(userId, featureAccessCacheDao.get(UUID.fromString(userId))) is OfflineEntitlementLeaseDecision.Allowed
-        return quotaPolicy.evaluate(
-            group = QuotaGroup.CUSTOM_CATEGORIES,
-            activeResourceIds = roots.map { it.id },
-            selectedResourceIds = selected,
-            limits = FreePlanLimits(),
+        return CategoryRules.evaluateCustomRootQuota(
+            categories = roots.map { it.toDomainCategory() },
+            selectedRootIds = selected.mapTo(mutableSetOf()) { CategoryId(it) },
+            limitPerType = FreePlanLimits().customCategories,
             premiumVerified = premiumVerified,
-        ).planLockedResourceIds
+        ).planLockedRootIds.mapTo(mutableSetOf()) { it.value }
     }
+
+    private fun CategoryEntity.toDomainCategory() = Category(
+        id = CategoryId(id),
+        ownerId = userId?.let(::UserId),
+        parentId = parentId?.let(::CategoryId),
+        origin = CategoryOrigin.valueOf(origin),
+        isActive = isActive,
+        revision = remoteRevision,
+        categoryType = CategoryType.fromStorage(categoryType),
+    )
 
     private suspend fun effectiveEntitlement(userId: String): EffectiveEntitlement? {
         val cache = featureAccessCacheDao.get(UUID.fromString(userId))

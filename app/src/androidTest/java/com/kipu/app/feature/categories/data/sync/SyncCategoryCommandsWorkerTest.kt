@@ -108,8 +108,64 @@ class SyncCategoryCommandsWorkerTest {
 
         coVerify { categoryDao.updateOutboxCommand(match { it.state == "COMPLETED" }) }
         coVerify { merchantDao.insertMerchants(match { it.size == 1 && it.first().id == "m1" }) }
-        coVerify { categoryDao.insertCategoriesIfAbsent(match { it.map { category -> category.id }.toSet().size == 3 }) }
+        coVerify {
+            categoryDao.insertCategory(match { it.id == "00000000-0000-0000-0000-000000000001" })
+            categoryDao.insertCategory(match { it.id == "00000000-0000-0000-0000-000000000002" })
+            categoryDao.insertCategory(match { it.id == "00000000-0000-0000-0000-000000000003" })
+        }
         coVerify { categoryDao.insertPresentationsIfAbsent(match { it.map { presentation -> presentation.name }.toSet() == setOf("Alimentación", "Transporte", "Servicios") }) }
+    }
+
+    @Test
+    fun workerDoesNotOverwritePendingLocalCategoryDuringHydration() = runTest {
+        val pendingCatId = "00000000-0000-0000-0000-000000000001"
+        val pendingCmd = CategorySyncOutboxEntity(
+            operationId = UUID.randomUUID().toString(),
+            userId = testUserId,
+            commandType = "SET_CATEGORY_ACTIVE",
+            aggregateType = "CATEGORY",
+            aggregateId = pendingCatId,
+            payloadJson = "{}",
+            payloadHash = "hash-pending",
+            state = "PENDING",
+            createdAt = 1000L,
+            updatedAt = 1000L
+        )
+        val existingLocal = com.kipu.app.feature.categories.data.local.CategoryEntity(
+            id = pendingCatId,
+            userId = testUserId,
+            parentId = null,
+            origin = "CUSTOM",
+            categoryType = "EXPENSE",
+            isActive = false,
+            remoteRevision = 1L,
+            createdAt = 1000L,
+            updatedAt = 1000L,
+        )
+
+        coEvery { categoryDao.getPendingOutboxCommands(testUserId) } returns listOf(pendingCmd)
+        coEvery { categoryDao.getCategoryById(pendingCatId) } returns existingLocal
+        coEvery { api.fetchCategories() } returns CategoryApiResponse.Success(
+            listOf(
+                CategoryCatalogItemDto(
+                    id = pendingCatId,
+                    name = "Pending Cat Remote",
+                    origin = "CUSTOM",
+                    isActive = true,
+                    remoteRevision = 2L,
+                    createdAt = "2026-09-23T00:00:00Z",
+                    updatedAt = "2026-09-23T00:00:00Z",
+                )
+            )
+        )
+        coEvery { api.fetchCategoryPresentations() } returns CategoryApiResponse.Success(emptyList())
+
+        val worker = SyncCategoryCommandsWorker(context, workerParams, categoryDao, merchantDao, api, sessionCoordinator)
+        val result = worker.doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        coVerify(exactly = 0) { categoryDao.updateCategory(match { it.id == pendingCatId }) }
+        coVerify(exactly = 0) { categoryDao.insertCategory(match { it.id == pendingCatId }) }
     }
 
     @Test
