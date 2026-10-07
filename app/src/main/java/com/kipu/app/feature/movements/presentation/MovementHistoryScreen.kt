@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,6 +63,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -123,6 +125,17 @@ fun MovementHistoryRoute(
     val savedText = stringResource(R.string.history_saved_pending)
     val voidedText = stringResource(R.string.history_voided_pending)
     val emeraldColors = rememberCalmEmeraldColors()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val layout = listState.layoutInfo
+            val lastVisible = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible >= layout.totalItemsCount - 6
+        }.collect { nearEnd ->
+            if (nearEnd) viewModel.onLoadMore()
+        }
+    }
 
     LaunchedEffect(savedMessage) {
         if (savedMessage) {
@@ -223,6 +236,7 @@ fun MovementHistoryRoute(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .testTag("list_movements"),
+            state = listState,
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item(key = "history_controls") {
@@ -399,7 +413,7 @@ fun MovementHistoryRoute(
                                     color = emeraldColors.pillTrack,
                                 ) {
                                     Text(
-                                        text = if (totalMovCount == 1) "1 mov" else "$totalMovCount movs",
+                                        text = if (totalMovCount == 1L) "1 mov" else "$totalMovCount movs",
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
@@ -564,7 +578,8 @@ fun MovementHistoryRoute(
                                     color = emeraldColors.primaryText,
                                 )
                                 Text(
-                                    text = if (rows.size == 1) "1 movimiento" else "${rows.size} movimientos",
+                                    text = if (uiState.hasMorePages) "${rows.size} cargados"
+                                        else if (rows.size == 1) "1 movimiento" else "${rows.size} movimientos",
                                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                     color = emeraldColors.secondaryMuted,
                                 )
@@ -601,6 +616,46 @@ fun MovementHistoryRoute(
                             }
                         }
                     }
+                }
+            }
+
+            if (uiState.isLoadingNextPage) {
+                item(key = "loading_next_page") {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            color = emeraldColors.primaryDeep,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                }
+            } else if (uiState.loadMoreError != null) {
+                item(key = "load_more_error") {
+                    Column(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        uiState.loadMoreError?.let { error ->
+                            Text(error, color = emeraldColors.secondaryMuted)
+                        }
+                        OutlinedButton(onClick = viewModel::onLoadMore) {
+                            Text(stringResource(R.string.history_retry))
+                        }
+                    }
+                }
+            } else if (!uiState.isLoading && uiState.filteredTransactions.isNotEmpty() && !uiState.hasMorePages) {
+                item(key = "end_of_history") {
+                    Text(
+                        text = "Fin del historial",
+                        color = emeraldColors.secondaryMuted,
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    )
                 }
             }
 

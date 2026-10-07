@@ -8,7 +8,6 @@ import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.plans.data.entitlement.offlineEntitlementRefreshTicker
 import com.kipu.app.feature.movements.domain.MovementMaintenanceRepository
 import com.kipu.app.feature.movements.domain.MovementRepository
-import com.kipu.app.feature.movements.domain.MovementNetFlowCalculator
 import com.kipu.app.feature.movements.domain.QueryMovementHistory
 import com.kipu.app.feature.movements.domain.VoidTransaction
 import com.kipu.app.feature.movements.domain.model.MovementFinancialState
@@ -24,18 +23,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import java.math.BigInteger
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
@@ -71,13 +66,14 @@ data class MovementHistoryUiState(
     val accessMessage: String? = null,
     val appliedFilters: AdvancedFiltersState = AdvancedFiltersState(),
     val queryError: Boolean = false,
+    val loadMoreError: String? = null,
     val recovery: HistoryAccessRecovery = HistoryAccessRecovery.IDLE,
     val selectedDetail: TransactionItem? = null,
     val detailRevisions: List<com.kipu.app.feature.movements.domain.model.MovementRevisionAudit> = emptyList(),
     val detailLoading: Boolean = false,
     val detailError: Boolean = false,
-    val totalFilteredCount: Int = 0,
-    val netByCurrency: Map<String, java.math.BigInteger> = emptyMap(),
+    val totalFilteredCount: Long = 0,
+    val netByCurrency: Map<String, BigInteger> = emptyMap(),
     val mostUsedAccountId: String? = null,
 ) {
     val hasActiveAdvancedFilters: Boolean
@@ -95,14 +91,6 @@ private data class VoidDialogState(
     val selectedItem: TransactionItem? = null,
     val isVoiding: Boolean = false,
     val errorMessage: String? = null,
-)
-
-private data class HistoryAccessInput(
-    val userId: String?,
-    val query: MovementHistoryQuery,
-    val requiresAdvancedAccess: Boolean,
-    val filters: AdvancedFiltersState = AdvancedFiltersState(),
-    val refresh: Int = 0,
 )
 
 data class AdvancedFiltersState(
@@ -146,6 +134,10 @@ class MovementHistoryViewModel @Inject constructor(
     private val _recovery = MutableStateFlow(HistoryAccessRecovery.IDLE)
     private val _readRetry = MutableStateFlow(0)
     private val _accessRefresh = MutableStateFlow(0)
+    private val _datasetInvalidation = MutableStateFlow(0)
+    private val _entitlementTick = MutableStateFlow(0)
+    private val _history = MutableStateFlow(HistoryLoadState())
+    private val _panelAccess = MutableStateFlow(PanelAccess())
     private var detailJob: kotlinx.coroutines.Job? = null
     private var recoveryJob: kotlinx.coroutines.Job? = null
 
@@ -200,124 +192,96 @@ class MovementHistoryViewModel @Inject constructor(
         Triple(query, filterType, showSheet)
     }
 
-    private val ownerTransactions = combine(activeUserId, _readRetry) { owner, _ -> owner }
-        .flatMapLatest { owner ->
-            if (owner == null) flowOf(OwnerHistory(null)) else
-                movementRepository.observeTransactions(owner)
-                    .map { OwnerHistory(owner, it.filter { item -> item.transaction.userId == owner }) }
-                    .onStart { emit(OwnerHistory(owner, loading = true)) }
-                    .catch { emit(OwnerHistory(owner, error = true)) }
-        }
-
-    private val historyAccessStatus = combine(
+    private val historyRequests = combine(
         activeUserId,
         basicFilterState,
         _advancedFilters,
-        offlineEntitlementRefreshTicker(),
         _accessRefresh,
-    ) { userId, basic, advanced, _, _ ->
+        _readRetry,
+    ) { userId, basic, advanced, accessRefresh, retry ->
         val (queryText, filterType, _) = basic
-        HistoryAccessInput(
-            userId = userId,
+        HistoryRequest(
+            ownerId = userId,
             query = MovementHistoryQuery(
                 queryText = queryText.takeIf(String::isNotBlank),
                 fromInclusive = advanced.fromDate,
                 toExclusive = advanced.toDate,
                 types = filterType?.let(::setOf) ?: emptySet(),
+                advancedCriteria = advanced.toHistoryCriteria(),
             ),
-            requiresAdvancedAccess = advanced.hasPremiumOnlyCriteria() || advanced.showPanel,
-            filters = advanced,
-            refresh = _accessRefresh.value,
+            accessRefresh = accessRefresh,
+            retry = retry,
+            invalidation = 0,
+            entitlementTick = 0,
         )
-    }.flatMapLatest { input ->
-        flow {
-            val decision = queryMovementHistoryUseCase?.evaluateAccess(
-                userId = input.userId,
-                query = input.query,
-                requiresAdvancedAccess = input.requiresAdvancedAccess,
-            ) ?: MovementHistoryAccessDecision.Allowed
-            emit(HistoryAccessEvaluation(input, decision))
-        }.catch { emit(HistoryAccessEvaluation(input, MovementHistoryAccessDecision.RevalidationRequired(input.query.toBasicFallback()))) }
+    }.combine(combine(_datasetInvalidation, _entitlementTick) { invalidation, entitlementTick ->
+        invalidation to entitlementTick
+    }) { request, (invalidation, entitlementTick) ->
+        request.copy(invalidation = invalidation, entitlementTick = entitlementTick)
+    }.distinctUntilChanged { previous, next -> previous.key == next.key }
+
+    init {
+        viewModelScope.launch {
+            historyRequests.collect { request -> loadFirstPage(request) }
+        }
+        viewModelScope.launch {
+            historyRequests.combine(_advancedFilters) { request, filters -> request to filters.showPanel }
+                .collect { (request, showPanel) ->
+                    val decision = try {
+                        queryMovementHistoryUseCase?.evaluateAccess(
+                            request.ownerId,
+                            request.query,
+                            request.query.requiresAdvancedAccess || showPanel,
+                        ) ?: MovementHistoryAccessDecision.Allowed
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        MovementHistoryAccessDecision.RevalidationRequired(request.query.toBasicFallback())
+                    }
+                    if (isCurrent(request)) _panelAccess.value = PanelAccess(request.key, showPanel, decision)
+                }
+        }
+        queryMovementHistoryUseCase?.let { useCase ->
+            viewModelScope.launch {
+                useCase.observeHistoryInvalidations().collect {
+                    _datasetInvalidation.update { it + 1 }
+                    refreshSelectedDetail()
+                }
+            }
+        }
+        viewModelScope.launch {
+            offlineEntitlementRefreshTicker().collect {
+                _entitlementTick.update { it + 1 }
+            }
+        }
     }
 
     val uiState: StateFlow<MovementHistoryUiState> = combine(
-        ownerTransactions,
+        activeUserId,
         basicFilterState,
         _voidState,
         _advancedFilters,
-        historyAccessStatus,
-    ) { read, (query, filterType, showSheet), voidState, adv, evaluated ->
-        val owner = (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId
-        val ownerMatches = read.ownerId == owner
-        val items = if (ownerMatches) read.items else emptyList()
-        val evaluationMatches = evaluated.input.userId == owner &&
-            evaluated.input.query.queryText == query.takeIf(String::isNotBlank) &&
-            evaluated.input.query.types == (filterType?.let { setOf(it) } ?: emptySet<MovementType>()) &&
-            evaluated.input.query.fromInclusive == adv.fromDate && evaluated.input.query.toExclusive == adv.toDate &&
-            evaluated.input.requiresAdvancedAccess == (adv.hasPremiumOnlyCriteria() || adv.showPanel)
-        val snapshotMatches = evaluationMatches && evaluated.input.filters == adv && evaluated.input.refresh == _accessRefresh.value
-        val accessDecision = if (snapshotMatches) evaluated.decision else MovementHistoryAccessDecision.NotAuthorized
-        val premiumFiltersAllowed = snapshotMatches && accessDecision == MovementHistoryAccessDecision.Allowed
-        val filtered = items.filter { item ->
-            val matchesType = filterType == null || item.transaction.type == filterType
-            val matchesQuery = query.isBlank() ||
-                (item.categoryName?.contains(query, ignoreCase = true) == true) ||
-                (item.merchantName?.contains(query, ignoreCase = true) == true) ||
-                (item.sourceAccountAlias?.contains(query, ignoreCase = true) == true) ||
-                (item.transaction.note?.contains(query, ignoreCase = true) == true)
-
-            val matchesAccounts = !premiumFiltersAllowed || adv.accountIds.isEmpty() ||
-                (item.transaction.sourceAccountId in adv.accountIds || item.transaction.destinationAccountId in adv.accountIds)
-
-            val matchesCategories = !premiumFiltersAllowed || adv.categoryIds.isEmpty() ||
-                (item.transaction.categoryId in adv.categoryIds)
-
-            val matchesMinAmount = !premiumFiltersAllowed || adv.minAmountMinor == null || (item.transaction.currency == adv.currency && item.transaction.amountMinor >= adv.minAmountMinor)
-            val matchesMaxAmount = !premiumFiltersAllowed || adv.maxAmountMinor == null || (item.transaction.currency == adv.currency && item.transaction.amountMinor <= adv.maxAmountMinor)
-
-            val matchesDates = (adv.fromDate == null || item.transaction.occurredAt >= adv.fromDate) &&
-                (adv.toDate == null || item.transaction.occurredAt < adv.toDate)
-
-            val financialState = when (item.transaction.status) {
-                com.kipu.app.feature.movements.domain.model.TransactionStatus.ACTIVE,
-                com.kipu.app.feature.movements.domain.model.TransactionStatus.CONFIRMED -> MovementFinancialState.CONFIRMED
-                com.kipu.app.feature.movements.domain.model.TransactionStatus.REVISED -> MovementFinancialState.REVISED
-                com.kipu.app.feature.movements.domain.model.TransactionStatus.VOIDED -> MovementFinancialState.VOIDED
-                com.kipu.app.feature.movements.domain.model.TransactionStatus.FAILED -> MovementFinancialState.LEGACY_FAILED
-            }
-            val matchesStates = !premiumFiltersAllowed || adv.financialStates.isEmpty() || financialState in adv.financialStates
-
-            val matchesCards = !premiumFiltersAllowed || adv.cardIds.isEmpty() || item.transaction.cardId in adv.cardIds
-            val matchesMerchants = !premiumFiltersAllowed || adv.merchantIds.isEmpty() || item.transaction.merchantId in adv.merchantIds
-            val matchesSync = !premiumFiltersAllowed || adv.syncStatuses.isEmpty() || item.transaction.syncStatus in adv.syncStatuses
-            matchesType && matchesQuery && matchesAccounts && matchesCategories &&
-                matchesMinAmount && matchesMaxAmount && matchesDates && matchesStates && matchesCards && matchesMerchants && matchesSync
-        }
-
-        val netMap = MovementNetFlowCalculator.calculate(filtered.asSequence().map { it.transaction }.asIterable())
-
-        val mostUsed = items.asSequence()
-            .filter { it.transaction.status == com.kipu.app.feature.movements.domain.model.TransactionStatus.ACTIVE }
-            .mapNotNull { it.transaction.sourceAccountId }
-            .groupingBy { it }
-            .eachCount()
-            .maxByOrNull { it.value }
-            ?.key
-
-        val grouped = groupTransactionsByDate(filtered)
+        combine(_history, _panelAccess) { history, panel -> history to panel },
+    ) { owner, (query, filterType, showSheet), voidState, adv, (history, panel) ->
+        val matchesOwner = history.ownerId == owner
+        val items = history.items.takeIf { matchesOwner }.orEmpty()
+        val accessDecision = if (adv.showPanel && panel.key == history.key) {
+            panel.decision
+        } else history.accessDecision.takeIf { matchesOwner } ?: MovementHistoryAccessDecision.NotAuthorized
 
         MovementHistoryUiState(
             ownerId = owner,
-            isLoading = read.loading || !ownerMatches,
-            queryError = ownerMatches && read.error,
+            isLoading = owner != null && (!matchesOwner || history.loadingFirst),
+            queryError = matchesOwner && history.firstPageError,
+            loadMoreError = history.loadMoreError.takeIf { matchesOwner },
             appliedFilters = adv,
             searchQuery = query,
             selectedFilterType = filterType,
             allTransactions = items,
-            filteredTransactions = grouped,
-            totalFilteredCount = filtered.size,
-            netByCurrency = netMap,
-            mostUsedAccountId = mostUsed,
+            filteredTransactions = groupTransactionsByDate(items),
+            totalFilteredCount = history.summary.totalCount.takeIf { matchesOwner } ?: 0L,
+            netByCurrency = history.summary.netByCurrency.takeIf { matchesOwner }.orEmpty(),
+            mostUsedAccountId = history.summary.mostUsedAccountId.takeIf { matchesOwner },
             showRegisterSheet = showSheet && (sessionCoordinator.localAccess.value is LocalAccess.Available),
             selectedTransactionForVoid = voidState.selectedItem?.takeIf { it.transaction.userId == owner },
             isVoiding = voidState.isVoiding,
@@ -330,12 +294,11 @@ class MovementHistoryViewModel @Inject constructor(
             fromDate = adv.fromDate,
             toDate = adv.toDate,
             selectedFinancialStates = adv.financialStates,
-            hasMorePages = false,
+            hasMorePages = matchesOwner && history.hasMore,
+            isLoadingNextPage = matchesOwner && history.loadingMore,
+            currentCursor = history.cursor.takeIf { matchesOwner },
             accessStatus = accessDecision,
-            fallbackUsed = (adv.hasPremiumOnlyCriteria() || adv.showPanel) && (
-                accessDecision is MovementHistoryAccessDecision.PremiumRequired ||
-                    accessDecision is MovementHistoryAccessDecision.RevalidationRequired
-                ),
+            fallbackUsed = matchesOwner && history.fallbackUsed,
             accessMessage = when (accessDecision) {
                 is MovementHistoryAccessDecision.PremiumRequired -> "PREMIUM_REQUIRED"
                 is MovementHistoryAccessDecision.RevalidationRequired -> "REVALIDATION_REQUIRED"
@@ -347,14 +310,14 @@ class MovementHistoryViewModel @Inject constructor(
         val ownsDetail = detail.ownerId == currentOwner
         state.copy(
             recovery = recovery,
-            selectedDetail = state.allTransactions.firstOrNull { ownsDetail && it.transaction.id == detail.transactionId },
+            selectedDetail = detail.item?.takeIf { ownsDetail },
             detailRevisions = detail.revisions.takeIf { ownsDetail } ?: emptyList(),
             detailLoading = ownsDetail && detail.loading,
             detailError = ownsDetail && detail.error,
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Lazily,
+        started = SharingStarted.Eagerly,
         initialValue = MovementHistoryUiState(),
     )
 
@@ -432,16 +395,57 @@ class MovementHistoryViewModel @Inject constructor(
 
     fun onRetryHistory() { _readRetry.update { it + 1 } }
 
+    fun onLoadMore() {
+        val history = _history.value
+        val owner = (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId ?: return
+        val request = currentHistoryRequest(owner) ?: return
+        if (history.ownerId != owner || history.key != request.key || !history.hasMore ||
+            history.loadingFirst || history.loadingMore || history.cursor == null
+        ) return
+
+        _history.update { it.copy(loadingMore = true, loadMoreError = null) }
+        viewModelScope.launch {
+            try {
+                val page = queryMovementHistoryUseCase?.invoke(owner, request.query.copy(cursor = history.cursor))
+                    ?: return@launch
+                if (!isCurrent(request) || _history.value.key != request.key) return@launch
+                if (page.fallbackUsed != history.fallbackUsed) {
+                    loadFirstPage(request)
+                    return@launch
+                }
+                _history.update { current ->
+                    if (current.key != request.key) current else current.copy(
+                        items = (current.items + page.items)
+                            .distinctBy { it.transaction.id }
+                            .sortedWith(compareByDescending<TransactionItem> { it.transaction.occurredAt }
+                                .thenByDescending { it.transaction.id }),
+                        cursor = page.nextCursor,
+                        hasMore = page.hasMore,
+                        loadingMore = false,
+                        accessDecision = page.accessDecision,
+                    )
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                if (isCurrent(request)) _history.update {
+                    if (it.key == request.key) it.copy(loadingMore = false, loadMoreError = error.message ?: "No se pudo cargar más movimientos") else it
+                }
+            }
+        }
+    }
+
     fun onOpenDetail(item: TransactionItem) {
         val owner = (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId ?: return
         if (item.transaction.userId != owner) return
         detailJob?.cancel()
-        _detail.value = HistoryDetailState(owner, item.transaction.id, loading = true)
+        _detail.value = HistoryDetailState(owner, item.transaction.id, item = item, loading = true)
         detailJob = viewModelScope.launch {
             try {
+                val refreshedItem = queryMovementHistoryUseCase?.getHistoryItemById(owner, item.transaction.id) ?: item
                 val revisions = maintenanceRepository?.getRevisionAudit(owner, item.transaction.id).orEmpty()
                 if ((sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId == owner) {
-                    _detail.value = HistoryDetailState(owner, item.transaction.id, revisions)
+                    _detail.value = HistoryDetailState(owner, item.transaction.id, item = refreshedItem, revisions = revisions)
                 }
             } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
             catch (_: Exception) { _detail.update { it.copy(loading = false, error = true) } }
@@ -567,12 +571,102 @@ class MovementHistoryViewModel @Inject constructor(
         val zone = java.time.ZoneId.systemDefault()
         val today = java.time.LocalDate.now(zone)
         val format = java.time.format.DateTimeFormatter.ofPattern("d 'de' MMMM yyyy", Locale.forLanguageTag("es-PE"))
-        return items.sortedByDescending { it.transaction.occurredAt }.groupBy { item ->
+        return items.sortedWith(compareByDescending<TransactionItem> { it.transaction.occurredAt }
+            .thenByDescending { it.transaction.id }).groupBy { item ->
             val date = java.time.Instant.ofEpochMilli(item.transaction.occurredAt).atZone(zone).toLocalDate()
             when (date) {
                 today -> "Hoy"
                 today.minusDays(1) -> "Ayer"
                 else -> format.format(date).lowercase(Locale.forLanguageTag("es-PE"))
+            }
+        }
+    }
+
+    private fun currentHistoryRequest(owner: String): HistoryRequest? {
+        val advanced = _advancedFilters.value
+        return HistoryRequest(
+            ownerId = owner,
+            query = MovementHistoryQuery(
+                queryText = _searchQuery.value.takeIf(String::isNotBlank),
+                fromInclusive = advanced.fromDate,
+                toExclusive = advanced.toDate,
+                types = _selectedFilterType.value?.let(::setOf) ?: emptySet(),
+                advancedCriteria = advanced.toHistoryCriteria(),
+            ),
+            accessRefresh = _accessRefresh.value,
+            retry = _readRetry.value,
+            invalidation = _datasetInvalidation.value,
+            entitlementTick = _entitlementTick.value,
+        )
+    }
+
+    private fun loadFirstPage(request: HistoryRequest) {
+        val owner = request.ownerId
+        if (owner.isNullOrBlank()) {
+            _history.value = HistoryLoadState(ownerId = null, key = request.key)
+            return
+        }
+        _history.value = HistoryLoadState(ownerId = owner, key = request.key, loadingFirst = true)
+        viewModelScope.launch {
+            try {
+                val useCase = queryMovementHistoryUseCase ?: run {
+                    // The use case is always injected in production. This keeps legacy lightweight fixtures inert.
+                    _history.update { if (it.key == request.key) it.copy(loadingFirst = false) else it }
+                    return@launch
+                }
+                val page = useCase(owner, request.query)
+                val summary = useCase.getHistorySummary(owner, request.query)
+                if (!isCurrent(request)) return@launch
+                _history.value = HistoryLoadState(
+                    ownerId = owner,
+                    key = request.key,
+                    items = page.items.distinctBy { it.transaction.id }.sortedWith(
+                        compareByDescending<TransactionItem> { it.transaction.occurredAt }.thenByDescending { it.transaction.id },
+                    ),
+                    cursor = page.nextCursor,
+                    hasMore = page.hasMore,
+                    accessDecision = page.accessDecision,
+                    fallbackUsed = page.fallbackUsed,
+                    summary = summary ?: com.kipu.app.feature.movements.domain.model.MovementHistorySummary(0L, emptyMap(), null),
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                if (isCurrent(request)) _history.value = HistoryLoadState(
+                    ownerId = owner,
+                    key = request.key,
+                    firstPageError = true,
+                )
+            }
+        }
+    }
+
+    private fun isCurrent(request: HistoryRequest): Boolean =
+        request.ownerId == (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId &&
+            currentHistoryRequest(request.ownerId ?: return false)?.key == request.key
+
+    private fun refreshSelectedDetail() {
+        val detail = _detail.value
+        val owner = (sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId
+        val transactionId = detail.transactionId ?: return
+        if (detail.ownerId != owner || owner == null) return
+        detailJob?.cancel()
+        detailJob = viewModelScope.launch {
+            val refreshed = try { queryMovementHistoryUseCase?.getHistoryItemById(owner, transactionId) }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (_: Exception) { return@launch }
+            if ((sessionCoordinator.localAccess.value as? LocalAccess.Available)?.userId != owner ||
+                _detail.value.transactionId != transactionId
+            ) return@launch
+            if (refreshed == null) {
+                _detail.value = HistoryDetailState()
+            } else {
+                val revisions = try {
+                    maintenanceRepository?.getRevisionAudit(owner, transactionId).orEmpty()
+                } catch (_: Exception) {
+                    _detail.value.revisions
+                }
+                _detail.value = _detail.value.copy(item = refreshed, revisions = revisions)
             }
         }
     }
@@ -583,12 +677,65 @@ private fun AdvancedFiltersState.hasPremiumOnlyCriteria(): Boolean =
         maxAmountMinor != null || financialStates.isNotEmpty() ||
         cardIds.isNotEmpty() || merchantIds.isNotEmpty() || syncStatuses.isNotEmpty()
 
+private fun AdvancedFiltersState.toHistoryCriteria() =
+    com.kipu.app.feature.movements.domain.model.AdvancedHistoryCriteria(
+        accountIds = accountIds,
+        cardIds = cardIds,
+        categoryIds = categoryIds,
+        merchantIds = merchantIds,
+        minAmountMinor = minAmountMinor,
+        maxAmountMinor = maxAmountMinor,
+        currency = currency,
+        financialStates = financialStates,
+        syncStatuses = syncStatuses,
+    ).takeIf { it.hasCriteria() }
+
 
 enum class HistoryAccessRecovery { IDLE, VERIFYING, VERIFIED, NO_PURCHASE, PENDING, RETRYABLE, NO_ACCESS }
-private data class OwnerHistory(val ownerId: String?, val items: List<TransactionItem> = emptyList(), val loading: Boolean = false, val error: Boolean = false)
-private data class HistoryAccessEvaluation(val input: HistoryAccessInput, val decision: MovementHistoryAccessDecision)
+private data class HistoryRequest(
+    val ownerId: String?,
+    val query: MovementHistoryQuery,
+    val accessRefresh: Int,
+    val retry: Int,
+    val invalidation: Int,
+    val entitlementTick: Int,
+) {
+    // Access refreshes and dataset invalidations intentionally produce a new generation, not a new page cursor.
+    val key = HistoryKey(ownerId, query, accessRefresh, retry, invalidation, entitlementTick)
+}
+
+private data class HistoryKey(
+    val ownerId: String?,
+    val query: MovementHistoryQuery,
+    val accessRefresh: Int,
+    val retry: Int,
+    val invalidation: Int,
+    val entitlementTick: Int,
+)
+
+private data class HistoryLoadState(
+    val ownerId: String? = null,
+    val key: HistoryKey? = null,
+    val items: List<TransactionItem> = emptyList(),
+    val cursor: MovementHistoryCursor? = null,
+    val hasMore: Boolean = false,
+    val loadingFirst: Boolean = false,
+    val loadingMore: Boolean = false,
+    val firstPageError: Boolean = false,
+    val loadMoreError: String? = null,
+    val accessDecision: MovementHistoryAccessDecision = MovementHistoryAccessDecision.NotAuthorized,
+    val fallbackUsed: Boolean = false,
+    val summary: com.kipu.app.feature.movements.domain.model.MovementHistorySummary =
+        com.kipu.app.feature.movements.domain.model.MovementHistorySummary(0L, emptyMap(), null),
+)
+private data class PanelAccess(
+    val key: HistoryKey? = null,
+    val panelShown: Boolean = false,
+    val decision: MovementHistoryAccessDecision = MovementHistoryAccessDecision.NotAuthorized,
+)
 private data class HistoryDetailState(
     val ownerId: String? = null, val transactionId: String? = null,
+    val item: TransactionItem? = null,
     val revisions: List<com.kipu.app.feature.movements.domain.model.MovementRevisionAudit> = emptyList(),
     val loading: Boolean = false, val error: Boolean = false,
 )

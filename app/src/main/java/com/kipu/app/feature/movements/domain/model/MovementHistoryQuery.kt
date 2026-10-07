@@ -1,5 +1,7 @@
 package com.kipu.app.feature.movements.domain.model
 
+import java.math.BigInteger
+
 data class MovementHistoryCursor(
     val occurredAt: Long,
     val transactionId: String,
@@ -68,12 +70,12 @@ data class MovementHistoryQuery(
 
     /**
      * Fallback basic query when advanced filter access is denied/expired.
-     * Preserves text, dates, types, limit and strips advanced criteria and cursor.
+     * Preserves text, dates, types, limit, and cursor while stripping advanced criteria so
+     * subsequent fallback pages keep their keyset position.
      */
     fun toBasicFallback(): MovementHistoryQuery {
         return copy(
             advancedCriteria = null,
-            cursor = null,
         )
     }
 }
@@ -91,4 +93,10 @@ data class MovementHistoryPage(
     val hasMore: Boolean,
     val accessDecision: MovementHistoryAccessDecision,
     val fallbackUsed: Boolean = false,
+)
+
+data class MovementHistorySummary(
+    val totalCount: Long,
+    val netByCurrency: Map<String, BigInteger>,
+    val mostUsedAccountId: String?,
 )

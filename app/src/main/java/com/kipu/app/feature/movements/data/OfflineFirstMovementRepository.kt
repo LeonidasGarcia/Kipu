@@ -20,6 +20,7 @@ import com.kipu.app.feature.movements.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import java.math.BigInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -184,15 +185,37 @@ class OfflineFirstMovementRepository @Inject constructor(
         )
     }
 
+    override suspend fun getHistorySummary(userId: String, query: MovementHistoryQuery): MovementHistorySummary {
+        val unpagedQuery = query.copy(cursor = null)
+        val totalCount = localDataSource.queryHistoryCount(MovementQuerySqlBuilder.buildCount(userId, unpagedQuery))
+        val netByCurrency = localDataSource.queryHistoryNetFlows(MovementQuerySqlBuilder.buildNetFlow(userId, unpagedQuery))
+            .associate { it.currencyCode to BigInteger.valueOf(it.netAmountMinor) }
+        return MovementHistorySummary(
+            totalCount = totalCount,
+            netByCurrency = netByCurrency,
+            mostUsedAccountId = localDataSource.getMostUsedSourceAccountId(userId),
+        )
+    }
+
+    override fun observeHistoryInvalidations(): Flow<Unit> = localDataSource.observeHistoryInvalidations()
+
+    override suspend fun getHistoryItemById(userId: String, transactionId: String): TransactionItem? {
+        return localDataSource.getTransactionById(userId, transactionId)?.let { entity ->
+            mapEntitiesToItems(userId, listOf(entity)).single()
+        }
+    }
+
     private suspend fun mapEntitiesToItems(userId: String, entities: List<TransactionEntity>): List<TransactionItem> {
         if (entities.isEmpty()) return emptyList()
         val presentations = categoryDao.observePresentationsForUser(userId).first().associateBy { it.categoryId }
         val merchants = merchantDao.observeMerchants().first().associateBy { it.id }
+        val accounts = accountDao.observeAll(userId).first().associateBy { it.id }
+        val cards = cardDao.observeAll(userId).first().associateBy { it.id }
         return entities.map { entity ->
             val domain = entity.toDomain()
-            val sourceAlias = domain.sourceAccountId?.let { accountDao.getById(userId, it)?.alias }
-            val destAlias = domain.destinationAccountId?.let { accountDao.getById(userId, it)?.alias }
-            val card = domain.cardId?.let { cardDao.getById(userId, it) }
+            val sourceAlias = domain.sourceAccountId?.let { accounts[it]?.alias }
+            val destAlias = domain.destinationAccountId?.let { accounts[it]?.alias }
+            val card = domain.cardId?.let(cards::get)
             val category = domain.categoryId?.let(presentations::get)
             TransactionItem(
                 transaction = domain,
