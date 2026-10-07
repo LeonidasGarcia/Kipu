@@ -991,14 +991,60 @@ fun CategoryRootCard(
                                 Spacer(modifier = Modifier.width(12.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = subItem.displayName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = colors.inkPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = subItem.displayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = colors.inkPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+
+                                        // Subcategory 3-dots Menu aligned with label
+                                        Box {
+                                            IconButton(
+                                                onClick = { showSubMenu = true },
+                                                modifier = Modifier.size(36.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.MoreVert,
+                                                    contentDescription = "Editar ${subItem.displayName}",
+                                                    tint = colors.inkSecondary,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
+                                            DropdownMenu(
+                                                expanded = showSubMenu,
+                                                onDismissRequest = { showSubMenu = false },
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Editar") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = colors.inkPrimary)
+                                                    },
+                                                    onClick = {
+                                                        showSubMenu = false
+                                                        onEditSubcategory(subItem)
+                                                    },
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Inactivar", color = MaterialTheme.colorScheme.error) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                                    },
+                                                    onClick = {
+                                                        showSubMenu = false
+                                                        onDeleteSubcategory(subItem)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
                                     if (!isRootActive) {
                                         Text(
                                             text = "Inactiva por categoría padre",
@@ -1012,46 +1058,6 @@ fun CategoryRootCard(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = colors.inkSecondary,
                                             fontSize = 11.sp,
-                                        )
-                                    }
-                                }
-
-                                // Subcategory 3-dots Menu
-                                Box {
-                                    IconButton(
-                                        onClick = { showSubMenu = true },
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.MoreVert,
-                                            contentDescription = "Editar ${subItem.displayName}",
-                                            tint = colors.inkSecondary,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
-                                    DropdownMenu(
-                                        expanded = showSubMenu,
-                                        onDismissRequest = { showSubMenu = false },
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Editar") },
-                                            leadingIcon = {
-                                                Icon(Icons.Default.Edit, contentDescription = null, tint = colors.inkPrimary)
-                                            },
-                                            onClick = {
-                                                showSubMenu = false
-                                                onEditSubcategory(subItem)
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Inactivar", color = MaterialTheme.colorScheme.error) },
-                                            leadingIcon = {
-                                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                            },
-                                            onClick = {
-                                                showSubMenu = false
-                                                onDeleteSubcategory(subItem)
-                                            },
                                         )
                                     }
                                 }

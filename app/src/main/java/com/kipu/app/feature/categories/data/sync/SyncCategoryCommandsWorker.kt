@@ -90,18 +90,31 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
 
     private suspend fun hydrateCategories(userId: String) {
         try {
+            val pendingCommands = categoryDao.getPendingOutboxCommands(userId)
+            val pendingCategoryIds = pendingCommands.map { it.aggregateId }.toSet()
+
             val categories = when (val response = api.fetchCategories()) {
                 is CategoryApiResponse.Success -> {
                     val visible = response.data.filter { it.userId == null || it.userId == userId }
-                    categoryDao.insertCategoriesIfAbsent(visible.map { dto ->
-                        CategoryEntity(
-                            id = dto.id, userId = dto.userId, parentId = dto.parentId,
-                            origin = dto.origin, categoryType = dto.categoryType, isActive = dto.isActive,
+                    for (dto in visible) {
+                        val existing = categoryDao.getCategoryById(dto.id)
+                        val entity = CategoryEntity(
+                            id = dto.id,
+                            userId = dto.userId,
+                            parentId = dto.parentId,
+                            origin = dto.origin,
+                            categoryType = dto.categoryType,
+                            isActive = dto.isActive,
                             remoteRevision = dto.remoteRevision,
                             createdAt = Instant.parse(dto.createdAt).toEpochMilli(),
                             updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
                         )
-                    })
+                        if (existing == null) {
+                            categoryDao.insertCategory(entity)
+                        } else if (dto.id !in pendingCategoryIds && dto.remoteRevision >= existing.remoteRevision) {
+                            categoryDao.updateCategory(entity)
+                        }
+                    }
                     visible
                 }
                 else -> {
@@ -109,19 +122,31 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                     emptyList()
                 }
             }
+
             when (val response = api.fetchCategoryPresentations()) {
-                is CategoryApiResponse.Success -> categoryDao.insertPresentationsIfAbsent(
-                    response.data.filter { it.userId == userId }.map { dto ->
-                        CategoryPresentationEntity(
-                            categoryId = dto.categoryId, userId = dto.userId,
-                            name = dto.name, icon = dto.icon, color = dto.color,
+                is CategoryApiResponse.Success -> {
+                    val userPresentations = response.data.filter { it.userId == userId }
+                    for (dto in userPresentations) {
+                        val existing = categoryDao.getPresentation(userId, dto.categoryId)
+                        val entity = CategoryPresentationEntity(
+                            categoryId = dto.categoryId,
+                            userId = dto.userId,
+                            name = dto.name,
+                            icon = dto.icon,
+                            color = dto.color,
                             remoteRevision = dto.remoteRevision,
                             updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
                         )
+                        if (existing == null) {
+                            categoryDao.insertPresentation(entity)
+                        } else if (dto.categoryId !in pendingCategoryIds && dto.remoteRevision >= existing.remoteRevision) {
+                            categoryDao.insertPresentation(entity)
+                        }
                     }
-                )
+                }
                 else -> SecureLog.w("SyncCategoryCommandsWorker", "Failed to load category presentations")
             }
+
             // System categories have a server name but no user presentation until customized.
             categoryDao.insertPresentationsIfAbsent(categories.filter { it.origin == "SYSTEM" }.map { dto ->
                 CategoryPresentationEntity(

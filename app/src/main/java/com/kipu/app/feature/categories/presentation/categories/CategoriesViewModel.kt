@@ -50,6 +50,8 @@ data class CategoriesUiState(
     val categories: List<CategoryItem> = emptyList(),
     val selectedTab: CategoryTab = CategoryTab.EXPENSE,
     val activeCustomRootsCount: Int = 0,
+    val activeCustomExpenseRootsCount: Int = 0,
+    val activeCustomIncomeRootsCount: Int = 0,
     val maxCustomRoots: Int = 5,
     val isCreateDialogOpen: Boolean = false,
     val editingCategoryId: CategoryId? = null,
@@ -67,7 +69,12 @@ data class CategoriesUiState(
     val quotaSelectionDraft: Set<CategoryId> = emptySet(),
     val isQuotaSelectionOpen: Boolean = false,
 ) {
-    val isFreeLimitReached: Boolean get() = activeCustomRootsCount >= maxCustomRoots
+    val isFreeLimitReached: Boolean
+        get() = when (createCategoryType) {
+            CategoryType.EXPENSE -> activeCustomExpenseRootsCount >= maxCustomRoots
+            CategoryType.INCOME -> activeCustomIncomeRootsCount >= maxCustomRoots
+            CategoryType.GENERAL -> activeCustomExpenseRootsCount >= maxCustomRoots || activeCustomIncomeRootsCount >= maxCustomRoots
+        }
     val isEditing: Boolean get() = editingCategoryId != null
 }
 
@@ -100,27 +107,27 @@ class CategoriesViewModel @Inject constructor(
                     observedOwnerId = ownerId
                     if (ownerId == null) {
                         currentUserId = null
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                categories = emptyList(),
-                                activeCustomRootsCount = 0,
-                                selectedFreeCategoryRootIds = emptySet(),
-                            )
-                        }
+                        _uiState.value = CategoriesUiState(
+                            isLoading = false,
+                            categories = emptyList(),
+                            activeCustomRootsCount = 0,
+                            activeCustomExpenseRootsCount = 0,
+                            activeCustomIncomeRootsCount = 0,
+                            selectedFreeCategoryRootIds = emptySet(),
+                        )
                         return@collectLatest
                     }
 
                     val userId = UserId(ownerId)
                     currentUserId = userId
-                    _uiState.update {
-                        it.copy(
-                            isLoading = true,
-                            categories = emptyList(),
-                            activeCustomRootsCount = 0,
-                            selectedFreeCategoryRootIds = emptySet(),
-                        )
-                    }
+                    _uiState.value = CategoriesUiState(
+                        isLoading = true,
+                        categories = emptyList(),
+                        activeCustomRootsCount = 0,
+                        activeCustomExpenseRootsCount = 0,
+                        activeCustomIncomeRootsCount = 0,
+                        selectedFreeCategoryRootIds = emptySet(),
+                    )
                     ensureInitialCategoryCatalog(userId)
                     syncScheduler.scheduleSync(ownerId)
                     kotlinx.coroutines.flow.combine(
@@ -130,11 +137,21 @@ class CategoriesViewModel @Inject constructor(
                         val activeRoots = items.count {
                             it.category.isRoot && it.category.isCustom && it.category.isActive
                         }
+                        val activeExpense = items.count {
+                            it.category.isRoot && it.category.isCustom && it.category.isActive &&
+                                (it.category.categoryType == CategoryType.EXPENSE || it.category.categoryType == CategoryType.GENERAL)
+                        }
+                        val activeIncome = items.count {
+                            it.category.isRoot && it.category.isCustom && it.category.isActive &&
+                                (it.category.categoryType == CategoryType.INCOME || it.category.categoryType == CategoryType.GENERAL)
+                        }
                         _uiState.update { current ->
                             current.copy(
                                 isLoading = false,
                                 categories = items,
                                 activeCustomRootsCount = activeRoots,
+                                activeCustomExpenseRootsCount = activeExpense,
+                                activeCustomIncomeRootsCount = activeIncome,
                                 selectedFreeCategoryRootIds = selected,
                             )
                         }
@@ -173,13 +190,13 @@ class CategoriesViewModel @Inject constructor(
     }
 
     fun saveQuotaSelection() {
-        val userId = currentUserId ?: return
+        val initiatingOwner = currentUserId ?: return
         val state = _uiState.value
         val selected = state.quotaSelectionDraft
-        if (selected.size > state.maxCustomRoots) return
         viewModelScope.launch {
-            saveSelectedFreeCategoryRoots(userId, selected).fold(
+            saveSelectedFreeCategoryRoots(initiatingOwner, selected).fold(
                 onSuccess = {
+                    if (currentUserId != initiatingOwner) return@launch
                     _uiState.update {
                         it.copy(
                             isQuotaSelectionOpen = false,
@@ -190,6 +207,7 @@ class CategoriesViewModel @Inject constructor(
                     }
                 },
                 onFailure = { error ->
+                    if (currentUserId != initiatingOwner) return@launch
                     _uiState.update { it.copy(errorMessage = error.message ?: "No se pudo guardar la selección") }
                 },
             )
@@ -270,10 +288,12 @@ class CategoriesViewModel @Inject constructor(
     }
 
     fun confirmDeleteCategory() {
+        val initiatingOwner = currentUserId ?: return
         val item = _uiState.value.categoryToDelete ?: return
         viewModelScope.launch {
             // Inactivating a category acts as deleting/disabling it per domain rules
             val result = setCategoryActive(item.category.id, false)
+            if (currentUserId != initiatingOwner) return@launch
             result.fold(
                 onSuccess = {
                     _uiState.update {
@@ -324,7 +344,7 @@ class CategoriesViewModel @Inject constructor(
     }
 
     fun submitCreateCategory() {
-        val userId = currentUserId ?: run {
+        val initiatingOwner = currentUserId ?: run {
             _uiState.update { it.copy(errorMessage = "No active user session") }
             return
         }
@@ -342,7 +362,7 @@ class CategoriesViewModel @Inject constructor(
                 val result = updateCategoryPresentation(
                     presentation = CategoryPresentation(
                         categoryId = editingId,
-                        ownerId = userId,
+                        ownerId = initiatingOwner,
                         name = name,
                         icon = state.createCategoryIcon,
                         color = state.createCategoryColor,
@@ -350,6 +370,7 @@ class CategoriesViewModel @Inject constructor(
                     ),
                     expectedRevision = state.editingRevision,
                 )
+                if (currentUserId != initiatingOwner) return@launch
                 result.fold(
                     onSuccess = {
                         closeCreateDialog()
@@ -365,14 +386,14 @@ class CategoriesViewModel @Inject constructor(
                     return@launch
                 }
                 val result = createCategory(
-                    ownerId = userId,
+                    ownerId = initiatingOwner,
                     name = name,
                     icon = state.createCategoryIcon,
                     color = state.createCategoryColor,
                     parentId = state.createParentId,
                     categoryType = state.createCategoryType,
                 )
-
+                if (currentUserId != initiatingOwner) return@launch
                 result.fold(
                     onSuccess = {
                         closeCreateDialog()
@@ -387,9 +408,11 @@ class CategoriesViewModel @Inject constructor(
     }
 
     fun toggleCategoryActive(categoryId: CategoryId, currentActive: Boolean) {
+        val initiatingOwner = currentUserId ?: return
         viewModelScope.launch {
             val targetState = !currentActive
             val result = setCategoryActive(categoryId, targetState)
+            if (currentUserId != initiatingOwner) return@launch
             result.onFailure { error ->
                 _uiState.update { it.copy(errorMessage = error.message ?: "Error al actualizar estado") }
             }
