@@ -6,7 +6,7 @@
 **Feature Branch**: `002-ep-cta-cuentas-tarjetas`
 **Date**: 2026-09-24
 **Spec**: [spec.md](spec.md) | **Plan**: [plan.md](plan.md) | **Data Model**: [data-model.md](data-model.md)
-**Sprint 3 Status**: 91/91 tasks completed (2026-10-06). Existing device and suite evidence remains historical; correction #21 requires its own current verification evidence.
+**Sprint 3 Status**: 93/93 tasks completed (2026-10-06). Existing device and suite evidence remains historical; corrections #21 and #25 have their own current verification evidence in `validation/issue25-rate-catalog-followup.md`.
 
 ## Phase 1: Setup (Shared Infrastructure)
 

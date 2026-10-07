@@ -93,7 +93,7 @@ class RateCatalogContextTest {
     }
 
     @Test
-    fun `catalog selection persists BCP Amex identity through the rate lookup`() {
+    fun `catalog selection maps BCP Amex identity through the rate lookup`() {
         val preset = com.kipu.app.feature.accounts.presentation.components.CardStylePresets
             .forProduct("BCP", "American Express Oro LATAM Pass", "AMEX")
 
@@ -106,7 +106,7 @@ class RateCatalogContextTest {
     }
 
     @Test
-    fun `catalog selection persists Interbank Amex identity through the rate lookup`() {
+    fun `catalog selection maps Interbank Amex identity through the rate lookup`() {
         val preset = com.kipu.app.feature.accounts.presentation.components.CardStylePresets
             .forProduct("INTERBANK", "American Express Gold", "AMEX")
 
@@ -193,6 +193,26 @@ class RateCatalogContextTest {
 
         assertEquals("53.25", personalTeaDraft(firstCardId, firstCardId, "53.25", 4_550))
         assertEquals("61.00", personalTeaDraft(firstCardId, secondCardId, "53.25", 6_100))
+    }
+
+    @Test
+    fun `rejects a BCP preset on a card issued by Interbank`() {
+        val result = resolveRateCatalogContext(
+            card("bcp-amex-latam-gold", issuer = "INTERBANK", network = CardNetwork.AMEX),
+            listOf(product("American Express Oro LATAM Pass", institutionCode = "BCP", network = "AMEX")),
+        )
+
+        assertTrue(result is RateCatalogContext.NoApplicableReference)
+    }
+
+    @Test
+    fun `accepts issuer case differences without accepting another issuer`() {
+        val result = resolveRateCatalogContext(
+            card("interbank-amex-gold", issuer = "Interbank", network = CardNetwork.AMEX),
+            listOf(product("American Express Gold", institutionCode = "INTERBANK", network = "AMEX")),
+        )
+
+        assertTrue(result is RateCatalogContext.Resolved)
     }
 
     private fun card(
