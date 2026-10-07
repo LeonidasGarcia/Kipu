@@ -47,4 +47,12 @@ En este MIUI, si `ActivityScenario` queda esperando el arranque con el celular d
 adb shell am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -f 0x10008000 -n com.kipu.app.lab/androidx.activity.ComponentActivity
 ```
 
-El capturador funciona también contra la APK previa conservada durante el trabajo, usando `-e evidencePrefix before`. La revisión física anterior de espaciado/tarjeta fue aceptada por el responsable; sus capturas personales y APKs temporales se conservan fuera de los archivos publicados.
+Para automatizar ese arranque en MIUI, usar el runner conservado en `scripts/android/` (requiere Python y ADB):
+
+```powershell
+python scripts/android/run-issue19-instrumentation.py com.kipu.app.feature.movements.presentation.MovementFilterVisualEvidenceTest after false
+```
+
+Acepta `--serial` si hay varios dispositivos; también reconoce `ANDROID_SERIAL`. Guarda registros locales en `scratch/issue-19/`, excluido de Git.
+
+Las capturas «antes» se obtuvieron durante el trabajo contra una APK temporal previa. Esa APK y las capturas personales se eliminaron al limpiar la carpeta temporal por indicación del responsable; las comparaciones sintéticas publicadas y el resultado final de instrumentación se conservan en esta carpeta. La revisión física anterior de espaciado/tarjeta fue aceptada por el responsable.

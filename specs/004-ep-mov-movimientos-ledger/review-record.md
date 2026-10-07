@@ -182,7 +182,7 @@ Alcance solicitado por el responsable tras probar la copia física: separar boto
 Validación ejecutada:
 
 ```powershell
-.\gradlew.bat --init-script Borrar-NoSubir/preview-device.init.gradle :app:assembleDebug :app:testDebugUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
+.\gradlew.bat --init-script gradle/preview-device.init.gradle :app:assembleDebug :app:testDebugUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
 ```
 
 - **BUILD SUCCESSFUL**, 1m36s. `MovementFilterDraftTest`: 4 pruebas; `MovementHistoryViewModelTest`: 17 pruebas. Total **21, 0 fallos, 0 errores**. Reportes en `app/build/test-results/testDebugUnitTest/`. Advertencias de pruebas existentes no bloquean compilación.
@@ -206,10 +206,10 @@ El responsable aceptó el resultado visual anterior, incluido el fondo de la tar
 Build final ejecutado:
 
 ```powershell
-.\gradlew.bat --init-script Borrar-NoSubir/preview-device.init.gradle -PisolatedAndroidTests=true :app:assembleLab :app:assembleLabAndroidTest :app:assembleDebug :app:testLabUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
+.\gradlew.bat --init-script gradle/preview-device.init.gradle -PisolatedAndroidTests=true :app:assembleLab :app:assembleLabAndroidTest :app:assembleDebug :app:testLabUnitTest --tests com.kipu.app.feature.movements.presentation.MovementFilterDraftTest --tests com.kipu.app.feature.movements.presentation.MovementHistoryViewModelTest --console=plain --no-configuration-cache
 ```
 
-**BUILD SUCCESSFUL**, 28 s. El init script solo mantiene la copia de prueba `com.kipu.app.preview`; no se versiona. Build reproducible de la variante aislada: omitir `--init-script` y `:app:assembleDebug`.
+**BUILD SUCCESSFUL**, 28 s. El init script solo mantiene la copia de prueba `com.kipu.app.preview`; se conserva en `gradle/` tras la limpieza autorizada. Build reproducible de la variante aislada: omitir `--init-script` y `:app:assembleDebug`.
 
 | Validación final | Resultado |
 |---|---|
@@ -229,3 +229,10 @@ Firmas públicas, modelos, Saver, validaciones de dominio, `MovementAppliedFilte
 ### Entrega
 
 Commit de implementación `2887831`, rama `feat/movimientos-filtros-ux` subida y [PR #30](https://github.com/LeonidasGarcia/Kipu/pull/30) abierto para revisión con `Closes #19` y comparación visual. T118 completada. No se realizó merge ni cierre manual del issue. El resultado final se instaló en `com.kipu.app.preview`: `adb install -r` **Success** y `am start -W` **Status: ok**. Las capturas de antes/después claro/oscuro finalizaron correctamente contra la APK conservada y la final, respectivamente.
+
+
+### Limpieza y conservaci?n de herramientas (2026-10-07)
+
+Por indicaci?n expresa del responsable, se traslad? `preview-device.init.gradle` a `gradle/` y el runner MIUI a `scripts/android/run-issue19-instrumentation.py`. El runner acepta el dispositivo por argumento o `ANDROID_SERIAL`, sin fijar un serial personal, y escribe registros nuevos en `scratch/issue-19/` (ignorado por Git). Los comandos anteriores de preview se actualizaron a la ruta conservada.
+
+Se elimin? `Borrar-NoSubir/` con sus APK, capturas personales, registros exploratorios y borradores. Las menciones anteriores a esas capturas describen evidencia hist?rica revisada; esos archivos temporales ya no est?n disponibles. Se mantienen el plan, las tareas, las capturas sint?ticas finales y la salida aceptada de instrumentaci?n en `specs/004-ep-mov-movimientos-ledger/`. `local.properties` permanece local, ignorado y fuera del PR. Esta limpieza no modifica la app instalada ni el c?digo de producto.

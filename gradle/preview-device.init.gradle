@@ -1,0 +1,7 @@
+// Local device preview: install beside the existing app without replacing its data.
+allprojects { previewProject ->
+    previewProject.plugins.withId('com.android.application') {
+        previewProject.extensions.getByName('android')
+            .buildTypes.getByName('debug').applicationIdSuffix = '.preview'
+    }
+}
