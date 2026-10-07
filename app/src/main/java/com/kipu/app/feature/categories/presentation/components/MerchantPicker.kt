@@ -47,6 +47,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,6 +59,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
@@ -69,18 +71,151 @@ import com.kipu.app.feature.categories.domain.model.CategoryId
 // TAXONOMÍA DE INTERFAZ (UI TAXONOMY)
 // Documentado en EP-CCO: Agrupación visual coherente para facilitar la búsqueda
 // independiente de las subcategorías contables de la base de datos.
-enum class UiMerchantGroup(val label: String, val merchants: Set<String>) {
-    RESTAURANTS("Restaurantes y Delivery", setOf("bembos", "burger king", "kfc", "mcdonald's", "mcdonalds", "pedidosya", "pizza hut", "rappi", "starbucks")),
-    ENTERTAINMENT("Entretenimiento y Streaming", setOf("cinemark", "cineplanet", "crunchyroll", "disney+", "joinnus", "max", "netflix", "prime video", "spotify", "teleticket", "youtube premium")),
-    SUPERMARKETS("Supermercados y Tiendas", setOf("mass", "metro", "oxxo", "plaza vea", "tambo+", "tambo", "tottus", "wong", "listo!")),
-    TRANSPORT("Transporte y Viajes", setOf("cabify", "didi", "indrive", "latam", "lima expresa", "línea 1", "linea 1", "uber", "metropolitano", "rutas de lima")),
-    TELECOM("Telecomunicaciones", setOf("bitel", "claro", "entel", "movistar", "win")),
-    TECH("Productividad e IA", setOf("adobe", "canva", "chatgpt", "claude", "google ai pro", "google one", "icloud+", "microsoft 365", "notion", "perplexity")),
-    GAMING("Videojuegos", setOf("playstation", "steam", "xbox")),
-    UTILITIES("Servicios Básicos", setOf("cálidda", "calidda", "luz del sur", "pluz energía", "pluz energia", "sedapal")),
-    GAS("Estaciones de Servicio", setOf("petroperú", "petroperu", "primax", "repsol")),
-    HEALTH("Farmacias y Salud", setOf("inkafarma", "mifarma")),
-    EDUCATION("Educación", setOf("wikipedia"))
+enum class UiMerchantGroup(
+    val label: String,
+    val canonicalNames: Set<String>,
+    val canonicalIds: Set<String> = emptySet(),
+) {
+    RESTAURANTS(
+        label = "Restaurantes y Delivery",
+        canonicalNames = setOf("bembos", "burger king", "kfc", "mcdonalds", "pedidosya", "pizza hut", "rappi", "starbucks"),
+        canonicalIds = setOf(
+            "00000000-0000-0001-0000-000000000002", // Starbucks
+            "00000000-0000-0000-0001-000000000010", // KFC
+            "00000000-0000-0000-0001-000000000011", // McDonald's
+            "00000000-0000-0000-0001-000000000012", // Bembos
+            "00000000-0000-0000-0001-000000000013", // Burger King
+            "00000000-0000-0000-0001-000000000014", // Pizza Hut
+            "00000000-0000-0000-0001-000000000015", // Rappi
+            "00000000-0000-0000-0001-000000000016", // PedidosYa
+        ),
+    ),
+    ENTERTAINMENT(
+        label = "Entretenimiento y Streaming",
+        canonicalNames = setOf("cinemark", "cineplanet", "crunchyroll", "disney", "disney plus", "joinnus", "max", "netflix", "prime video", "spotify", "teleticket", "youtube premium"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000040", // Netflix
+            "00000000-0000-0000-0001-000000000041", // Disney+
+            "00000000-0000-0000-0001-000000000042", // Prime Video
+            "00000000-0000-0000-0001-000000000043", // Spotify
+            "00000000-0000-0000-0001-000000000046", // Max
+            "00000000-0000-0000-0001-000000000047", // YouTube Premium
+            "00000000-0000-0000-0001-000000000048", // Crunchyroll
+            "00000000-0000-0000-0001-000000000060", // Cineplanet
+            "00000000-0000-0000-0001-000000000061", // Cinemark
+            "00000000-0000-0000-0001-000000000062", // Teleticket
+            "00000000-0000-0000-0001-000000000063", // Joinnus
+        ),
+    ),
+    SUPERMARKETS(
+        label = "Supermercados y Tiendas",
+        canonicalNames = setOf("listo", "mass", "metro", "oxxo", "plaza vea", "tambo", "tottus", "wong"),
+        canonicalIds = setOf(
+            "00000000-0000-0001-0000-000000000001", // Tambo
+            "00000000-0000-0001-0000-000000000003", // Plaza Vea
+            "00000000-0000-0000-0001-000000000004", // Tottus
+            "00000000-0000-0000-0001-000000000005", // Metro
+            "00000000-0000-0000-0001-000000000006", // Wong
+            "00000000-0000-0000-0001-000000000007", // Mass
+            "00000000-0000-0000-0001-000000000008", // Oxxo
+            "00000000-0000-0000-0001-000000000009", // Listo!
+        ),
+    ),
+    TRANSPORT(
+        label = "Transporte y Viajes",
+        canonicalNames = setOf("cabify", "didi", "indrive", "latam airlines", "latam", "lima expresa", "linea 1", "metropolitano", "rutas de lima", "uber"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000019", // Uber
+            "00000000-0000-0000-0001-000000000020", // inDrive
+            "00000000-0000-0000-0001-000000000021", // DiDi
+            "00000000-0000-0000-0001-000000000022", // Cabify
+            "00000000-0000-0000-0001-000000000026", // Metropolitano
+            "00000000-0000-0000-0001-000000000027", // Línea 1
+            "00000000-0000-0000-0001-000000000028", // Rutas de Lima
+            "00000000-0000-0000-0001-000000000029", // Lima Expresa
+            "00000000-0000-0000-0001-000000000030", // LATAM Airlines
+        ),
+    ),
+    TELECOM(
+        label = "Telecomunicaciones",
+        canonicalNames = setOf("bitel", "claro", "entel", "movistar", "win"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000035", // Claro
+            "00000000-0000-0000-0001-000000000036", // Movistar
+            "00000000-0000-0000-0001-000000000037", // Entel
+            "00000000-0000-0000-0001-000000000038", // Bitel
+            "00000000-0000-0000-0001-000000000039", // Win
+        ),
+    ),
+    TECH(
+        label = "Productividad e IA",
+        canonicalNames = setOf("adobe", "canva", "chatgpt", "claude", "google ai pro", "google one", "icloud", "icloud plus", "microsoft 365", "notion", "perplexity"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000044", // Google One
+            "00000000-0000-0000-0001-000000000045", // iCloud+
+            "00000000-0000-0000-0001-000000000049", // ChatGPT
+            "00000000-0000-0000-0001-000000000050", // Claude
+            "00000000-0000-0000-0001-000000000051", // Google AI Pro
+            "00000000-0000-0000-0001-000000000052", // Perplexity
+            "00000000-0000-0000-0001-000000000053", // Canva
+            "00000000-0000-0000-0001-000000000054", // Microsoft 365
+            "00000000-0000-0000-0001-000000000055", // Adobe
+            "00000000-0000-0000-0001-000000000056", // Notion
+        ),
+    ),
+    GAMING(
+        label = "Videojuegos",
+        canonicalNames = setOf("playstation", "steam", "xbox"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000057", // Steam
+            "00000000-0000-0000-0001-000000000058", // PlayStation
+            "00000000-0000-0000-0001-000000000059", // Xbox
+        ),
+    ),
+    UTILITIES(
+        label = "Servicios Básicos",
+        canonicalNames = setOf("calidda", "luz del sur", "pluz energia", "sedapal"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000031", // Pluz Energía
+            "00000000-0000-0000-0001-000000000032", // Luz del Sur
+            "00000000-0000-0000-0001-000000000033", // Sedapal
+            "00000000-0000-0000-0001-000000000034", // Cálidda
+        ),
+    ),
+    GAS(
+        label = "Estaciones de Servicio",
+        canonicalNames = setOf("petroperu", "primax", "repsol"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000023", // Primax
+            "00000000-0000-0000-0001-000000000024", // Repsol
+            "00000000-0000-0000-0001-000000000025", // Petroperú
+        ),
+    ),
+    HEALTH(
+        label = "Farmacias y Salud",
+        canonicalNames = setOf("inkafarma", "mifarma"),
+        canonicalIds = setOf(
+            "00000000-0000-0000-0001-000000000017", // Inkafarma
+            "00000000-0000-0000-0001-000000000018", // Mifarma
+        ),
+    ),
+    EDUCATION(
+        label = "Educación",
+        canonicalNames = setOf("wikipedia"),
+    );
+
+    val merchants: Set<String> get() = canonicalNames
+
+    fun matches(entry: MerchantCatalogEntry): Boolean {
+        if (canonicalIds.contains(entry.id.value)) return true
+        val assignedToOtherGroup = entries.any { other ->
+            other != this && other.canonicalIds.contains(entry.id.value)
+        }
+        if (assignedToOtherGroup) return false
+        val normName = CategoryRules.normalizeText(entry.name)
+        val normStored = CategoryRules.normalizeText(entry.normalizedName)
+        return canonicalNames.contains(normName) || canonicalNames.contains(normStored)
+    }
 }
 
 data class MerchantVisualProfile(
@@ -212,15 +347,25 @@ fun MerchantPicker(
         }
     }
     
-    // Una vez obtenida la lista de coincidencias correcta, aplicamos el filtro de taxonomía UI.
+    val availableGroups = remember(state.catalogEntries, catalogToDisplay) {
+        val baseCatalog = state.catalogEntries.ifEmpty { catalogToDisplay }
+        UiMerchantGroup.entries.filter { group ->
+            baseCatalog.any { merchant -> group.matches(merchant) }
+        }
+    }
+
+    LaunchedEffect(availableGroups, selectedUiGroup) {
+        if (selectedUiGroup != null && selectedUiGroup !in availableGroups) {
+            selectedUiGroup = null
+        }
+    }
+
+    // Una vez obtenida la lista de coincidencias correcta, aplicamos el filtro de taxonomía UI canónico.
     val visibleMerchants = remember(catalogToDisplay, selectedUiGroup) {
         if (selectedUiGroup == null) {
             catalogToDisplay
         } else {
-            catalogToDisplay.filter { merchant ->
-                val normalizedName = merchant.name.lowercase().trim()
-                selectedUiGroup!!.merchants.any { normalizedName.contains(it) }
-            }
+            catalogToDisplay.filter { merchant -> selectedUiGroup!!.matches(merchant) }
         }
     }
 
@@ -285,12 +430,6 @@ fun MerchantPicker(
                         selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
                     ),
                 )
-            }
-            // Mostrar solo los grupos de la taxonomía visual que tengan al menos 1 comercio coincidente en el catálogo total
-            val availableGroups = UiMerchantGroup.entries.filter { group -> 
-                state.catalogEntries.any { merchant -> 
-                    group.merchants.any { merchant.name.lowercase().trim().contains(it) } 
-                } 
             }
             
             items(availableGroups, key = { it.name }) { group ->
@@ -358,6 +497,94 @@ fun MerchantPicker(
 }
 
 @Composable
+fun MerchantAvatar(
+    drawableId: Int,
+    remoteLogoUrl: String?,
+    profile: MerchantVisualProfile,
+    size: Dp = 42.dp,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        var isRemoteLoaded by remember(remoteLogoUrl) { mutableStateOf(false) }
+        var isRemoteError by remember(remoteLogoUrl) { mutableStateOf(false) }
+
+        if (remoteLogoUrl != null && !isRemoteError) {
+            if (!isRemoteLoaded) {
+                if (drawableId != 0) {
+                    Box(
+                        modifier = Modifier
+                            .size(size)
+                            .background(Color.White),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            painter = painterResource(drawableId),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(size),
+                        )
+                    }
+                } else {
+                    MerchantInitialsBox(profile = profile, size = size)
+                }
+            }
+
+            AsyncImage(
+                model = remoteLogoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(size)
+                    .then(if (isRemoteLoaded) Modifier.background(Color.White) else Modifier),
+                onSuccess = { isRemoteLoaded = true },
+                onError = { isRemoteError = true },
+            )
+        } else if (drawableId != 0) {
+            Box(
+                modifier = Modifier
+                    .size(size)
+                    .background(Color.White),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(drawableId),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(size),
+                )
+            }
+        } else {
+            MerchantInitialsBox(profile = profile, size = size)
+        }
+    }
+}
+
+@Composable
+private fun MerchantInitialsBox(
+    profile: MerchantVisualProfile,
+    size: Dp,
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .background(profile.backgroundColor),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = profile.initials,
+            color = profile.foregroundColor,
+            fontWeight = FontWeight.Bold,
+            fontSize = if (size <= 40.dp) 13.sp else 14.sp,
+        )
+    }
+}
+
+@Composable
 fun SelectedMerchantCard(
     selectedMerchant: MerchantCatalogEntry?,
     provisionalText: String?,
@@ -391,41 +618,12 @@ fun SelectedMerchantCard(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.White), // Fondo blanco cuando hay imagen
-                contentAlignment = Alignment.Center,
-            ) {
-                when {
-                    drawableId != 0 -> Image(
-                        painter = painterResource(drawableId),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(40.dp), // Ocupar todo el tamaño
-                    )
-                    remoteLogoUrl != null -> AsyncImage(
-                        model = remoteLogoUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(40.dp), // Ocupar todo el tamaño
-                    )
-                    else -> Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(profile.backgroundColor),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = profile.initials,
-                            color = profile.foregroundColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                        )
-                    }
-                }
-            }
+            MerchantAvatar(
+                drawableId = drawableId,
+                remoteLogoUrl = remoteLogoUrl,
+                profile = profile,
+                size = 40.dp,
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -490,46 +688,12 @@ fun MerchantResultItem(
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(Color.White), // Fondo blanco cuando hay imagen para resaltarla
-                contentAlignment = Alignment.Center,
-            ) {
-                // FALLBACK VISUAL Y LOGOS:
-                // Si existe un logo válido (drawable local o remoto), SE MUESTRA SOLAMENTE LA IMAGEN que ocupa todo el contenedor (42dp).
-                // Si NO hay imagen (drawableId == 0 y remoteLogoUrl == null), SE MUESTRAN LAS INICIALES sobre su color de marca.
-                // Esto previene que se solape el texto de las iniciales por detrás de imágenes 
-                // con transparencias, logrando una interfaz limpia.
-                when {
-                    drawableId != 0 -> Image(
-                        painter = painterResource(drawableId),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(42.dp),
-                    )
-                    remoteLogoUrl != null -> AsyncImage(
-                        model = remoteLogoUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(42.dp),
-                    )
-                    else -> Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .background(profile.backgroundColor),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = profile.initials,
-                            color = profile.foregroundColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                        )
-                    }
-                }
-            }
+            MerchantAvatar(
+                drawableId = drawableId,
+                remoteLogoUrl = remoteLogoUrl,
+                profile = profile,
+                size = 42.dp,
+            )
 
             Spacer(modifier = Modifier.width(12.dp))
 
