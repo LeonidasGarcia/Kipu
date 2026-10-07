@@ -31,6 +31,7 @@ import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
+import com.kipu.app.feature.categories.domain.usecase.EnsureInitialCategoryCatalog
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.core.finance.domain.model.MovementId
 import com.kipu.app.feature.movements.domain.MovementRepository
@@ -97,6 +98,7 @@ class QuickMovementViewModelTest {
             observeFinancialDashboard = ObserveFinancialDashboard(fakeInstrumentsRepo),
             observeCategories = ObserveCategories(categoriesRepo),
             createCategoryUseCase = CreateCategory(categoriesRepo),
+            ensureInitialCategoryCatalog = EnsureInitialCategoryCatalog(categoriesRepo),
             categorySyncScheduler = object : CategorySyncScheduler {
                 override fun scheduleSync(userId: String) = Unit
                 override fun cancelSync(userId: String) = Unit

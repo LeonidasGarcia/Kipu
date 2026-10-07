@@ -11,6 +11,7 @@ import com.kipu.app.feature.categories.domain.model.Category
 import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
+import com.kipu.app.feature.categories.domain.usecase.EnsureInitialCategoryCatalog
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.categories.domain.usecase.ObserveSelectedFreeCategoryRoots
 import com.kipu.app.feature.categories.domain.usecase.SaveSelectedFreeCategoryRoots
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -46,9 +49,8 @@ data class CategoriesUiState(
     val isLoading: Boolean = true,
     val categories: List<CategoryItem> = emptyList(),
     val selectedTab: CategoryTab = CategoryTab.EXPENSE,
-    val activeCustomExpenseRootsCount: Int = 0,
-    val activeCustomIncomeRootsCount: Int = 0,
-    val maxCustomRootsPerType: Int = 5,
+    val activeCustomRootsCount: Int = 0,
+    val maxCustomRoots: Int = 5,
     val isCreateDialogOpen: Boolean = false,
     val editingCategoryId: CategoryId? = null,
     val editingRevision: Long = 1L,
@@ -65,14 +67,6 @@ data class CategoriesUiState(
     val quotaSelectionDraft: Set<CategoryId> = emptySet(),
     val isQuotaSelectionOpen: Boolean = false,
 ) {
-    val activeCustomRootsCount: Int
-        get() = when (selectedTab) {
-            CategoryTab.INCOME -> activeCustomIncomeRootsCount
-            else -> activeCustomExpenseRootsCount
-        }
-
-    val maxCustomRoots: Int get() = maxCustomRootsPerType
-
     val isFreeLimitReached: Boolean get() = activeCustomRootsCount >= maxCustomRoots
     val isEditing: Boolean get() = editingCategoryId != null
 }
@@ -85,56 +79,67 @@ class CategoriesViewModel @Inject constructor(
     private val updateCategoryPresentation: UpdateCategoryPresentation,
     private val observeSelectedFreeCategoryRoots: ObserveSelectedFreeCategoryRoots,
     private val saveSelectedFreeCategoryRoots: SaveSelectedFreeCategoryRoots,
+    private val ensureInitialCategoryCatalog: EnsureInitialCategoryCatalog,
     private val sessionCoordinator: SessionCoordinator,
+    private val syncScheduler: com.kipu.app.feature.categories.data.sync.CategorySyncScheduler,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CategoriesUiState())
     val uiState: StateFlow<CategoriesUiState> = _uiState.asStateFlow()
 
     private var currentUserId: UserId? = null
+    private var observedOwnerId: String? = null
 
     init {
         viewModelScope.launch {
-            sessionCoordinator.localAccess.collectLatest { access ->
-                when (access) {
-                    is LocalAccess.Available -> {
-                        val userId = UserId(access.userId)
-                        currentUserId = userId
-                        observeUserCategories(userId)
-                    }
-                    else -> {
+            sessionCoordinator.localAccess
+                .map { access -> (access as? LocalAccess.Available)?.userId }
+                .distinctUntilChanged()
+                .collectLatest { ownerId ->
+                    observedOwnerId?.takeIf { it != ownerId }?.let(syncScheduler::cancelSync)
+                    observedOwnerId = ownerId
+                    if (ownerId == null) {
                         currentUserId = null
-                        _uiState.update { it.copy(isLoading = false, categories = emptyList()) }
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                categories = emptyList(),
+                                activeCustomRootsCount = 0,
+                                selectedFreeCategoryRootIds = emptySet(),
+                            )
+                        }
+                        return@collectLatest
+                    }
+
+                    val userId = UserId(ownerId)
+                    currentUserId = userId
+                    _uiState.update {
+                        it.copy(
+                            isLoading = true,
+                            categories = emptyList(),
+                            activeCustomRootsCount = 0,
+                            selectedFreeCategoryRootIds = emptySet(),
+                        )
+                    }
+                    ensureInitialCategoryCatalog(userId)
+                    syncScheduler.scheduleSync(ownerId)
+                    kotlinx.coroutines.flow.combine(
+                        observeCategories(userId),
+                        observeSelectedFreeCategoryRoots(userId),
+                    ) { items, selected -> items to selected }.collect { (items, selected) ->
+                        val activeRoots = items.count {
+                            it.category.isRoot && it.category.isCustom && it.category.isActive
+                        }
+                        _uiState.update { current ->
+                            current.copy(
+                                isLoading = false,
+                                categories = items,
+                                activeCustomRootsCount = activeRoots,
+                                selectedFreeCategoryRootIds = selected,
+                            )
+                        }
                     }
                 }
-            }
-        }
-    }
-
-    private fun observeUserCategories(userId: UserId) {
-        viewModelScope.launch {
-            kotlinx.coroutines.flow.combine(
-                observeCategories(userId),
-                observeSelectedFreeCategoryRoots(userId),
-            ) { items, selected -> items to selected }.collectLatest { (items, selected) ->
-                val activeExpenseRoots = items.count {
-                    it.category.isRoot && it.category.isCustom && it.category.isActive &&
-                        it.category.categoryType == CategoryType.EXPENSE
-                }
-                val activeIncomeRoots = items.count {
-                    it.category.isRoot && it.category.isCustom && it.category.isActive &&
-                        it.category.categoryType == CategoryType.INCOME
-                }
-                _uiState.update { current ->
-                    current.copy(
-                        isLoading = false,
-                        categories = items,
-                        activeCustomExpenseRootsCount = activeExpenseRoots,
-                        activeCustomIncomeRootsCount = activeIncomeRoots,
-                        selectedFreeCategoryRootIds = selected,
-                    )
-                }
-            }
         }
     }
 
@@ -159,18 +164,10 @@ class CategoriesViewModel @Inject constructor(
         _uiState.update { state ->
             if (categoryId in state.quotaSelectionDraft) {
                 state.copy(quotaSelectionDraft = state.quotaSelectionDraft - categoryId)
+            } else if (state.quotaSelectionDraft.size < state.maxCustomRoots) {
+                state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
             } else {
-                val targetItem = state.categories.firstOrNull { it.category.id == categoryId }
-                val targetType = targetItem?.category?.categoryType ?: CategoryType.EXPENSE
-                val selectedCountForType = state.quotaSelectionDraft.count { id ->
-                    state.categories.firstOrNull { it.category.id == id }?.category?.categoryType == targetType
-                }
-                if (selectedCountForType < state.maxCustomRootsPerType) {
-                    state.copy(quotaSelectionDraft = state.quotaSelectionDraft + categoryId, errorMessage = null)
-                } else {
-                    val label = if (targetType == CategoryType.INCOME) "ingresos" else "gastos"
-                    state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRootsPerType} categorías de $label")
-                }
+                state.copy(errorMessage = "Puedes elegir hasta ${state.maxCustomRoots} categorías personalizadas")
             }
         }
     }
@@ -179,13 +176,7 @@ class CategoriesViewModel @Inject constructor(
         val userId = currentUserId ?: return
         val state = _uiState.value
         val selected = state.quotaSelectionDraft
-        val selectedExpenses = selected.count { id ->
-            state.categories.firstOrNull { it.category.id == id }?.category?.categoryType != CategoryType.INCOME
-        }
-        val selectedIncomes = selected.count { id ->
-            state.categories.firstOrNull { it.category.id == id }?.category?.categoryType == CategoryType.INCOME
-        }
-        if (selectedExpenses > state.maxCustomRootsPerType || selectedIncomes > state.maxCustomRootsPerType) return
+        if (selected.size > state.maxCustomRoots) return
         viewModelScope.launch {
             saveSelectedFreeCategoryRoots(userId, selected).fold(
                 onSuccess = {
