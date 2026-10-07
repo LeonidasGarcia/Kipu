@@ -62,8 +62,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.kipu.app.BuildConfig
+import com.kipu.app.feature.categories.domain.CategoryRules
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
 import com.kipu.app.feature.categories.domain.model.CategoryId
+
+// TAXONOMÍA DE INTERFAZ (UI TAXONOMY)
+// Documentado en EP-CCO: Agrupación visual coherente para facilitar la búsqueda
+// independiente de las subcategorías contables de la base de datos.
+enum class UiMerchantGroup(val label: String, val merchants: Set<String>) {
+    RESTAURANTS("Restaurantes y Delivery", setOf("bembos", "burger king", "kfc", "mcdonald's", "mcdonalds", "pedidosya", "pizza hut", "rappi", "starbucks")),
+    ENTERTAINMENT("Entretenimiento y Streaming", setOf("cinemark", "cineplanet", "crunchyroll", "disney+", "joinnus", "max", "netflix", "prime video", "spotify", "teleticket", "youtube premium")),
+    SUPERMARKETS("Supermercados y Tiendas", setOf("mass", "metro", "oxxo", "plaza vea", "tambo+", "tambo", "tottus", "wong", "listo!")),
+    TRANSPORT("Transporte y Viajes", setOf("cabify", "didi", "indrive", "latam", "lima expresa", "línea 1", "linea 1", "uber", "metropolitano", "rutas de lima")),
+    TELECOM("Telecomunicaciones", setOf("bitel", "claro", "entel", "movistar", "win")),
+    TECH("Productividad e IA", setOf("adobe", "canva", "chatgpt", "claude", "google ai pro", "google one", "icloud+", "microsoft 365", "notion", "perplexity")),
+    GAMING("Videojuegos", setOf("playstation", "steam", "xbox")),
+    UTILITIES("Servicios Básicos", setOf("cálidda", "calidda", "luz del sur", "pluz energía", "pluz energia", "sedapal")),
+    GAS("Estaciones de Servicio", setOf("petroperú", "petroperu", "primax", "repsol")),
+    HEALTH("Farmacias y Salud", setOf("inkafarma", "mifarma")),
+    EDUCATION("Educación", setOf("wikipedia"))
+}
 
 data class MerchantVisualProfile(
     val initials: String,
@@ -183,12 +201,27 @@ fun MerchantPicker(
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedCategoryId by remember { mutableStateOf<CategoryId?>(null) }
-    val availableCategoryIds = state.categoryFilters.mapTo(hashSetOf()) { it.categoryId }
-    val activeCategoryId = selectedCategoryId?.takeIf { it in availableCategoryIds }
-    val catalogToDisplay = if (state.query.isBlank()) state.catalogEntries else state.searchResults
-    val visibleMerchants = remember(catalogToDisplay, activeCategoryId) {
-        catalogToDisplay.filter { activeCategoryId == null || it.defaultCategoryId == activeCategoryId }
+    var selectedUiGroup by remember { mutableStateOf<UiMerchantGroup?>(null) }
+
+    val catalogToDisplay = remember(state.catalogEntries, state.searchResults, state.query) {
+        if (state.query.isBlank()) {
+            state.catalogEntries
+        } else {
+            val baseList = if (state.catalogEntries.isNotEmpty()) state.catalogEntries else state.searchResults
+            baseList.filter { CategoryRules.matchesNormalized(it.name, state.query) }
+        }
+    }
+    
+    // Una vez obtenida la lista de coincidencias correcta, aplicamos el filtro de taxonomía UI.
+    val visibleMerchants = remember(catalogToDisplay, selectedUiGroup) {
+        if (selectedUiGroup == null) {
+            catalogToDisplay
+        } else {
+            catalogToDisplay.filter { merchant ->
+                val normalizedName = merchant.name.lowercase().trim()
+                selectedUiGroup!!.merchants.any { normalizedName.contains(it) }
+            }
+        }
     }
 
     Column(
@@ -235,15 +268,15 @@ fun MerchantPicker(
                 .testTag("merchant_search_input"),
         )
 
-        // Chips de filtro
+        // Chips de filtro UI (Taxonomía Visual)
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
             item {
                 FilterChip(
-                    selected = activeCategoryId == null,
-                    onClick = { selectedCategoryId = null },
+                    selected = selectedUiGroup == null,
+                    onClick = { selectedUiGroup = null },
                     label = { Text("Todos", fontSize = 12.sp) },
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
@@ -253,13 +286,20 @@ fun MerchantPicker(
                     ),
                 )
             }
-            items(state.categoryFilters, key = { it.categoryId.value }) { category ->
+            // Mostrar solo los grupos de la taxonomía visual que tengan al menos 1 comercio coincidente en el catálogo total
+            val availableGroups = UiMerchantGroup.entries.filter { group -> 
+                state.catalogEntries.any { merchant -> 
+                    group.merchants.any { merchant.name.lowercase().trim().contains(it) } 
+                } 
+            }
+            
+            items(availableGroups, key = { it.name }) { group ->
                 FilterChip(
-                    selected = activeCategoryId == category.categoryId,
+                    selected = selectedUiGroup == group,
                     onClick = {
-                        selectedCategoryId = if (activeCategoryId == category.categoryId) null else category.categoryId
+                        selectedUiGroup = if (selectedUiGroup == group) null else group
                     },
-                    label = { Text(category.name, fontSize = 12.sp) },
+                    label = { Text(group.label, fontSize = 12.sp) },
                     shape = RoundedCornerShape(20.dp),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = MaterialTheme.colorScheme.primary,
@@ -326,6 +366,17 @@ fun SelectedMerchantCard(
 ) {
     val displayName = selectedMerchant?.name ?: provisionalText ?: ""
     val profile = getMerchantVisualProfile(displayName, selectedMerchant?.brandColor)
+    
+    val context = LocalContext.current
+    val drawableId = remember(selectedMerchant?.logoKey) {
+        selectedMerchant?.logoKey?.let { context.resources.getIdentifier(it, "drawable", context.packageName) } ?: 0
+    }
+    val remoteLogoUrl = remember(selectedMerchant?.priority, selectedMerchant?.logoKey) {
+        val supabaseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
+        selectedMerchant?.logoKey
+            ?.takeIf { selectedMerchant.priority != "A" && it.isNotBlank() && supabaseUrl.isNotBlank() }
+            ?.let { "$supabaseUrl/storage/v1/object/public/merchant-logos/${Uri.encode(it, "/")}" }
+    }
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -344,15 +395,36 @@ fun SelectedMerchantCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(profile.backgroundColor),
+                    .background(Color.White), // Fondo blanco cuando hay imagen
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = profile.initials,
-                    color = profile.foregroundColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+                when {
+                    drawableId != 0 -> Image(
+                        painter = painterResource(drawableId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(40.dp), // Ocupar todo el tamaño
+                    )
+                    remoteLogoUrl != null -> AsyncImage(
+                        model = remoteLogoUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(40.dp), // Ocupar todo el tamaño
+                    )
+                    else -> Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(profile.backgroundColor),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = profile.initials,
+                            color = profile.foregroundColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -422,28 +494,40 @@ fun MerchantResultItem(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(profile.backgroundColor),
+                    .background(Color.White), // Fondo blanco cuando hay imagen para resaltarla
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = profile.initials,
-                    color = profile.foregroundColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+                // FALLBACK VISUAL Y LOGOS:
+                // Si existe un logo válido (drawable local o remoto), SE MUESTRA SOLAMENTE LA IMAGEN que ocupa todo el contenedor (42dp).
+                // Si NO hay imagen (drawableId == 0 y remoteLogoUrl == null), SE MUESTRAN LAS INICIALES sobre su color de marca.
+                // Esto previene que se solape el texto de las iniciales por detrás de imágenes 
+                // con transparencias, logrando una interfaz limpia.
                 when {
                     drawableId != 0 -> Image(
                         painter = painterResource(drawableId),
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(42.dp),
                     )
                     remoteLogoUrl != null -> AsyncImage(
                         model = remoteLogoUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(42.dp),
                     )
+                    else -> Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(profile.backgroundColor),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = profile.initials,
+                            color = profile.foregroundColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                        )
+                    }
                 }
             }
 
