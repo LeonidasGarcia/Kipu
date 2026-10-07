@@ -187,6 +187,7 @@ fun MerchantPicker(
     var selectedCategoryId by remember { mutableStateOf<CategoryId?>(null) }
     val availableCategoryIds = state.categoryFilters.mapTo(hashSetOf()) { it.categoryId }
     val activeCategoryId = selectedCategoryId?.takeIf { it in availableCategoryIds }
+
     val catalogToDisplay = remember(state.catalogEntries, state.searchResults, state.query) {
         if (state.query.isBlank()) {
             state.catalogEntries
@@ -195,6 +196,8 @@ fun MerchantPicker(
             baseList.filter { CategoryRules.matchesNormalized(it.name, state.query) }
         }
     }
+    
+    // Una vez obtenida la lista de coincidencias correcta, aplicamos el filtro de categoría.
     val visibleMerchants = remember(catalogToDisplay, activeCategoryId) {
         catalogToDisplay.filter { activeCategoryId == null || it.defaultCategoryId == activeCategoryId }
     }
@@ -334,6 +337,17 @@ fun SelectedMerchantCard(
 ) {
     val displayName = selectedMerchant?.name ?: provisionalText ?: ""
     val profile = getMerchantVisualProfile(displayName, selectedMerchant?.brandColor)
+    
+    val context = LocalContext.current
+    val drawableId = remember(selectedMerchant?.logoKey) {
+        selectedMerchant?.logoKey?.let { context.resources.getIdentifier(it, "drawable", context.packageName) } ?: 0
+    }
+    val remoteLogoUrl = remember(selectedMerchant?.priority, selectedMerchant?.logoKey) {
+        val supabaseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
+        selectedMerchant?.logoKey
+            ?.takeIf { selectedMerchant.priority != "A" && it.isNotBlank() && supabaseUrl.isNotBlank() }
+            ?.let { "$supabaseUrl/storage/v1/object/public/merchant-logos/${Uri.encode(it, "/")}" }
+    }
 
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -352,15 +366,36 @@ fun SelectedMerchantCard(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(profile.backgroundColor),
+                    .background(Color.White), // Fondo blanco cuando hay imagen
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = profile.initials,
-                    color = profile.foregroundColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+                when {
+                    drawableId != 0 -> Image(
+                        painter = painterResource(drawableId),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(40.dp), // Ocupar todo el tamaño
+                    )
+                    remoteLogoUrl != null -> AsyncImage(
+                        model = remoteLogoUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.size(40.dp), // Ocupar todo el tamaño
+                    )
+                    else -> Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(profile.backgroundColor),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = profile.initials,
+                            color = profile.foregroundColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -430,28 +465,40 @@ fun MerchantResultItem(
                 modifier = Modifier
                     .size(42.dp)
                     .clip(CircleShape)
-                    .background(profile.backgroundColor),
+                    .background(Color.White), // Fondo blanco cuando hay imagen para resaltarla
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = profile.initials,
-                    color = profile.foregroundColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+                // FALLBACK VISUAL Y LOGOS:
+                // Si existe un logo válido (drawable local o remoto), SE MUESTRA SOLAMENTE LA IMAGEN que ocupa todo el contenedor (42dp).
+                // Si NO hay imagen (drawableId == 0 y remoteLogoUrl == null), SE MUESTRAN LAS INICIALES sobre su color de marca.
+                // Esto previene que se solape el texto de las iniciales por detrás de imágenes 
+                // con transparencias, logrando una interfaz limpia.
                 when {
                     drawableId != 0 -> Image(
                         painter = painterResource(drawableId),
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(42.dp),
                     )
                     remoteLogoUrl != null -> AsyncImage(
                         model = remoteLogoUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(42.dp),
                     )
+                    else -> Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .background(profile.backgroundColor),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = profile.initials,
+                            color = profile.foregroundColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                        )
+                    }
                 }
             }
 
