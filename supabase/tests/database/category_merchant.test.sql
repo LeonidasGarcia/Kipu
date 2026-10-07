@@ -43,11 +43,20 @@ SET LOCAL "request.jwt.claim.sub" = '11111111-1111-1111-1111-111111111111';
 
 SELECT lives_ok(
     $$
-    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active)
-    VALUES ('aaaaaaaa-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', NULL, 'Raíz', 'CUSTOM', true);
+    PERFORM public.create_category_v1(jsonb_build_object(
+        'category_id', 'aaaaaaaa-1111-1111-1111-000000000001',
+        'name', 'Raíz',
+        'icon', 'folder',
+        'color', '#112233'
+    ));
     
-    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active)
-    VALUES ('bbbbbbbb-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-1111-1111-1111-000000000001', 'Hija', 'CUSTOM', true);
+    PERFORM public.create_category_v1(jsonb_build_object(
+        'category_id', 'bbbbbbbb-1111-1111-1111-000000000001',
+        'parent_id', 'aaaaaaaa-1111-1111-1111-000000000001',
+        'name', 'Hija',
+        'icon', 'folder',
+        'color', '#112233'
+    ));
     $$,
     'Creating root and subcategory succeeds'
 );
@@ -55,8 +64,13 @@ SELECT lives_ok(
 -- Test 11: Third level hierarchy is rejected by trigger
 SELECT throws_ok(
     $$
-    INSERT INTO public.categories (id, user_id, parent_id, name, origin, is_active)
-    VALUES ('cccccccc-1111-1111-1111-000000000001', '11111111-1111-1111-1111-111111111111', 'bbbbbbbb-1111-1111-1111-000000000001', 'Nieta', 'CUSTOM', true);
+    PERFORM public.create_category_v1(jsonb_build_object(
+        'category_id', 'cccccccc-1111-1111-1111-000000000001',
+        'parent_id', 'bbbbbbbb-1111-1111-1111-000000000001',
+        'name', 'Nieta',
+        'icon', 'folder',
+        'color', '#112233'
+    ));
     $$,
     'P0001',
     NULL,

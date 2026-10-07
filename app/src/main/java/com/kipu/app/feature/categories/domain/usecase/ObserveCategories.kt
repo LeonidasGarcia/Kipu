@@ -21,6 +21,8 @@ data class CategoryItem(
 class ObserveCategories @Inject constructor(
     private val repository: CategoriesRepository,
 ) {
+    fun observePremiumVerified(userId: UserId): Flow<Boolean> = repository.observePremiumVerified(userId)
+
     operator fun invoke(userId: UserId): Flow<List<CategoryItem>> {
         return combine(
             repository.observeCategories(userId),

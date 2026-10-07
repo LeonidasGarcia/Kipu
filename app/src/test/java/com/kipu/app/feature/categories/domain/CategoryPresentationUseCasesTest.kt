@@ -73,6 +73,19 @@ class CategoryPresentationUseCasesTest {
     @Test
     fun `updateCategoryPresentation succeeds when revision matches`() = runTest {
         val catId = CategoryId.generate()
+        categoryDao.insertCategory(
+            com.kipu.app.feature.categories.data.local.CategoryEntity(
+                id = catId.value,
+                userId = testUserId.value,
+                parentId = null,
+                origin = "CUSTOM",
+                isActive = true,
+                remoteRevision = 1L,
+                categoryType = "EXPENSE",
+                createdAt = 1000L,
+                updatedAt = 1000L,
+            )
+        )
         val initialPres = CategoryPresentationEntity(
             categoryId = catId.value,
             userId = testUserId.value,
@@ -122,6 +135,19 @@ class CategoryPresentationUseCasesTest {
     @Test
     fun `updateCategoryPresentation records conflict when revision does not match`() = runTest {
         val catId = CategoryId.generate()
+        categoryDao.insertCategory(
+            com.kipu.app.feature.categories.data.local.CategoryEntity(
+                id = catId.value,
+                userId = testUserId.value,
+                parentId = null,
+                origin = "CUSTOM",
+                isActive = true,
+                remoteRevision = 2L,
+                categoryType = "EXPENSE",
+                createdAt = 1000L,
+                updatedAt = 2000L,
+            )
+        )
         val currentRemotePres = CategoryPresentationEntity(
             categoryId = catId.value,
             userId = testUserId.value,

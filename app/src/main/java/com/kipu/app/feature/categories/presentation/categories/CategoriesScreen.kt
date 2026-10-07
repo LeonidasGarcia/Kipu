@@ -86,11 +86,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kipu.app.feature.categories.domain.CategoryRules
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.presentation.parseHexColor
 import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
 import com.kipu.app.ui.theme.KipuMotionTokens
+import com.kipu.app.ui.theme.KipuUiColors
 import com.kipu.app.ui.theme.rememberKipuColors
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -408,12 +410,13 @@ fun CategoriesScreen(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 // Quota Card
-                if (state.activeCustomRootsCount > 0 || state.isFreeLimitReached) {
+                if (!state.isPremiumVerified && (state.activeCustomRootsCount > 0 || state.isFreeLimitReachedFor(state.selectedTab.categoryType))) {
                     QuotaBanner(
-                        activeCount = state.activeCustomRootsCount,
+                        expenseCount = state.activeCustomExpenseRootsCount,
+                        incomeCount = state.activeCustomIncomeRootsCount,
                         maxCount = state.maxCustomRoots,
-                        isLimitReached = state.isFreeLimitReached,
-                        onOpenQuotaSelection = if (state.activeCustomRootsCount > state.maxCustomRoots) {
+                        isLimitReached = state.isFreeLimitReachedFor(state.selectedTab.categoryType),
+                        onOpenQuotaSelection = if (state.activeCustomExpenseRootsCount > state.maxCustomRoots || state.activeCustomIncomeRootsCount > state.maxCustomRoots) {
                             viewModel::openQuotaSelection
                         } else null,
                     )
@@ -520,7 +523,7 @@ fun CategoriesScreen(
             text = {
                 Column {
                     Text(
-                        text = "Elige hasta 5 categorías personalizadas en total. Las demás conservarán su historial y quedarán bloqueadas por el plan; su estado activo no cambia.",
+                        text = "Elige hasta 5 categorías de gasto y 5 de ingreso personalizadas. Las categorías generales consumen un cupo de cada tipo. Las demás conservarán su historial y quedarán bloqueadas por el plan; su estado activo no cambia.",
                         color = colors.inkSecondary,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -565,8 +568,13 @@ fun CategoriesScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    val draftQuota = CategoryRules.evaluateCustomRootQuota(
+                        categories = selectableRoots.map { it.category },
+                        selectedRootIds = state.quotaSelectionDraft,
+                        limitPerType = state.maxCustomRoots,
+                    )
                     Text(
-                        text = "${state.quotaSelectionDraft.size} / ${state.maxCustomRoots} seleccionadas",
+                        text = "Gastos: ${draftQuota.selectedCounts.expenseRoots}/${state.maxCustomRoots} • Ingresos: ${draftQuota.selectedCounts.incomeRoots}/${state.maxCustomRoots} (${draftQuota.selectedRootIds.size} seleccionadas)",
                         fontWeight = FontWeight.Bold,
                         color = colors.primaryText,
                     )
@@ -599,7 +607,7 @@ fun CategoriesScreen(
             },
             text = {
                 Text(
-                    text = "Has alcanzado el límite de 5 categorías personalizadas en tu plan gratuito. Conserva el historial y elige cuáles quieres seguir usando o inactiva una para crear otra.",
+                    text = "Has alcanzado el límite Free por tipo de categoría: 5 de gasto y 5 de ingreso. Las generales consumen un cupo de cada tipo. Conserva el historial y elige cuáles quieres seguir usando o inactiva una para crear otra.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.inkSecondary,
                 )
@@ -660,6 +668,25 @@ fun QuotaBanner(
     modifier: Modifier = Modifier,
     onOpenQuotaSelection: (() -> Unit)? = null,
 ) {
+    QuotaBanner(
+        expenseCount = activeCount,
+        incomeCount = 0,
+        maxCount = maxCount,
+        isLimitReached = isLimitReached,
+        modifier = modifier,
+        onOpenQuotaSelection = onOpenQuotaSelection,
+    )
+}
+
+@Composable
+fun QuotaBanner(
+    expenseCount: Int,
+    incomeCount: Int,
+    maxCount: Int,
+    isLimitReached: Boolean,
+    modifier: Modifier = Modifier,
+    onOpenQuotaSelection: (() -> Unit)? = null,
+) {
     val colors = rememberKipuColors()
 
     Card(
@@ -700,7 +727,7 @@ fun QuotaBanner(
                         color = colors.inkPrimary,
                     )
                     Text(
-                        text = "Activas en tu plan: $activeCount de $maxCount",
+                        text = "Gastos: $expenseCount/$maxCount • Ingresos: $incomeCount/$maxCount",
                         style = MaterialTheme.typography.bodySmall,
                         color = colors.inkSecondary,
                     )
@@ -709,7 +736,7 @@ fun QuotaBanner(
                 if (onOpenQuotaSelection != null) {
                     IconButton(
                         onClick = onOpenQuotaSelection,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
@@ -722,27 +749,9 @@ fun QuotaBanner(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 5-Segment Progress Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                val totalBars = maxOf(maxCount, 5)
-                for (i in 0 until totalBars) {
-                    val isFilled = i < activeCount
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(
-                                if (isFilled) colors.primary
-                                else if (colors.isDark) colors.surfaceVariant
-                                else Color(0xFFE2E8F0)
-                            ),
-                    )
-                }
-            }
+            CategoryQuotaProgressRow("Gastos", expenseCount, maxCount, colors)
+            Spacer(modifier = Modifier.height(8.dp))
+            CategoryQuotaProgressRow("Ingresos", incomeCount, maxCount, colors)
 
             if (isLimitReached) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -752,6 +761,30 @@ fun QuotaBanner(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CategoryQuotaProgressRow(label: String, count: Int, maxCount: Int, colors: KipuUiColors) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+        repeat(maxCount) { index ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        if (index < count) colors.primary
+                        else if (colors.isDark) colors.surfaceVariant
+                        else Color(0xFFE2E8F0)
+                    ),
+            )
         }
     }
 }
@@ -991,14 +1024,60 @@ fun CategoryRootCard(
                                 Spacer(modifier = Modifier.width(12.dp))
 
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = subItem.displayName,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = colors.inkPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = subItem.displayName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = colors.inkPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
+                                        )
+
+                                        // Subcategory 3-dots Menu aligned with label
+                                        Box {
+                                            IconButton(
+                                                onClick = { showSubMenu = true },
+                                                modifier = Modifier.size(36.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.MoreVert,
+                                                    contentDescription = "Editar ${subItem.displayName}",
+                                                    tint = colors.inkSecondary,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
+                                            DropdownMenu(
+                                                expanded = showSubMenu,
+                                                onDismissRequest = { showSubMenu = false },
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("Editar") },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = colors.inkPrimary)
+                                                    },
+                                                    onClick = {
+                                                        showSubMenu = false
+                                                        onEditSubcategory(subItem)
+                                                    },
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("Inactivar", color = MaterialTheme.colorScheme.error) },
+                                                    leadingIcon = {
+                                                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                                    },
+                                                    onClick = {
+                                                        showSubMenu = false
+                                                        onDeleteSubcategory(subItem)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
                                     if (!isRootActive) {
                                         Text(
                                             text = "Inactiva por categoría padre",
@@ -1012,46 +1091,6 @@ fun CategoryRootCard(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = colors.inkSecondary,
                                             fontSize = 11.sp,
-                                        )
-                                    }
-                                }
-
-                                // Subcategory 3-dots Menu
-                                Box {
-                                    IconButton(
-                                        onClick = { showSubMenu = true },
-                                        modifier = Modifier.size(48.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.MoreVert,
-                                            contentDescription = "Editar ${subItem.displayName}",
-                                            tint = colors.inkSecondary,
-                                            modifier = Modifier.size(18.dp),
-                                        )
-                                    }
-                                    DropdownMenu(
-                                        expanded = showSubMenu,
-                                        onDismissRequest = { showSubMenu = false },
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Editar") },
-                                            leadingIcon = {
-                                                Icon(Icons.Default.Edit, contentDescription = null, tint = colors.inkPrimary)
-                                            },
-                                            onClick = {
-                                                showSubMenu = false
-                                                onEditSubcategory(subItem)
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("Inactivar", color = MaterialTheme.colorScheme.error) },
-                                            leadingIcon = {
-                                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                            },
-                                            onClick = {
-                                                showSubMenu = false
-                                                onDeleteSubcategory(subItem)
-                                            },
                                         )
                                     }
                                 }

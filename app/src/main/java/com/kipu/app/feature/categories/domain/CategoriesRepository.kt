@@ -17,6 +17,7 @@ interface CategoriesRepository {
     suspend fun ensureInitialCatalog(userId: UserId): Result<Unit> =
         Result.failure(UnsupportedOperationException("Initial category catalog is unavailable"))
     fun observeCategories(userId: UserId): Flow<List<Category>>
+    fun observePremiumVerified(userId: UserId): Flow<Boolean> = flowOf(false)
     fun observeCategoryPresentations(userId: UserId): Flow<List<CategoryPresentation>>
     suspend fun getCategory(categoryId: CategoryId): Category?
     suspend fun createCategory(category: Category, presentation: CategoryPresentation): Result<Category>

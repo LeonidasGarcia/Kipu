@@ -341,10 +341,10 @@ class OfflineFirstCategoriesRepositoryTest {
     }
 
     @Test
-    fun `createCategory fails when five active custom roots across types are reached`() = runTest {
+    fun `createCategory fails when five active custom roots of a type are reached`() = runTest {
         sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
 
-        // Seed 5 active custom roots
+        // Seed 5 active custom roots for INCOME
         for (i in 1..5) {
             val root = CategoryEntity(
                 id = "root-$i",
@@ -352,7 +352,7 @@ class OfflineFirstCategoriesRepositoryTest {
                 parentId = null,
                 origin = "CUSTOM",
                 isActive = true,
-                categoryType = if (i <= 3) "EXPENSE" else "INCOME",
+                categoryType = "INCOME",
                 remoteRevision = 1L,
                 createdAt = 1000L,
                 updatedAt = 1000L,
@@ -371,7 +371,7 @@ class OfflineFirstCategoriesRepositoryTest {
         val presentation = CategoryPresentation(
             categoryId = category.id,
             ownerId = testUserId,
-            name = "Sexta Categoria",
+            name = "Sexta Categoria Income",
             icon = "tag",
             color = "#00FF00",
         )
@@ -379,6 +379,25 @@ class OfflineFirstCategoriesRepositoryTest {
         val result = repository.createCategory(category, presentation)
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.message?.contains("Free plan limit reached") == true)
+
+        // But creating an EXPENSE root is still allowed (5+5 quota isolation)
+        val expenseCat = Category(
+            id = CategoryId.generate(),
+            ownerId = testUserId,
+            parentId = null,
+            origin = CategoryOrigin.CUSTOM,
+            isActive = true,
+            categoryType = com.kipu.app.feature.categories.domain.model.CategoryType.EXPENSE,
+        )
+        val expensePresentation = CategoryPresentation(
+            categoryId = expenseCat.id,
+            ownerId = testUserId,
+            name = "Primera Categoria Expense",
+            icon = "tag",
+            color = "#00FF00",
+        )
+        val expenseResult = repository.createCategory(expenseCat, expensePresentation)
+        assertTrue(expenseResult.isSuccess)
     }
 
     @Test
@@ -474,10 +493,10 @@ class OfflineFirstCategoriesRepositoryTest {
     }
 
     @Test
-    fun `free category selection allows five roots total and rejects a sixth across types`() = runTest {
+    fun `free category selection allows five roots per type and rejects a sixth in a type`() = runTest {
         sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
-        val expenseIds = (1..3).map { CategoryId.generate() }
-        val incomeIds = (1..3).map { CategoryId.generate() }
+        val expenseIds = (1..6).map { CategoryId.generate() }
+        val incomeIds = (1..5).map { CategoryId.generate() }
 
         expenseIds.forEachIndexed { index, id ->
             categoryDao.insertCategory(
@@ -506,10 +525,13 @@ class OfflineFirstCategoriesRepositoryTest {
             )
         }
 
-        repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet() + incomeIds.take(2).toSet()).getOrThrow()
-        val overLimit = repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet() + incomeIds.toSet())
+        // 5 expense + 5 income succeeds (10 total roots across types)
+        val validSelection = expenseIds.take(5).toSet() + incomeIds.toSet()
+        repository.saveSelectedFreeCategoryRoots(testUserId, validSelection).getOrThrow()
+        assertEquals(10, quotaSelectionDao.getSelectedResourceIds(testUserId.value, "CUSTOM_CATEGORIES").size)
 
+        // Attempting 6 expense roots fails
+        val overLimit = repository.saveSelectedFreeCategoryRoots(testUserId, expenseIds.toSet() + incomeIds.take(2).toSet())
         assertTrue(overLimit.isFailure)
-        assertEquals(5, quotaSelectionDao.getSelectedResourceIds(testUserId.value, "CUSTOM_CATEGORIES").size)
     }
 }

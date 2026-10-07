@@ -398,7 +398,7 @@ Este addendum amplía EP-PLA para el Sprint 2 sin cambiar el alcance comercial d
 
 ### Invariantes de HU-57
 
-- Límites Free: 4 instrumentos computables, 5 raíces personalizadas, 2 deudas, 2 metas y 2 presupuestos activos.
+- Límites Free: 4 instrumentos computables, 5 raíces personalizadas de gastos y 5 raíces personalizadas de ingresos (raíces GENERAL consumen un cupo en ambos límites; subcategorías y categorías SYSTEM exentas), 2 deudas, 2 metas y 2 presupuestos activos.
 - Efectivo, cuenta virtual de metas y cuenta interna de pasivo de crédito no consumen un cupo de instrumento adicional.
 - Una selección es una **instantánea completa por usuario y grupo**. Cada revisión representa el estado local vigente y puede saltar revisiones intermedias coalescidas offline; el servidor solo acepta revisiones estrictamente mayores que la cabecera aceptada. Reintentar la misma identidad/payload devuelve el recibo previo; revisiones iguales o anteriores se reconcilian como `STALE`.
 - La aceptación, el downgrade y los conflictos nunca eliminan ni alteran movimientos, historial, categorías, instrumentos o saldos. Solo cambia qué recursos pueden usarse para nuevas operaciones bajo Free.

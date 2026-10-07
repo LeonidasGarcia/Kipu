@@ -7,9 +7,42 @@ import com.kipu.app.feature.categories.domain.model.CategoryType
 import java.text.Normalizer
 import java.util.Locale
 
+data class CategoryQuotaCounts(
+    val expenseRoots: Int = 0,
+    val incomeRoots: Int = 0,
+) {
+    fun with(type: CategoryType): CategoryQuotaCounts = when (type) {
+        CategoryType.EXPENSE -> copy(expenseRoots = expenseRoots + 1)
+        CategoryType.INCOME -> copy(incomeRoots = incomeRoots + 1)
+        CategoryType.GENERAL -> copy(expenseRoots = expenseRoots + 1, incomeRoots = incomeRoots + 1)
+    }
+
+    fun isWithin(limitPerType: Int): Boolean = expenseRoots <= limitPerType && incomeRoots <= limitPerType
+}
+
+data class CustomCategoryQuotaEvaluation(
+    val activeCounts: CategoryQuotaCounts,
+    val selectedCounts: CategoryQuotaCounts,
+    val selectedRootIds: Set<CategoryId>,
+    val usableSelectedRootIds: Set<CategoryId>,
+    val planLockedRootIds: Set<CategoryId>,
+    val limitPerType: Int,
+    val premiumVerified: Boolean,
+) {
+    val isOverLimit: Boolean
+        get() = !activeCounts.isWithin(limitPerType)
+
+    val selectedWithinLimit: Boolean
+        get() = selectedCounts.isWithin(limitPerType)
+
+    fun canAdd(type: CategoryType): Boolean = premiumVerified || activeCounts.with(type).isWithin(limitPerType)
+}
+
 object CategoryRules {
 
     const val MAX_FREE_ACTIVE_CUSTOM_ROOTS = 5
+    const val MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS = 5
+    const val MAX_FREE_ACTIVE_CUSTOM_INCOME_ROOTS = 5
 
     /**
      * Validates that adding or editing a category does not violate hierarchy constraints:
@@ -97,10 +130,108 @@ object CategoryRules {
     }
 
     /**
+     * Type-aware quota evaluation:
+     * - EXPENSE roots check expense quota (max 5).
+     * - INCOME roots check income quota (max 5).
+     * - GENERAL roots consume a slot in BOTH quotas (both must be < 5).
+     */
+    fun canActivateCustomRoot(
+        candidateType: CategoryType,
+        categories: List<Category>,
+        isPremium: Boolean,
+    ): Boolean {
+        return evaluateCustomRootQuota(
+            categories = categories,
+            selectedRootIds = emptySet(),
+            limitPerType = MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS,
+            premiumVerified = isPremium,
+        ).canAdd(candidateType)
+    }
+
+    /**
+     * Evaluates creation, active counts, saved selections and plan locks from the same typed
+     * set of active custom roots. GENERAL roots contribute to both axes; descendants and
+     * SYSTEM roots never enter either count.
+     */
+    fun evaluateCustomRootQuota(
+        categories: Collection<Category>,
+        selectedRootIds: Set<CategoryId>,
+        limitPerType: Int = MAX_FREE_ACTIVE_CUSTOM_EXPENSE_ROOTS,
+        premiumVerified: Boolean = false,
+    ): CustomCategoryQuotaEvaluation {
+        require(limitPerType >= 0) { "Category root quota must not be negative" }
+        val activeRoots = categories.filter(::isActiveCustomRoot)
+        val activeIds = activeRoots.mapTo(mutableSetOf()) { it.id }
+        val selectedIds = selectedRootIds intersect activeIds
+        val selectedRoots = activeRoots.filter { it.id in selectedIds }
+        val activeCounts = countRootTypes(activeRoots)
+        val selectedCounts = countRootTypes(selectedRoots)
+        val usableSelectedIds = selectedRoots.sortedBy { it.id.value }.fold(mutableSetOf<CategoryId>()) { usable, root ->
+            val currentCounts = countRootTypes(activeRoots.filter { it.id in usable })
+            if (currentCounts.with(root.categoryType).isWithin(limitPerType)) usable.add(root.id)
+            usable
+        }
+        val lockedIds = if (premiumVerified || activeCounts.isWithin(limitPerType)) {
+            emptySet()
+        } else {
+            activeRoots.asSequence()
+                .filter { root -> root.id !in usableSelectedIds && contributesToExceededAxis(root.categoryType, activeCounts, limitPerType) }
+                .mapTo(mutableSetOf()) { it.id }
+        }
+        return CustomCategoryQuotaEvaluation(
+            activeCounts = activeCounts,
+            selectedCounts = selectedCounts,
+            selectedRootIds = selectedIds,
+            usableSelectedRootIds = usableSelectedIds,
+            planLockedRootIds = lockedIds,
+            limitPerType = limitPerType,
+            premiumVerified = premiumVerified,
+        )
+    }
+
+    private fun isActiveCustomRoot(category: Category): Boolean =
+        category.isRoot && category.isCustom && category.isActive
+
+    private fun countRootTypes(roots: Collection<Category>): CategoryQuotaCounts = CategoryQuotaCounts(
+        expenseRoots = roots.count { it.categoryType == CategoryType.EXPENSE || it.categoryType == CategoryType.GENERAL },
+        incomeRoots = roots.count { it.categoryType == CategoryType.INCOME || it.categoryType == CategoryType.GENERAL },
+    )
+
+    private fun contributesToExceededAxis(
+        type: CategoryType,
+        counts: CategoryQuotaCounts,
+        limitPerType: Int,
+    ): Boolean = when (type) {
+        CategoryType.EXPENSE -> counts.expenseRoots > limitPerType
+        CategoryType.INCOME -> counts.incomeRoots > limitPerType
+        CategoryType.GENERAL -> counts.expenseRoots > limitPerType || counts.incomeRoots > limitPerType
+    }
+
+    /**
      * Counts active custom roots from a list of categories.
      */
     fun countActiveCustomRoots(categories: List<Category>): Int {
         return categories.count { it.origin == CategoryOrigin.CUSTOM && it.isRoot && it.isActive }
+    }
+
+    /**
+     * Counts active custom roots that consume EXPENSE quota (EXPENSE + GENERAL).
+     */
+    fun countActiveCustomExpenseRoots(categories: List<Category>): Int {
+        return categories.count {
+            it.origin == CategoryOrigin.CUSTOM && it.isRoot && it.isActive &&
+                (it.categoryType == CategoryType.EXPENSE || it.categoryType == CategoryType.GENERAL)
+        }
+    }
+
+    /**
+     * Counts active custom roots that consume INCOME quota (INCOME + GENERAL).
+     */
+    fun countActiveCustomIncomeRoots(categories: List<Category>): Int {
+        return categories.count {
+            it.origin == CategoryOrigin.CUSTOM && it.isRoot && it.isActive &&
+                (it.categoryType == CategoryType.INCOME || it.categoryType == CategoryType.GENERAL)
+        }
     }
 
     /**

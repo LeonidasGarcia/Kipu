@@ -24,7 +24,7 @@ class MerchantPickerTest {
     @Test
     fun displaysCatalogSearchResults() {
         val entry1 = MerchantCatalogEntry(MerchantId("m1"), "Tambo+", "tambo+")
-        val entry2 = MerchantCatalogEntry(MerchantId("m2"), "Supermercados Metro", "supermercados metro")
+        val entry2 = MerchantCatalogEntry(MerchantId("m2"), "LATAM Airlines", "latam airlines")
 
         var selectedEntry: MerchantCatalogEntry? = null
 
@@ -43,7 +43,7 @@ class MerchantPickerTest {
 
         composeTestRule.onNodeWithText("Resultados del catálogo:").assertIsDisplayed()
         composeTestRule.onNodeWithText("Tambo+").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Supermercados Metro").assertIsDisplayed()
+        composeTestRule.onNodeWithText("LATAM Airlines").assertIsDisplayed()
 
         composeTestRule.onNodeWithText("Tambo+").performClick()
         assertEquals(entry1, selectedEntry)
