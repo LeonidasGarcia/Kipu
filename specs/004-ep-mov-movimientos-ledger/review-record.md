@@ -225,3 +225,7 @@ Dispositivo 23129RA5FL, Android 15/API 35. La prueba compacta usa configuración
 [Comparación visual y reproducción](validation/ui/issue-19/README.md): fixtures sintéticos, temas claro/oscuro, calendario y configuración compacta. «Antes» incluye las correcciones visuales previamente aceptadas y precede a errores/selectores; no se presenta como captura de `main`. Las capturas personales permanecen locales. La instrumentación verifica presentación con estado `Allowed` explícito, no compras reales, backend ni rendimiento de consultas.
 
 Firmas públicas, modelos, Saver, validaciones de dominio, `MovementAppliedFilters.kt`, pantalla, ViewModel, repositorios, DAOs y componentes globales permanecen sin modificaciones de este issue. T115–T117 completan el alcance autorizado de implementación/validación; entrega en T118. T110 y gates ajenos de Sprint 4 conservan su estado anterior.
+
+### Entrega
+
+Commit de implementación `2887831`, rama `feat/movimientos-filtros-ux` subida y [PR #30](https://github.com/LeonidasGarcia/Kipu/pull/30) abierto para revisión con `Closes #19` y comparación visual. T118 completada. No se realizó merge ni cierre manual del issue. El resultado final se instaló en `com.kipu.app.preview`: `adb install -r` **Success** y `am start -W` **Status: ok**. Las capturas de antes/después claro/oscuro finalizaron correctamente contra la APK conservada y la final, respectivamente.
