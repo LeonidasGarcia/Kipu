@@ -43,6 +43,31 @@ class CardStylePresetsTest {
         assertEquals("bcp-visa-latam-gold", CardStylePresets.forProduct("BCP", "Visa Oro LATAM Pass")?.id)
     }
 
+    @Test
+    fun `official catalog names select the explicit Amex presets`() {
+        assertEquals(
+            "bcp-amex-latam-gold",
+            CardStylePresets.forProduct("BCP", "American Express Oro LATAM Pass", "AMEX")?.id,
+        )
+        assertEquals(
+            "interbank-amex-gold",
+            CardStylePresets.forProduct("INTERBANK", "American Express Gold", "AMEX")?.id,
+        )
+    }
+
+    @Test
+    fun `official mappings keep Sapphire and Iridium distinct and reject partial names`() {
+        assertEquals(
+            "bcp-visa-latam-sapphire",
+            CardStylePresets.forProduct("BCP", "Visa Infinite Sapphire LATAM Pass", "VISA")?.id,
+        )
+        assertEquals(
+            "bcp-visa-latam-iridium",
+            CardStylePresets.forProduct("BCP", "Visa Infinite Iridium LATAM Pass", "VISA")?.id,
+        )
+        assertNull(CardStylePresets.forProduct("BCP", "Visa Infinite", "VISA"))
+    }
+
     private fun contrastRatio(foreground: androidx.compose.ui.graphics.Color, background: androidx.compose.ui.graphics.Color): Double {
         val foregroundLuminance = luminance(foreground.red, foreground.green, foreground.blue)
         val backgroundLuminance = luminance(background.red, background.green, background.blue)

@@ -33,8 +33,12 @@ Room es la autoridad visible inmediata; PostgreSQL es la autoridad remota reconc
 **Propagated**: 2026-10-06 — Updated from the #21 contextual-rate refinement in spec.md.
 
 - Validacion PR #23: las equivalencias entre preset y catalogo son una lista explicita; estados de tarjeta y catalogo son excluyentes, el reintento limpia el error y el borrador de TEA se conserva por tarjeta.
+- Seguimiento #25: `OfficialCreditProductMappings` es el unico puente de nombres oficiales para el selector y la consulta. La recuperacion de una tarjeta sin preset exige alias, emisor y red exactos; no persiste una inferencia por banco/red ni modifica snapshot, ledger o calculos.
+- Cierre de revision #25: la referencia compara tambien el emisor almacenado de la tarjeta con el producto, aun si existe preset. `RateCatalogPersistenceTest` valida registro y relectura al reabrir Room, PEN/USD, dato no publicado y TEA por tarjeta; la respuesta de catalogo y la sesion son fixtures de prueba, no una consulta remota real.
 
 **Propagated**: 2026-10-06 - Updated from the #21 PR #23 validation in spec.md.
+
+**Propagated**: 2026-10-06 - Updated from the #25 official-product identity refinement in spec.md.
 
 ## Technical Context
 
