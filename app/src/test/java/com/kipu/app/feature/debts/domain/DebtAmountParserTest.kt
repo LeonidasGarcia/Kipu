@@ -20,4 +20,14 @@ class DebtAmountParserTest {
         assertNull(DebtAmountParser.toMinorUnits("999999999999999999999999"))
         assertNull(DebtAmountParser.toMinorUnits("1,234.56"))
     }
+
+    @Test
+    fun acceptsZeroForOptionalInterestWithoutAllowingItAsPrincipal() {
+        assertEquals(0L, DebtAmountParser.toNonNegativeMinorUnits("0"))
+        assertEquals(0L, DebtAmountParser.toNonNegativeMinorUnits("0,00"))
+        assertEquals(125L, DebtAmountParser.toNonNegativeMinorUnits("1,25"))
+        assertNull(DebtAmountParser.toNonNegativeMinorUnits("-1"))
+        assertNull(DebtAmountParser.toNonNegativeMinorUnits("1.001"))
+        assertNull(DebtAmountParser.toMinorUnits("0"))
+    }
 }
