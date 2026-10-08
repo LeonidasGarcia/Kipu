@@ -10,6 +10,9 @@ import com.kipu.app.feature.debts.data.sync.DebtSyncScheduler
 import com.kipu.app.feature.debts.domain.DebtCommandHasher
 import com.kipu.app.feature.debts.domain.model.DebtCommandIdentity
 import com.kipu.app.feature.debts.domain.model.DebtCommandResult
+import com.kipu.app.feature.debts.domain.model.DebtDeleteResult
+import com.kipu.app.feature.debts.domain.model.DebtDescriptionPatch
+import com.kipu.app.feature.debts.domain.model.DebtDetailsEditResult
 import com.kipu.app.feature.debts.domain.model.DebtEventType
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
@@ -92,6 +95,50 @@ class PayableDebtRepositoryTest {
         assertEquals(4_900L, visible.remainingPrincipalMinor)
         assertEquals(2L, scalarLong("SELECT COUNT(*) FROM debt_events"))
         assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox"))
+    }
+
+    @Test
+    fun descriptiveEditChangesOnlyLabelsAndQueuesAnIdempotentRevision() = runBlocking {
+        repository.openDebt("owner", command(), hasPremiumAccess = false)
+        val originalEvents = scalarLong("SELECT COUNT(*) FROM debt_events")
+        val identity = DebtCommandIdentity(
+            "84000000-0000-4000-8000-000000000010",
+            DebtCommandHasher.sha256("edit:$DEBT_ID:Banco actualizado:2026-11-01:nota"),
+        )
+
+        val result = repository.editDebtDetails(
+            userId = "owner",
+            debtId = DEBT_ID,
+            patch = DebtDescriptionPatch(" Banco   actualizado ", LocalDate.parse("2026-11-01"), " nota ", 1L),
+            identity = identity,
+        )
+
+        assertTrue(result is DebtDetailsEditResult.Applied)
+        val updated = repository.observeDebts("owner").first().single()
+        assertEquals("Banco actualizado", updated.counterpartyName)
+        assertEquals(5_000L, updated.principalMinor)
+        assertEquals(5_000L, updated.remainingPrincipalMinor)
+        assertEquals("2026-11-01", updated.dueDate.toString())
+        assertEquals("nota", updated.notes)
+        assertEquals(originalEvents, scalarLong("SELECT COUNT(*) FROM debt_events"))
+        assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox WHERE command_type='EDIT_DEBT_DETAILS'"))
+    }
+
+    @Test
+    fun historicalOpeningWithoutFinancialHistoryCanBeRemovedLocallyAndQueued() = runBlocking {
+        repository.openDebt("owner", command(), hasPremiumAccess = false)
+        val identity = DebtCommandIdentity(
+            "84000000-0000-4000-8000-000000000011",
+            DebtCommandHasher.sha256("delete:$DEBT_ID"),
+        )
+
+        val result = repository.deleteDebtIfUnreferenced("owner", DEBT_ID, identity)
+
+        assertEquals(DebtDeleteResult.Deleted(DEBT_ID), result)
+        assertEquals(null, repository.observeDebt("owner", DEBT_ID).first())
+        assertEquals(0L, scalarLong("SELECT COUNT(*) FROM debts WHERE id='$DEBT_ID'"))
+        assertEquals(0L, scalarLong("SELECT COUNT(*) FROM debt_events WHERE debt_id='$DEBT_ID'"))
+        assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox WHERE command_type='DELETE_DEBT_IF_UNREFERENCED'"))
     }
 
     private fun command() = OpenDebtCommand(

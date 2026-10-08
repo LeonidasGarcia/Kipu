@@ -73,6 +73,27 @@ class PayableDebtFlowTest {
         assertEquals(0, deletes)
     }
 
+    @Test
+    fun debtWithoutFinancialHistoryRequiresConfirmationBeforeDeletion() {
+        var deletes = 0
+        compose.setContent {
+            DebtDetailScreen(
+                debt = debtSummary(),
+                hasFinancialHistory = false,
+                onNavigateBack = {},
+                onEdit = {},
+                onDelete = { deletes++ },
+            )
+        }
+
+        compose.onNodeWithText("Eliminar deuda").performClick()
+        compose.onNodeWithText("¿Eliminar esta deuda?").assertIsDisplayed()
+        assertEquals(0, deletes)
+        compose.onNodeWithTag("confirm-delete-debt").performClick()
+
+        assertEquals(1, deletes)
+    }
+
     private fun debtSummary() = DebtSummary(
         debtId = "86000000-0000-4000-8000-000000000001",
         userId = "owner",
