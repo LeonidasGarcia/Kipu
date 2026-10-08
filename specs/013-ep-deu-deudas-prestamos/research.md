@@ -1,7 +1,9 @@
 # EP-DEU Sprint 5 — Research
 
-**Fecha de corte**: 2026-10-08  
-**Alcance**: HU-26 a HU-29; 29 puntos  
+**Fecha de corte**: 2026-10-08
+
+**Alcance**: HU-26 a HU-29; 29 puntos
+
 **Método**: lectura del repositorio y documentos de producto, más consultas de catálogo de solo lectura a Supabase. No se modificaron datos remotos ni se ejecutaron pruebas.
 
 ## Fuentes de producto

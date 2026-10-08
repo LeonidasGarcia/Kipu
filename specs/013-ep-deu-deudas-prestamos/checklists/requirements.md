@@ -1,7 +1,9 @@
 # Specification Quality Checklist: EP-DEU — Deudas y Préstamos (Sprint 5)
 
-**Purpose**: Validate specification completeness and quality before planning  
-**Created**: 2026-10-08  
+**Purpose**: Validate specification completeness and quality before planning
+
+**Created**: 2026-10-08
+
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
