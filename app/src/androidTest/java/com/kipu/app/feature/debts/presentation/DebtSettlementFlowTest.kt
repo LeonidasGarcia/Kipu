@@ -1,0 +1,133 @@
+package com.kipu.app.feature.debts.presentation
+
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
+import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
+import com.kipu.app.feature.debts.domain.model.DebtObligationType
+import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
+import com.kipu.app.feature.debts.domain.model.DebtSummary
+import java.time.LocalDate
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+
+class DebtSettlementFlowTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    @Test
+    fun payableSheetKeepsPrincipalAndInterestSeparateWhenSubmitting() {
+        val state = mutableStateOf(
+            DebtSettlementUiState(
+                principalAmount = "30.00",
+                interestAmount = "1.25",
+                selectedAccountId = ACCOUNT_ID,
+                selectedInterestCategoryId = CATEGORY_ID,
+                availableAccounts = listOf(DebtAccountOption(ACCOUNT_ID, "Ahorros", "PEN")),
+                availableInterestCategories = listOf(DebtCategoryOption(CATEGORY_ID, "Intereses")),
+            ),
+        )
+        var submitted = false
+        compose.setContent {
+            DebtSettlementSheet(
+                debt = debt(DebtObligationType.PAYABLE),
+                state = state.value,
+                onPrincipalAmountChange = { state.value = state.value.copy(principalAmount = it) },
+                onInterestAmountChange = { state.value = state.value.copy(interestAmount = it) },
+                onAccountSelected = { state.value = state.value.copy(selectedAccountId = it) },
+                onInterestCategorySelected = { state.value = state.value.copy(selectedInterestCategoryId = it) },
+                onSave = { submitted = true },
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithText("El principal reduce el saldo; el interés se registra por separado.").assertIsDisplayed()
+        compose.onNodeWithTag("settlement-principal").performTextReplacement("35.00")
+        compose.onNodeWithTag("settlement-interest").performTextReplacement("2.50")
+        compose.onNodeWithTag("settlement-save").performClick()
+
+        assertEquals("35.00", state.value.principalAmount)
+        assertEquals("2.50", state.value.interestAmount)
+        assertEquals(true, submitted)
+    }
+
+    @Test
+    fun principalAboveRemainingShowsErrorAndBlocksSubmission() {
+        compose.setContent {
+            DebtSettlementSheet(
+                debt = debt(DebtObligationType.PAYABLE),
+                state = DebtSettlementUiState(
+                    principalAmount = "81.00",
+                    interestAmount = "0",
+                    selectedAccountId = ACCOUNT_ID,
+                    availableAccounts = listOf(DebtAccountOption(ACCOUNT_ID, "Ahorros", "PEN")),
+                ),
+                onPrincipalAmountChange = {},
+                onInterestAmountChange = {},
+                onAccountSelected = {},
+                onInterestCategorySelected = {},
+                onSave = {},
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithText("El principal supera el saldo pendiente.").assertIsDisplayed()
+        compose.onNodeWithTag("settlement-save").assertIsNotEnabled()
+    }
+
+    @Test
+    fun staleCommandConflictIsShownWithoutAllowingResubmission() {
+        compose.setContent {
+            DebtSettlementSheet(
+                debt = debt(DebtObligationType.RECEIVABLE),
+                state = DebtSettlementUiState(
+                    principalAmount = "10.00",
+                    interestAmount = "0",
+                    selectedAccountId = ACCOUNT_ID,
+                    availableAccounts = listOf(DebtAccountOption(ACCOUNT_ID, "Ahorros", "PEN")),
+                    conflictMessage = "La deuda cambió en otro dispositivo. Actualizamos el saldo pendiente.",
+                ),
+                onPrincipalAmountChange = {},
+                onInterestAmountChange = {},
+                onAccountSelected = {},
+                onInterestCategorySelected = {},
+                onSave = {},
+                onDismiss = {},
+            )
+        }
+
+        compose.onNodeWithText("La deuda cambió en otro dispositivo. Actualizamos el saldo pendiente.").assertIsDisplayed()
+        compose.onNodeWithTag("settlement-save").assertIsNotEnabled()
+    }
+
+    private fun debt(type: DebtObligationType) = DebtSummary(
+        debtId = DEBT_ID,
+        userId = OWNER_ID,
+        obligationType = type,
+        counterpartyName = "Proveedor",
+        principalMinor = 10_000L,
+        remainingPrincipalMinor = 8_000L,
+        currencyCode = "PEN",
+        openedOn = LocalDate.parse("2026-10-01"),
+        dueDate = null,
+        reminderLeadDays = null,
+        notes = null,
+        status = DebtLifecycleStatus.ACTIVE,
+        syncState = "SYNCED",
+        revision = 2L,
+        openingMode = DebtOpeningMode.HISTORICAL,
+    )
+
+    private companion object {
+        const val OWNER_ID = "88000000-0000-4000-8000-000000000001"
+        const val DEBT_ID = "88000000-0000-4000-8000-000000000002"
+        const val ACCOUNT_ID = "88000000-0000-4000-8000-000000000003"
+        const val CATEGORY_ID = "88000000-0000-4000-8000-000000000004"
+    }
+}
