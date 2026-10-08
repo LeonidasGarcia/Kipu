@@ -209,3 +209,43 @@ La sesión de implementación no dispone de evidencia de IDs aprobados, cuenta l
 ## S4 UI/UX approved research — 2026-10-03
 
 User approved the broadened UI/UX Pro Max and Compose Animations plan. Recommendations prioritize readable minimal finance surfaces, explicit filter application/recovery, privacy and semantic state labels. Sources: existing Stitch design system; Obsidian Mind `work/active/kipu/Procesos/15-consultar-y-filtrar-historial.md`, `work/active/kipu/Procesos/14-corregir-o-anular-movimiento.md`, and HU-58/HU-59 in the product backlog. Motion uses existing shared tokens/reduced-motion adapter. No new financial operation, undo of VOIDED, remote deployment or database migration is introduced.
+
+## Sprint 5 research — HU-55 (2026-10-08)
+
+### R-020 — RTDN delivery and authentication
+
+**Decision**: Use a Google Cloud Pub/Sub authenticated push subscription to deliver RTDN to a dedicated receiver. Validate the Google-signed OIDC bearer JWT, configured issuer, service-account email, audience and expiration before parsing the message envelope. Decode one base64 `data` message, validate the application package and notification type, and treat the provider token as request-scoped secret data. The receiver is not authorized by a Supabase user JWT.
+
+**Rationale**: Google Play RTDN publishes through Cloud Pub/Sub; authenticated push carries a signed JWT in the `Authorization` header. Google Cloud instructs subscribers to validate token integrity and configured email/audience claims. This gives the S5 service a publisher identity independent of an end-user session.
+
+**Alternatives considered**: An unauthenticated public webhook is rejected because RTDN can trigger billing mutations. A Supabase user JWT cannot identify Google Pub/Sub and is not an appropriate publisher credential. A Cloud Run proxy remains a deployment fallback if the chosen Edge Function runtime cannot validate Google OIDC tokens safely; no proxy is assumed in the acceptance contract.
+
+**Sources**: [Google Cloud — Authentication for push subscriptions](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions); [Google Play — Real-time developer notifications reference](https://developer.android.com/google/play/billing/rtdn-reference).
+
+### R-021 — Periodic scheduling
+
+**Decision**: Use Supabase Cron (`pg_cron`) to invoke a server-only Edge Function through `pg_net`; keep the invocation credential in Supabase Vault and validate a dedicated scheduler credential at the function boundary. The cadence remains an operational setting because HU-55 and P30 specify periodic processing without an interval or SLO.
+
+**Rationale**: Current Supabase documentation describes `pg_cron` plus `pg_net` for periodic Edge Function invocation and recommends Vault for invocation credentials. The remote migration/extension state still requires verification before deployment.
+
+**Alternatives considered**: A public, unauthenticated scheduler endpoint is rejected. A fixed one-minute schedule is not inferred because the backlog/process gives no cadence and no capacity or provider quota target.
+
+**Sources**: [Supabase — Scheduling Edge Functions](https://supabase.com/docs/guides/functions/schedule-functions); [Supabase — Cron](https://supabase.com/docs/guides/cron).
+
+### R-022 — Token lifecycle and lost-event recovery
+
+**Decision (user-approved 2026-10-08)**: Keep purchase tokens in memory only and permit provider re-query only while the current RTDN or authenticated device-restore request supplies the token. Persist only the existing SHA-256 token hash, stable event identity, sanitized provider metadata and lease/receipt state. A hash-only row remains `WAITING_FOR_TOKEN`/`RETRYABLE`; never declare it reverified, expired or absent, and do not grant, extend or revoke access by assumption. A later RTDN redelivery or restore token re-enters the shared verifier.
+
+**Rationale**: The existing billing model and migration persist `purchase_token_hash`, not the token. Google Play’s purchase-verification calls need the original token. The supplied live-state findings show `billing_purchases` and `internal.billing_events`, but no deployed RTDN processing. The user chose the privacy-preserving path: no encrypted token retention, and no entitlement change while a hash-only job waits for a current token. A hash cannot be reversed to call Google Play.
+
+**Alternatives considered**: Storing raw tokens in reconciliation jobs or sanitized event payloads is rejected. Guessing a purchase is absent from a hash-only record is also rejected because it could remove valid access. This decision is resolved; the remaining release gates are the live migration/function baseline and alignment of P30’s broader periodic-sweep wording.
+
+**Sources**: EP-PLA `data-model.md` and S3 migration `20260927003156_billing_purchase_verification_s3.sql`; `Procesos/30-restaurar-y-reconciliar-compras.md` §§4.3–4.4.
+
+### R-023 — Restore path and ownership
+
+**Decision**: Reuse the existing Android `restoreAndVerifyAccess()` flow and verify each Play-owned candidate through the authenticated `verify-purchase` service. Derive the Kipu owner from the live session; correlate server-side RTDN to an already-associated purchase hash. An unknown RTDN token cannot create or transfer a purchase owner without an authenticated user verification request.
+
+**Rationale**: S4.5 already provides explicit restore entry/result behavior, and S3’s verification path accepts an ephemeral candidate, binds it to the authenticated owner, and rejects a token already associated with another account. Reuse avoids a duplicate restore endpoint and keeps verification authority centralized.
+
+**Sources**: EP-PLA `BillingRepository.kt`, `PlayBillingGateway.kt`, `verify-purchase.openapi.yaml`, S3 `billing_purchases` model and P30 §§4.1, 4.5, 4.10.

@@ -1,5 +1,7 @@
 # Implementation Plan: EP-PLA - Planes, Límites y Monetización Freemium
 
+**Propagated**: 2026-10-08 — Added HU-55 S5 RTDN/restore/reconciliation scope and the approved ephemeral-token boundary; S1–S4.5 plan history remains intact.
+
 **Propagated**: 2026-10-02 — Added the approved S4 HU-58/HU-59 capability and signed offline lease design; preserved the S1/S2/S3 plan.
 
 **Propagated**: 2026-09-26 — Clarified the distinct meanings of Billing `PENDING`, verification `RETRYABLE`, and the HU-52 selection-sync outbox `PENDING`.
@@ -470,3 +472,60 @@ Apply Premium capabilities only from a validated effective entitlement and provi
 Provide explicit restore-and-verify through BillingPurchaseRepository, reusing authenticated verification and signed-cache persistence. This command returns completion rather than depending on offers or an unbounded event stream; it handles no recoverable purchase, pending, transient failure and timeout without manufacturing Premium. History tracks typed feedback, guards concurrent requests and current owner, and recomputes access after completion. Ver Premium continues to open existing offers.
 
 Render an access card with concise title/body/action and semantic informational/warning theme tokens. Announce meaningful state changes politely, keep minimum 48 dp targets and adaptive layout. AnimatedVisibility owns card lifecycle, AnimatedContent renders its lambda target, and reduced motion disables custom transitions. Commercial and monotonic authorization remain independent of presentation. Coordinate with EP-MOV T103–T109; T112/T113 retain their device/release gates and wait for the UI refinement evidence.
+
+## Sprint 5 Technical Approach — HU-55 (13 pts)
+
+### Goal and boundaries
+
+Implement HU-55’s three related paths: authenticated Google Play RTDN intake, explicit restore from a second installation under the same Kipu account, and scheduled reconciliation of purchases requiring a current provider check. RTDN is a trigger only; the existing Google Play verifier and HU-56 lifecycle rules remain authoritative. HU-54 and HU-56 are S3 blockers, not S5 reimplementation work. HU-06 (S9) and the complete HU-60 “Mi plan” experience (S10) remain outside S5; restoration reuses the existing explicit recovery entry point.
+
+No path creates a new purchase, transfers a purchase between Kipu accounts, persists a raw purchase token, or changes financial records when the effective plan changes.
+
+### Verified remote baseline and delivery gates
+
+The current live Supabase findings report `public.billing_purchases` and `internal.billing_events`, remote migration history only through 2026-09-30, and no live evidence that an RTDN receiver is processing messages. The local migration tree is newer than that remote history; local files do not prove deployment. Before applying any S5 migration or enabling the receiver, reconcile the exact live catalog, privileges, RLS, deployed Edge Functions, and extension/scheduler state against the migration sequence. Do not use broad `IF NOT EXISTS` to conceal schema drift.
+
+### Architecture decisions
+
+1. **RTDN ingress**: Receive Google Play notifications through an authenticated Google Cloud Pub/Sub push subscription. The receiver validates the Google-signed OIDC token, configured issuer, expected service-account identity, audience and expiry before decoding the single Pub/Sub message. It then validates the package and allowlisted notification type. This is a publisher-authenticated endpoint, not a Supabase user-JWT endpoint. Pub/Sub documents the signed JWT in the push `Authorization` header and requires the subscriber to validate signature and the configured email/audience claims ([Google Cloud authentication for push subscriptions](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions)); RTDN uses Cloud Pub/Sub and carries the provider purchase reference ([Google Play RTDN reference](https://developer.android.com/google/play/billing/rtdn-reference)).
+2. **One verification boundary**: Factor provider verification, normalization, owner enforcement, persistence and entitlement aggregation behind one server-only billing service shared by `verify-purchase`, RTDN and restore. An RTDN token remains in memory only for that request. Its hash may correlate to an existing `billing_purchases` owner; an unknown hash cannot create or select a Kipu owner because RTDN has no authenticated user session. It waits for an authenticated restore/verification path or is retried/terminally recorded without an entitlement change.
+3. **Event identity and transaction**: Persist a stable event-identity digest, provider-message identity, token hash, normalized type, receipt status and safe result in an internal receipt table. The raw token and unfiltered message are excluded. Apply a valid provider result, sanitized `internal.billing_events` entry, purchase projection and event receipt atomically per purchase. Duplicate receipts return the recorded result; an older event still invokes the provider check before projection changes.
+4. **Manual restore**: Reuse `BillingRepository.restoreAndVerifyAccess()` and `PlayBillingGateway.recoverPurchaseUpdates()` to obtain current Play-owned candidates, then send each purchased candidate through the existing authenticated `verify-purchase` contract. The JWT session remains the owner authority. No second purchase screen, full HU-60 route or new public restore endpoint is introduced. Pending items do not grant access; owner conflicts are not reassigned. If Play returns no candidate while the server has only a token hash, the result cannot be called a fresh provider verification; retain the known entitlement only within HU-56/HU-59 validity and return a retryable/pending state.
+5. **Scheduled reconciliation**: Use a Supabase Cron job to invoke a server-only reconciliation function with a dedicated secret held in Vault; `pg_cron` plus `pg_net` is the documented Edge Function scheduling pattern ([Supabase Scheduling Edge Functions](https://supabase.com/docs/guides/functions/schedule-functions)). A per-purchase lease prevents concurrent workers; failed provider/persistence calls use backoff. The cadence is an operational setting because HU-55/P30 specify “periodic” but no interval/SLO. A hash-only `billing_purchases` row cannot be queried at Google Play. The scheduler must not persist the raw token to make a future retry. It may recover expired leases and mark hash-only jobs `WAITING_FOR_TOKEN` or `RETRYABLE`, but it cannot call Play or alter entitlement without a token supplied to the current RTDN or restore execution.
+6. **Effective access and data preservation**: After current provider verification, aggregate all verified purchases using HU-56’s ACTIVE/grace/hold/canceled/expired/revoked and Lifetime rules. A temporary provider or persistence failure does not imply Free or extend access. A confirmed absence/non-entitling result applies Free only under the existing verified rules and never deletes or alters movements, balances or history. Successful verification continues through HU-59’s existing signed-grant issuer; RTDN or its event receipt does not mint Premium.
+7. **Least privilege and privacy**: Keep receipt and reconciliation tables in the unexposed `internal` schema, with RLS enabled/forced, no client DML, narrow server executor grants and append-only billing audit. Validate all object ownership in the privileged provider boundary; do not rely on `auth.uid()` for a Pub/Sub request and do not expose `service_role`, Pub/Sub credentials or grant-signing secrets to Android.
+
+### Approved token-source behavior
+
+The user approved keeping purchase tokens in memory only and permitting provider queries only when the current RTDN or authenticated device-restore execution supplies the token. A hash-only purchase is not a provider query input. Its job remains `WAITING_FOR_TOKEN` or `RETRYABLE`; the scheduler may recover a stale lease and classify the job but cannot query Play or mutate entitlement based on assumed absence. A previously verified expiry still applies, and waiting does not extend validity. A later RTDN redelivery or restore candidate re-enters the shared verifier with a fresh ephemeral token. The previous entitlement remains only within the already verified HU-56/HU-59 validity and is not renewed by waiting.
+
+P30 §4.3–4.4 describes a broader periodic provider re-query. The S5 artifacts record the approved no-token boundary; P30’s owning documentation context must align before claiming automatic recovery of a missed event without a new token. This is a documentation-alignment and live-deployment gate, not an unanswered product decision. Do not infer that a token can be reconstructed from its hash.
+
+### Delivery phases
+
+1. **External prerequisites**: Confirm the S3 HU-54 verifier and HU-56 state projection, then compare the deployed Supabase schema/function state with the live migration baseline. These are gates, not new HU-54/HU-56 scope.
+2. **Contracts and storage**: Define the Pub/Sub envelope, event identity/receipt, reconciliation job/lease and safe result states in `contracts/`, `data-model.md` and a versioned additive migration. No raw token column or client DML is permitted.
+3. **Provider service and event receiver**: Share the verified purchase service, add authenticated RTDN validation, correlate existing owners, deduplicate and atomically persist current provider outcomes. Unknown purchase ownership cannot be established by RTDN alone.
+4. **Restore integration**: Extend the existing restore path to process all current Play candidates, keep the active Kipu owner fixed throughout the request, aggregate the result and preserve explicit pending/retry/conflict outcomes.
+5. **Scheduled reconciliation**: Add per-purchase leases, bounded retry metadata and a scheduler that reclaims stale leases and classifies hash-only work as `WAITING_FOR_TOKEN`/`RETRYABLE`. Provider verification runs only inside a current RTDN or restore execution carrying the token; a scheduler with only a hash cannot treat a purchase as verified, expired or absent.
+6. **Acceptance and operations**: Verify authentication, duplicate/out-of-order delivery, owner isolation, failure handling, no raw-token exposure, migration/RLS behavior and real Play/Pub/Sub delivery in a non-production environment. Record remote deployment and provider limitations separately; do not enable production delivery without the live-baseline gate.
+
+### S5 scope-specific files
+
+| Area | Main artifacts |
+|---|---|
+| RTDN contract and event model | `specs/012-ep-pla-planes-monetizacion/contracts/rtdn-event-processing.md`, `data-model.md` |
+| Server receipt and shared verifier | `supabase/functions/play-rtdn/index.ts`, `supabase/functions/verify-purchase/index.ts`, `supabase/functions/_shared/billing-reconciliation.ts` |
+| Reconciliation queue and scheduler | `supabase/functions/reconcile-billing/index.ts`, versioned `supabase/migrations/` migration, Supabase Cron/Vault configuration |
+| Android restore and result handling | `app/src/main/java/com/kipu/app/feature/plans/data/billing/BillingRepository.kt`, `app/src/main/java/com/kipu/app/feature/plans/data/billing/PlayBillingGateway.kt`, billing result/presentation state and existing recovery action |
+| Evidence | `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md`, `validation/security-release-audit.md` |
+
+### S5 Definition of Done
+
+- HU-55 FR-059–FR-067 and SC-028–SC-034 trace to implementation tasks and have applicable server, Android, database and provider evidence.
+- RTDN authentication is verified against configured Google issuer, audience and service identity; invalid or unsupported messages cannot mutate billing state.
+- Duplicate and out-of-order messages converge on the current verified Play state with one logical receipt and no duplicate acknowledgement or entitlement.
+- Restore recovers a valid current Play candidate only for the same authenticated Kipu owner; verified absence and retryable/incomplete verification remain distinct.
+- No raw token or unfiltered RTDN payload appears in persistent storage, internal retry messages, logs, receipts, client responses or release artifacts.
+- The additive migration and live baseline are reviewed for RLS, grants, non-destructive behavior and remote/local drift before deployment.
+- SC-034 is satisfied by the approved no-token behavior: a hash-only job stays `WAITING_FOR_TOKEN`/`RETRYABLE` without a provider call or entitlement mutation; a later RTDN/restore token can resume verification. HU-55 production acceptance still requires the live migration/function/scheduler baseline gate and P30 documentation alignment.

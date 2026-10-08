@@ -457,3 +457,46 @@ Android generates an installation P-256 signing key in Android Keystore and send
 
 
 UI drafts use an owner-scoped Compose saved-state saver. Authorization decisions and signed leases are never restored from this saver; effective capabilities are reevaluated by the existing domain boundary.
+
+**Propagated**: 2026-10-08 — Added the S5 event receipt, reconciliation job, lease, and approved token-source lifecycle; S1–S4 model history remains intact.
+
+## Sprint 5 — HU-55 event receipts and reconciliation jobs
+
+These are conceptual additions for the S5 migration; the remote schema must be checked against the live baseline before implementation or deployment. They do not change the S3 purchase projection or the S4 signed entitlement cache.
+
+### `internal.billing_event_receipts`
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | UUID | Server-generated primary key. |
+| `event_identity_hash` | CHAR(64) | SHA-256 of the configured Pub/Sub subscription identity and stable Pub/Sub `messageId`; unique for redelivery deduplication. |
+| `provider_message_id` | TEXT | Stable Pub/Sub message identity; not a credential. |
+| `purchase_token_hash` | CHAR(64), nullable | SHA-256 of a request-scoped token when one is present; correlation only. |
+| `user_id` | UUID, nullable | Existing owner found by token hash; remains null until an authenticated verification establishes ownership. |
+| `notification_type` | TEXT, nullable | Allowlisted normalized RTDN type; never trusted as the current purchase state. |
+| `receipt_status` | TEXT | `WAITING_FOR_TOKEN`, `PROCESSING`, `RETRYABLE`, `COMPLETED`, or `REJECTED`. |
+| `safe_result_code` | TEXT, nullable | Normalized result/error code; never includes provider payload or token. |
+| `received_at`, `updated_at`, `completed_at` | TIMESTAMPTZ | Server-assigned lifecycle timestamps. |
+
+Only authenticated and structurally valid Pub/Sub messages enter the receipt flow. Authentication failures and malformed envelopes are rejected before billing mutations; security telemetry, if needed, contains only sanitized reason codes. No raw RTDN body, base64 message, purchase token, OIDC JWT, or service credential is stored. Terminal duplicate delivery returns the recorded result. A distinct older event still triggers a current provider query when the current delivery supplies a token.
+
+### `internal.billing_reconciliation_jobs`
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | UUID | Server-generated primary key. |
+| `purchase_token_hash` | CHAR(64) | Correlates one known purchase; never sufficient to query Google Play. |
+| `user_id` | UUID, nullable | Known owner, nullable until established by authenticated verification. |
+| `latest_event_receipt_id` | UUID, nullable | Most recent safe RTDN receipt associated with this purchase. |
+| `job_status` | TEXT | `WAITING_FOR_TOKEN`, `PROCESSING`, `RETRYABLE`, `COMPLETED`, or `REJECTED`. |
+| `attempt_count` | INTEGER | Non-negative count of processing attempts, excluding lease-only sweeps. |
+| `next_attempt_at` | TIMESTAMPTZ, nullable | Retry/readiness timestamp; it does not authorize a provider query without a current token. |
+| `lease_owner`, `lease_expires_at` | UUID/TIMESTAMPTZ, nullable | Exclusive short-lived worker lease for one purchase. |
+| `last_safe_error_code` | TEXT, nullable | Allowlisted normalized code with no token or raw provider data. |
+| `created_at`, `updated_at` | TIMESTAMPTZ | Server-assigned lifecycle timestamps. |
+
+`WAITING_FOR_TOKEN` means only a hash is available or no usable token arrived. `RETRYABLE` means a transient attempt failed and requires a fresh token delivered by RTDN or authenticated device restoration. `PROCESSING` is valid only while the request-scoped token remains in memory under an exclusive lease. `COMPLETED` is set after the current provider result, purchase projection, sanitized append-only `internal.billing_events` row, and receipt/job outcome commit atomically. `REJECTED` covers a permanent provider/ownership rejection and cannot reassign an existing purchase.
+
+A scheduled sweep may reclaim expired leases, classify stale jobs, and leave hash-only work waiting. It must never call Google Play, infer absence/expiry/revocation, issue or extend a grant, or clear a known entitlement from `purchase_token_hash` alone. A later RTDN redelivery or authenticated restore supplies a new ephemeral token and re-enters the shared verifier. The known entitlement remains usable only within its already verified HU-56/HU-59 validity; waiting does not renew it.
+
+Both tables belong in the unexposed `internal` schema, with RLS enabled and forced, no `anon`/`authenticated` table DML, narrow server-only execution grants, and constraints/indexes for stable event identity, one active job per token hash, and exclusive lease recovery. Migration must be additive and fail visibly on unexpected live schema drift; do not mask drift with broad `IF NOT EXISTS` guards.

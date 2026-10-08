@@ -12,6 +12,8 @@
 
 **Refined**: 2026-10-02 — Incorporación del alcance S4 de HU-58/HU-59: autorización de capacidades Premium y concesión offline firmada, ligada a usuario/instalación, limitada a 72 horas y a la vigencia comercial verificada; Free local continúa disponible al vencer.
 
+**Refined**: 2026-10-08 — Incorporación de HU-55 (13 pts) para S5 y aclaración aprobada: tokens efímeros solo desde RTDN/restauración; sin token, estado pendiente/reintentable y ninguna concesión o revocación por suposición; se conserva el historial S1–S4.5.
+
 **Refined**: 2026-09-15 — Adopción del design system Stitch "Kipu Andean Modernist" como única fuente de verdad visual de la Pantalla 1B; actualización de tokens de UI y lista de artefactos derivados; sin cambios funcionales (FR/RN/SC y user stories intactos).
 
 **Refined**: 2026-09-15 — Eliminación de las referencias residuales al sistema de diseño previo a Stitch; todas las referencias de diseño apuntan a `docs/stitch-design-system.md` (cleanup post-adopción del design system Stitch; sin cambios funcionales).
@@ -19,6 +21,12 @@
 **Refined**: 2026-09-16 — Fidelidad total a Pantalla 1B Stitch (Kipu V4 Finale): copy, componentes y layout 1B autorizados; Free informativo no seleccionable, Trial estático, Anual preseleccionado, CTA secundario, badges, sufijos de precio, nota info literal y footer fiscal; los invariantes de dominio permanecen intactos.
 
 **Input**: Especificar la HU-52 para que una persona recién registrada pueda continuar con Kipu Free o conocer voluntariamente la oferta Premium, sin cobros accidentales ni concesión de derechos Premium no verificados.
+
+## Clarifications
+
+### Session 2026-10-08
+
+- Q: ¿Qué debe hacer la reconciliación si el servidor solo conserva el hash del token y no recibió un token nuevo? → A: Mantener los tokens solo en memoria y reconsultar Google Play únicamente mientras una solicitud actual de RTDN o restauración del dispositivo aporta el token. Sin token, dejar el resultado pendiente/reintentable; no conceder ni revocar por suposición ni extender la vigencia. Un vencimiento ya confirmado por HU-56/HU-59 sigue aplicando.
 
 ## Control de la Épica
 
@@ -709,3 +717,91 @@ Como persona usuaria con Premium verificado, quiero seguir usando capacidades Pr
 - **FR-058**: Avisos anuncian cambios relevantes discretamente a TalkBack; feedback respeta tokens, texto ampliado, targets 48 dp y movimiento reducido. Ni animación ni error de transporte renuevan concesiones o retrasan la denegación.
 - **SC-026**: Restauración directa tiene resultados verificables para éxito autenticado, sin compras, compra pendiente, fallo y timeout; pulsaciones repetidas no duplican solicitudes.
 - **SC-027**: Pruebas y previews cubren estados del aviso, enmascaramiento y reducción de movimiento; la ejecución en dispositivo se registra aparte.
+
+## Sprint 5 Addendum: HU-55 — Reconciliación y restauración de compras (13 pts)
+
+Este addendum incorpora exclusivamente HU-55 para Sprint 5. Conserva como historial los alcances y decisiones de S1, S2, S3, S4 y S4.5; no reabre ni renumera sus requisitos.
+
+### Control del incremento S5
+
+| Historia | Puntos | Sprint | Dependencias y condición de cierre |
+| :--- | :---: | :---: | :--- |
+| HU-55 — Reconciliación y restauración de compras | 13 | S5 | HU-54 y HU-56 son bloqueantes y permanecen asignadas a S3. HU-06 (S9) y HU-60 (S10) son relacionadas; HU-55 habilita la futura HU-60. |
+
+### Alcance incluido y límites
+
+- Recibir notificaciones RTDN autenticadas como avisos de cambio, validar su sobre y tipo, y consultar Google Play para obtener el estado vigente antes de cambiar una compra o un derecho.
+- Deduplicar eventos y procesarlos de forma segura aunque lleguen repetidos, atrasados o fuera de orden.
+- Permitir restaurar compras recuperables desde otra instalación de la misma cuenta Kipu usando candidatos actuales de Google Play y la verificación existente de HU-54.
+- Programar la recuperación de leases vencidos y la clasificación de trabajos pendientes/reintentables. Una consulta a Play requiere que la ejecución actual reciba un token de RTDN o restauración; los trabajos con solo hash esperan esa entrada y no cambian derechos.
+- Conservar la proyección existente `public.billing_purchases` y el registro saneado append-only `internal.billing_events`; las nuevas identidades/recibos de eventos y trabajos internos no son escrituras del cliente.
+- Reutilizar la semántica de estados y entitlement efectiva de HU-54/HU-56. Una señal RTDN, un resultado local de Billing o una notificación por sí solos no conceden Premium.
+
+**Fuera de alcance de S5**:
+
+- Reimplementar compra/verificación de HU-54 o el ciclo de vida de HU-56; son bloqueantes ya asignados a S3.
+- Implementar autenticación HU-06 (S9) o la pantalla completa «Mi plan» de HU-60 (S10). La restauración se integra al punto de entrada explícito existente.
+- Comprar otra vez, cambiar el propietario de una compra, consumir Lifetime, persistir el token completo, cambiar movimientos o borrar datos al aplicar Free.
+
+### User Story Sprint 5 — HU-55: Recuperar y mantener derechos verificados (Priority: P1)
+
+Como persona usuaria de Kipu, quiero recuperar y mantener mis derechos de compra en mis dispositivos, para conservar el acceso verificado aunque cambie de teléfono.
+
+**Precondiciones**: La persona tiene una sesión Kipu válida; los flujos bloqueantes de verificación HU-54 y estados HU-56 están disponibles; el canal de entrega RTDN se autentica en el backend. La identidad propietaria siempre se deriva de la sesión Kipu autenticada, nunca de un campo editable.
+
+**Independent Test**: Con compras de prueba verificables, se puede confirmar la misma cuenta en una segunda instalación, restaurar un candidato actual de Play y demostrar que una notificación válida, duplicada, atrasada o no autenticada no concede, duplica ni reasigna derechos. Un trabajo con solo hash queda pendiente/reintentable; solo una entrada actual de RTDN o restauración aporta el token para verificar y cambiar el estado.
+
+**Criterios de aceptación**:
+
+1. **RTDN válido**: Dado que llega un aviso autenticado de una compra, cuando el aviso aporta un token y su hash se asocia a una compra existente, entonces el backend consulta Google Play con ese token efímero y actualiza desde la respuesta vigente. Si falta token o no se puede derivar un propietario existente, deja el trabajo `WAITING_FOR_TOKEN` sin mutar el entitlement.
+2. **Duplicado**: Dado que una identidad de evento ya tiene recibo terminal, cuando se entrega de nuevo, entonces se devuelve el resultado canónico y no se duplica compra, auditoría lógica, reconocimiento ni entitlement.
+3. **Desorden**: Dado que llega un aviso anterior después de uno más reciente, cuando se procesa, entonces se consulta el estado actual de Play y no se aplica el estado deducido del orden de llegada.
+4. **Restauración en otro dispositivo**: Dado que la persona inicia sesión con la misma cuenta Kipu y Play entrega un candidato recuperable, cuando solicita restaurar, entonces ese candidato se verifica sin iniciar una compra nueva ni cambiar de propietario.
+5. **Resultado incompleto**: Dado que Play o la persistencia no pueden verificarse temporalmente, cuando termina el intento, entonces se informa verificación pendiente/reintentable, se conserva el acceso previo conocido dentro de su vigencia y no se aplica Free por una falla temporal.
+6. **Ausencia confirmada**: Dado que una consulta actual de Google Play con un token recibido por RTDN o restauración confirma un resultado no entitling, cuando se deriva el resultado de la cuenta, entonces se aplica el estado de HU-56 correspondiente sin borrar ni alterar datos financieros. Un hash sin token o la ausencia de candidato en el dispositivo no bastan para declarar ausencia.
+7. **Emisor o payload inválido**: Dado que una notificación no autentica, está mal formada o no corresponde a un tipo permitido, cuando llega al receptor, entonces se rechaza antes de cambiar compras o derechos.
+8. **Conflicto de propietario**: Dado que un candidato ya pertenece a otra cuenta Kipu, cuando se restaura desde la sesión actual, entonces se rechaza la asociación y no se reasigna el propietario.
+9. **Evento perdido o token no disponible**: Dado que no llegó RTDN y el servidor solo conserva el hash del token, cuando corre la tarea periódica, entonces deja el trabajo `WAITING_FOR_TOKEN` o `RETRYABLE`, no consulta Play ni muta la compra/entitlement por ausencia supuesta; la vigencia previamente verificada sigue aplicando y la espera no la extiende. Si una solicitud posterior de RTDN o restauración aporta el token, se ejecuta la verificación vigente y el resultado converge de forma idempotente.
+
+### Reglas de negocio S5
+
+- RTDN avisa de un cambio; la respuesta actual de Google Play es la autoridad del estado.
+- Restaurar significa verificar una compra asociada a la cuenta Kipu autenticada; no crea una compra ni permite migrarla a otra cuenta.
+- Restauración, RTDN y reconciliación convergen en el mismo flujo de verificación, estado de compra, agregación de compras válidas y cálculo de entitlement efectivo.
+- Un evento duplicado se reconoce por identidad estable y devuelve su recibo. Un evento fuera de orden no revierte el estado vigente confirmado por Play.
+- Las fallas temporales son reintentables y no se interpretan como expiración, revocación o ausencia. `PENDING` continúa sin conceder Premium según HU-54.
+- El token de compra se mantiene efímero en la solicitud al proveedor: solo se conserva su hash para correlación, no el valor original en tablas, colas, recibos, auditorías, logs ni respuestas. La ejecución actual solo lo acepta desde RTDN o restauración autenticada del dispositivo.
+- La identidad de evento, el recibo y el lease son internos al backend, con acceso mínimo y sin DML del cliente; `internal.billing_events` sigue siendo append-only y solo guarda campos saneados. Un lease vencido puede recuperarse sin token, pero la verificación del proveedor espera un nuevo RTDN/restauración que lo aporte.
+- Un cambio de entitlement no elimina movimientos, saldos, historia ni datos financieros, y no altera la duración definida por HU-56/HU-59.
+
+### Requisitos funcionales S5
+
+- **FR-059**: El receptor de RTDN valida la autenticidad del push, su audiencia/emisor configurados, el sobre, el paquete de aplicación y el tipo de notificación antes de aceptar el evento. Una notificación inválida no cambia compras, recibos terminales ni entitlements.
+- **FR-060**: Una notificación aceptada que aporta un token correlacionable con una compra/propietario existente causa una consulta a Google Play mediante el verificador servidor de HU-54. Sin token o sin propietario correlacionable, el trabajo queda `WAITING_FOR_TOKEN` y no cambia la compra ni el entitlement. RTDN nunca es estado final ni autorización Premium.
+- **FR-061**: El backend conserva un recibo interno con identidad estable del evento y resultado canónico. La repetición no duplica efectos; un evento antiguo vuelve a consultar Play antes de actualizar la proyección.
+- **FR-062**: La restauración explícita requiere una sesión Kipu autenticada y candidatos vigentes que la aplicación recupera de Google Play. El backend deriva propietario del JWT, verifica cada candidato con el proveedor y devuelve resultados por compra y un resumen de la cuenta sin comprar de nuevo.
+- **FR-063**: Una restauración solo aplica Free cuando el proveedor confirma de forma completa que no existe una compra válida que conceda acceso. Timeout, indisponibilidad del proveedor, conflicto de persistencia o respuesta incompleta producen un resultado pendiente/reintentable y preservan el derecho previo conocido dentro de su vigencia.
+- **FR-064**: La reconciliación selecciona trabajos vencidos o pendientes bajo lease exclusivo por compra y usa backoff. Solo consulta Google Play mientras la ejecución actual recibe un token de RTDN o restauración. Un registro que solo tiene `purchase_token_hash` queda `WAITING_FOR_TOKEN` o `RETRYABLE`; el scheduler puede recuperar leases y clasificar trabajos, pero no consulta al proveedor ni muta el entitlement por ausencia supuesta. La expiración previamente verificada sigue aplicando y la espera no extiende la vigencia. La siguiente entrada con token converge de forma idempotente con el recibo de evento.
+- **FR-065**: La proyección y el entitlement se actualizan transaccionalmente desde la respuesta vigente del proveedor y el conjunto de compras verificadas de la cuenta, siguiendo los estados de HU-56; una falla revierte la actualización de esa compra y deja el trabajo reintentable.
+- **FR-066**: Tokens completos y payloads no saneados no se persisten ni aparecen en logs, recibos, auditoría o respuestas; tablas/funciones de billing y leases no dan escritura al cliente y preservan RLS/grants mínimos.
+- **FR-067**: La restauración nunca reasigna una compra entre cuentas y nunca elimina, reescribe ni excluye historia financiera al confirmar Kipu Free.
+
+### Criterios de éxito S5
+
+- **SC-028**: Un aviso no autenticado, con audiencia/emisor erróneos, paquete incorrecto o payload inválido termina sin cambio de compra ni entitlement.
+- **SC-029**: Repetir un evento produce el mismo resultado terminal y como máximo una actualización de compra, un evento lógico y una actualización de entitlement; un evento antiguo siempre usa el estado vigente consultado a Play.
+- **SC-030**: Un candidato válido restaurado desde otra instalación bajo la misma cuenta Kipu recupera el derecho verificado sin nueva compra; un token de otra cuenta se rechaza sin reasignación.
+- **SC-031**: Una respuesta completa sin compra entitling aplica Free sin borrar datos; una respuesta temporalmente incompleta conserva el acceso previo dentro de su vigencia y queda reintentable.
+- **SC-032**: Los trabajos que sí disponen de un token efímero exclusivo para la ejecución procesan una compra a la vez, recuperan leases vencidos y no duplican reconocimiento ni entitlement.
+- **SC-033**: Ningún token completo se encuentra en tablas persistentes, mensajes internos reintentables, recibos, payloads de auditoría, logs o respuestas; el cliente no realiza DML de billing.
+- **SC-034**: Para un evento perdido con solo `purchase_token_hash`, la tarea periódica deja el trabajo `WAITING_FOR_TOKEN` o `RETRYABLE` y no consulta Play ni muta el entitlement por ausencia supuesta; cualquier vencimiento ya verificado sigue aplicando. Cuando RTDN o restauración entrega un token actual, la verificación resultante puede completar el trabajo una sola vez. El token nunca se persiste.
+
+### Decisión confirmada: token efímero y espera segura
+
+Se aprobó mantener el token solo en memoria y limitar las consultas a Google Play a una ejecución actual que reciba el token por RTDN o restauración del dispositivo. El servidor conserva el hash solo para correlación. Si una compra conocida tiene únicamente `purchase_token_hash`, el trabajo queda `WAITING_FOR_TOKEN` o `RETRYABLE`; no se afirma que Play se consultó ni se concede o revoca acceso por suposición. Una concesión previamente verificada solo se conserva dentro de su vigencia ya confirmada por HU-56/HU-59: el vencimiento conocido sigue aplicando y el estado pendiente no renueva la vigencia. Una nueva entrega de RTDN o restauración reingresa el token efímero al verificador compartido.
+
+P30 §4.3–4.4 describe una reconsulta periódica más amplia. HU-55 aplica aquí el límite compatible con el modelo de token no persistente; el documento de proceso P30 debe alinearse en su contexto propietario antes de afirmar que un evento perdido sin token se recupera automáticamente. Este gate de alineación documental y el gate de base remota siguen siendo operativos; la decisión sobre el tratamiento sin token ya está cerrada.
+
+### Trazabilidad S5 y evidencia de base remota
+
+La definición funcional procede de HU-55 en `KipuApp/Kipu md/02_Kipu_V4.2_Product_Backlog.md` y P30 `KipuApp/Procesos/30-restaurar-y-reconciliar-compras.md`; el alcance de reconsulta de P30 se acota para S5 por la decisión aprobada de no persistir tokens y esperar una nueva entrada con token. Las tablas, privacidad del token y transacción de facturación se contrastan con `data-model.md` y la migración local S3. El estado remoto reportado el 2026-10-08 confirma `billing_purchases` e `internal.billing_events`, con historial de migraciones remoto solo hasta 2026-09-30 y sin evidencia de procesamiento RTDN en vivo. Esa evidencia no prueba que el receptor, scheduler, recibos o leases de S5 estén desplegados; cualquier activación requiere reconciliar primero el catálogo remoto con las migraciones requeridas.
