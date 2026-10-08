@@ -107,7 +107,7 @@ Both feature directories contain spec, plan, tasks, research, data-model and con
 
 ## Sprint 5 HU-55 RTDN, restore, and reconciliation — 2026-10-08
 
-**Readiness**: The isolated implementation and local automated checks are ready for review. Release acceptance remains **BLOCKED** on T118/T128 external baseline and documentation gates. No remote migration, Edge deployment, or Cron schedule was applied.
+**Readiness**: The isolated implementation and local automated checks are ready for review. Release acceptance remains **BLOCKED** on the missing live verifier endpoint (T118) and non-production/provider/scheduler acceptance (T128). No remote migration, Edge deployment, or Cron schedule was applied.
 
 ### Completed locally
 
@@ -121,7 +121,7 @@ Both feature directories contain spec, plan, tasks, research, data-model and con
 
 ### Remaining gates
 
-- **T118 / P30**: the approved token-retention clarification is captured in the feature artifacts, but P30 §4.3–4.4 is owned outside this workspace and was not available to update or cross-review. The read-only live baseline observed on 2026-10-08 has no S5 functions/migration and no `pg_cron`, `pg_net`, or Vault scheduling setup.
+- **T118 / P30**: P30 §4.3–4.4 and related flow rules were aligned in the owning `KipuApp` documentation working tree on 2026-10-08: complete tokens stay in request memory, hash-only jobs wait without a provider call or entitlement mutation, and waiting never extends the verified term. T118 remains open because the read-only remote catalog has `public.verify_play_purchase(jsonb)` and `public.v_feature_access`, but the Android verifier route `/functions/v1/verify-purchase/billing/verify` is not deployed: the only active Edge functions are `auth-access` and `plans`, and `plans` does not route that path. The last remote migration is `20260930035146`; no S5 migration/functions, `pg_cron`, `pg_net`, or billing/play scheduler secret were observed. `pg_cron`/`pg_net` are absent; Vault is installed but has no matching scheduling secret. No remote writes were made. The P30 working-tree change is outside this feature branch and remains uncommitted for its owning repository's review.
 - A full local migration replay is still blocked before S5 by the pre-existing `20260928110000_credit_card_pull_projection.sql` dependency on missing `public.recurrence_occurrences`. The S5 migration was not recorded in local migration history through `db reset`; the targeted database tests ran against the manually applied S5 schema.
-- No non-production Google Play/Pub/Sub delivery, remote migration, function deployment, Vault secret, or Cron execution was performed. The 15-minute Cron recipe is versioned in `supabase/operations/billing-reconciliation-cron.sql` but remains unapplied until the baseline and P30 gates are reviewed.
-- **T128 remains open** until the external integration, migration-history reconciliation, deployed scheduler evidence, and P30 alignment are complete. Historical T112/T113 release gates remain open as documented above.
+- No non-production Google Play/Pub/Sub delivery, remote migration, function deployment, Vault secret, or Cron execution was performed. The 15-minute Cron recipe is versioned in `supabase/operations/billing-reconciliation-cron.sql` but remains unapplied until the verifier endpoint and non-production target are available and reviewed.
+- **T128 remains open** until the external integration, migration-history reconciliation, and deployed function/scheduler evidence are complete. P30's no-token alignment is now present in its owning documentation working tree. Historical T112/T113 release gates remain open as documented above.

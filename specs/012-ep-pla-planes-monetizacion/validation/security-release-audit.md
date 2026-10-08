@@ -86,9 +86,10 @@ T094 source, local database, Edge boundary, and unsigned release APK review is c
 - `reconcile-billing` requires a dedicated scheduler secret with a minimum length, limits the batch size, returns generic failures, and only reclaims leases/classifies hash-only jobs. It imports no Google Play provider and makes no provider call or entitlement change.
 - Local checks passed: **35 Deno tests**, **61 pgTAP assertions**, and **452 Android JVM tests**. The database assertions include restore resume and owner-conflict behavior.
 
-### Not verified against external systems
+### Remote baseline and release gates
 
-- P30 §4.3–4.4 remains unaligned in its owning documentation repository; the approved no-token behavior is recorded here and in the feature contract pending that review.
-- The remote Supabase baseline observed on 2026-10-08 has not received the S5 migration or Edge functions, and scheduling extensions/secrets are not configured. No remote write or deployment was made.
+- P30 §4.3–4.4 and related flow rules were aligned in the owning `KipuApp` documentation working tree on 2026-10-08. The change specifies request-scoped in-memory tokens, hash-only waiting with no provider call or entitlement mutation, and no extension of the last verified term. It is outside this feature branch and remains uncommitted for review in its owning repository.
+- Read-only remote Supabase inspection on 2026-10-08 found the database verifier RPC `public.verify_play_purchase(jsonb)` and `public.v_feature_access` projection. The Android route `/functions/v1/verify-purchase/billing/verify` is not available remotely: only `auth-access` and `plans` Edge functions are active, and `plans` does not route that path. The database objects alone therefore do not establish an end-to-end usable HU-54 verifier for the current client.
+- The latest remote migration is `20260930035146`; no S5 migration, `play-rtdn`, or `reconcile-billing` function is deployed. `pg_cron` and `pg_net` are absent and `cron.job` is unavailable. Vault is installed, but no billing/play/reconciliation scheduler secret was found. No remote write or deployment was made.
 - The local full migration reset fails at the pre-existing missing `public.recurrence_occurrences` dependency. The S5 migration was manually applied only to the local Docker database for targeted pgTAP runs; its migration-history replay is not certified.
-- No real Google Play verification, Pub/Sub push, Vault read, Cron invocation, or deployed-function acceptance was performed. `T118` and `T128` therefore remain unchecked.
+- No non-production Google Play verification, Pub/Sub push, Vault read, Cron invocation, or deployed-function acceptance was performed. `T118` remains open until the live verifier route and deployment baseline are usable/reconciled; `T128` remains open until non-production integration and deployed function/scheduler evidence are available.
