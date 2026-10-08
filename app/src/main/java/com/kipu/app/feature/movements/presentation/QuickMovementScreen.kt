@@ -194,6 +194,10 @@ fun QuickMovementBottomSheet(
         )
     }
 
+    if (uiState.isSaving) {
+        SavingMovementDialog()
+    }
+
     if (showDatePicker) {
         val state = rememberDatePickerState(
             initialSelectedDateMillis = toUtcDateMillis(uiState.occurredAt),
@@ -1510,6 +1514,40 @@ fun DuplicateWarningDialog(
             }
         },
         modifier = modifier.testTag("dialog_duplicate_warning"),
+    )
+}
+
+@Composable
+internal fun SavingMovementDialog() {
+    val emeraldColors = rememberCalmEmeraldColors()
+    AlertDialog(
+        onDismissRequest = {},
+        icon = {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(28.dp)
+                    .semantics { contentDescription = "Guardando movimiento" },
+                color = emeraldColors.primaryDeep,
+                strokeWidth = 2.5.dp,
+            )
+        },
+        title = {
+            Text(
+                text = "Guardando movimiento",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                textAlign = TextAlign.Center,
+            )
+        },
+        text = {
+            Text(
+                text = "Estamos guardando el movimiento y preparando su sincronización.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = emeraldColors.secondaryMuted,
+            )
+        },
+        confirmButton = {},
+        containerColor = emeraldColors.surfaceCard,
+        modifier = Modifier.testTag("dialog_saving_movement"),
     )
 }
 

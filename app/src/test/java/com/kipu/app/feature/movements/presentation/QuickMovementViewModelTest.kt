@@ -47,13 +47,16 @@ import com.kipu.app.feature.movements.domain.model.TransactionItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -346,11 +349,51 @@ class QuickMovementViewModelTest {
         )
         val explicitlySelected = viewModel.uiState.value.availableCategories.first { it.id == testCategoryId.value }
         viewModel.onCategorySelected(explicitlySelected)
+        viewModel.onTypeSelected(MovementType.EXPENSE)
 
         viewModel.onMerchantSelected(merchant)
         advanceUntilIdle()
 
         assertEquals(explicitlySelected.id, viewModel.uiState.value.selectedCategoryId)
+    }
+
+    @Test
+    fun `saving waits for the merchant preference before using the category`() = runTest {
+        advanceUntilIdle()
+        val merchant = MerchantCatalogEntry(
+            MerchantId.generate(), "Tambo", "tambo", defaultCategoryId = testCategoryId,
+        )
+        fakeCategoriesRepo.merchantPreferences = listOf(
+            MerchantCategoryPreference(testUserId, merchant.id, fakeCategoriesRepo.preferenceCategoryId)
+        )
+        fakeCategoriesRepo.preferenceLookupDelayMillis = 100L
+
+        viewModel.onMerchantSelected(merchant)
+        viewModel.onAmountChanged("25.50")
+        viewModel.onSave()
+
+        assertTrue(viewModel.uiState.value.isSaving)
+        assertTrue(fakeMovementRepo.registeredCommands.isEmpty())
+        advanceTimeBy(50L)
+        assertTrue(fakeMovementRepo.registeredCommands.isEmpty())
+        advanceUntilIdle()
+
+        assertEquals(fakeCategoriesRepo.preferenceCategoryId.value, fakeMovementRepo.registeredCommands.single().categoryId)
+    }
+
+    @Test
+    fun `failed preference lookup does not save the general category`() = runTest {
+        advanceUntilIdle()
+        val merchant = MerchantCatalogEntry(
+            MerchantId.generate(), "Tambo", "tambo", defaultCategoryId = testCategoryId,
+        )
+        fakeCategoriesRepo.preferenceLookupFailure = IllegalStateException("local read failed")
+
+        viewModel.onMerchantSelected(merchant)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.selectedCategoryId)
+        assertEquals("No se pudo validar la preferencia del comercio.", viewModel.uiState.value.categoryError)
     }
 
     @Test
@@ -401,6 +444,8 @@ class QuickMovementViewModelTest {
     ) : CategoriesRepository {
         val preferenceCategoryId = CategoryId.generate()
         var merchantPreferences: List<MerchantCategoryPreference> = emptyList()
+        var preferenceLookupDelayMillis = 0L
+        var preferenceLookupFailure: Exception? = null
 
         private fun categories() = listOf(
             Category(categoryId, null, null, CategoryOrigin.SYSTEM, true, categoryType = CategoryType.EXPENSE),
@@ -426,8 +471,11 @@ class QuickMovementViewModelTest {
         override suspend fun setCategoryActive(categoryId: CategoryId, isActive: Boolean): Result<Unit> = Result.failure(UnsupportedOperationException())
         override suspend fun updateCategoryPresentation(presentation: CategoryPresentation, expectedRevision: Long): Result<Unit> = Result.failure(UnsupportedOperationException())
         override fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>> = flowOf(emptyList())
-        override fun observeMerchantCategoryPreferences(userId: UserId): Flow<List<MerchantCategoryPreference>> =
-            flowOf(merchantPreferences)
+        override fun observeMerchantCategoryPreferences(userId: UserId): Flow<List<MerchantCategoryPreference>> = flow {
+            if (preferenceLookupDelayMillis > 0) delay(preferenceLookupDelayMillis)
+            preferenceLookupFailure?.let { throw it }
+            emit(merchantPreferences)
+        }
         override fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?> = flowOf(null)
         override suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit> = Result.failure(UnsupportedOperationException())
         override suspend fun clearCategoryClassification(movementId: MovementId): Result<Unit> = Result.failure(UnsupportedOperationException())
