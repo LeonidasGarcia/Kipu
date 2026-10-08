@@ -37,14 +37,14 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 - [X] T004 [P] Add pure domain and movement-accounting tests for signed principal deltas, legacy PAYMENT compatibility, zero-balance derivation, voided linked transactions, principal exclusion, and real-interest inclusion in `app/src/test/java/com/kipu/app/feature/debts/domain/DebtPrincipalCalculatorTest.kt` and `app/src/test/java/com/kipu/app/feature/movements/domain/DebtMovementAccountingTest.kt`.
 - [X] T005 [P] Add Room v18-to-v19 upgrade and data-preservation coverage in `app/src/androidTest/java/com/kipu/app/core/database/DebtRoomMigrationTest.kt`.
 - [X] T006 [P] Add database contract tests for owner isolation across debt/account/installment/transaction references, SECURITY DEFINER ownership checks, command idempotency, and concurrent Free quota enforcement in `supabase/tests/database/debt_sprint5_security_and_idempotency_test.sql`.
-- [ ] T007 Create the additive debt lifecycle migration in `supabase/migrations/20261008120000_s5_debt_lifecycle.sql` only after T001 confirms a safe migration path; add opening/reminder/event-delta fields, update the debt summary and category constraint, and preserve existing IDs, history, RLS, grants, and valid balances.
-- [ ] T008 Add `DebtEntity`, `DebtInstallmentEntity`, `DebtEventEntity`, their DAOs, indexes, and the v18-to-v19 registration in `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt` and `app/src/main/java/com/kipu/app/core/database/RoomMigrations.kt`.
-- [ ] T009 Define shared debt command IDs, request hashes, revision checks, owner-safe results, retry/conflict errors, and the pure signed-delta principal projection in `app/src/main/java/com/kipu/app/feature/debts/domain/model/DebtCommandModels.kt`, `app/src/main/java/com/kipu/app/feature/debts/domain/DebtCommandHasher.kt`, and `app/src/main/java/com/kipu/app/feature/debts/domain/DebtPrincipalCalculator.kt`.
-- [ ] T010 Implement atomic Room debt/event/outbox/receipt persistence and local change projection in `app/src/main/java/com/kipu/app/feature/debts/data/local/DebtLocalDataSource.kt` and `app/src/main/java/com/kipu/app/feature/debts/data/local/DebtDao.kt`.
-- [ ] T011 Add debt DTOs, RPC calls, and paged debt change-feed application with explicit stale-revision conflicts in `app/src/main/java/com/kipu/app/feature/debts/data/remote/DebtApi.kt`, `app/src/main/java/com/kipu/app/feature/debts/data/remote/DebtDtos.kt`, and `app/src/main/java/com/kipu/app/feature/debts/data/sync/SyncDebtChangesWorker.kt`.
-- [ ] T012 Extend movement and budget calculations so debt principal changes account cash but never counts as operating income/expense or expense consumption, while a separately recorded real-interest movement does, in `app/src/main/java/com/kipu/app/feature/movements/domain/MovementNetFlowCalculator.kt` and `app/src/main/java/com/kipu/app/feature/movements/domain/ExpenseConsumptionCalculator.kt`.
-- [ ] T013 Implement the shared owner-checked, idempotent `OPEN_DEBT` command framework, combined quota lock, receipt handling, and change-feed publication in `supabase/migrations/20261008120000_s5_debt_lifecycle.sql`; leave the type-specific cash branches to US1 and US2.
-- [ ] T014 Add the common obligation list/detail query path, repository boundary, and Hilt bindings in `app/src/main/java/com/kipu/app/feature/debts/domain/DebtRepository.kt`, `app/src/main/java/com/kipu/app/feature/debts/data/OfflineFirstDebtRepository.kt`, and `app/src/main/java/com/kipu/app/feature/debts/di/DebtsModule.kt`.
+- [X] T007 Create the additive debt lifecycle migration in `supabase/migrations/20261008120000_s5_debt_lifecycle.sql` only after T001 confirms a safe migration path; add opening/reminder/event-delta fields, update the debt summary and category constraint, and preserve existing IDs, history, RLS, grants, and valid balances.
+- [X] T008 Add `DebtEntity`, `DebtInstallmentEntity`, `DebtEventEntity`, their DAOs, indexes, and the v18-to-v19 registration in `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt` and `app/src/main/java/com/kipu/app/core/database/RoomMigrations.kt`.
+- [X] T009 Define shared debt command IDs, request hashes, revision checks, owner-safe results, retry/conflict errors, and the pure signed-delta principal projection in `app/src/main/java/com/kipu/app/feature/debts/domain/model/DebtCommandModels.kt`, `app/src/main/java/com/kipu/app/feature/debts/domain/DebtCommandHasher.kt`, and `app/src/main/java/com/kipu/app/feature/debts/domain/DebtPrincipalCalculator.kt`.
+- [X] T010 Implement atomic Room debt/event/outbox/receipt persistence and local change projection in `app/src/main/java/com/kipu/app/feature/debts/data/local/DebtLocalDataSource.kt` and `app/src/main/java/com/kipu/app/feature/debts/data/local/DebtDao.kt`.
+- [X] T011 Add debt DTOs, RPC calls, and paged debt change-feed application with explicit stale-revision conflicts in `app/src/main/java/com/kipu/app/feature/debts/data/remote/DebtApi.kt`, `app/src/main/java/com/kipu/app/feature/debts/data/remote/DebtDtos.kt`, and `app/src/main/java/com/kipu/app/feature/debts/data/sync/SyncDebtChangesWorker.kt`.
+- [X] T012 Extend movement and budget calculations so debt principal changes account cash but never counts as operating income/expense or expense consumption, while a separately recorded real-interest movement does, in `app/src/main/java/com/kipu/app/feature/movements/domain/MovementNetFlowCalculator.kt` and `app/src/main/java/com/kipu/app/feature/movements/domain/ExpenseConsumptionCalculator.kt`.
+- [X] T013 Implement the shared owner-checked, idempotent `OPEN_DEBT` command framework, combined quota lock, receipt handling, and change-feed publication in `supabase/migrations/20261008120000_s5_debt_lifecycle.sql`; leave the type-specific cash branches to US1 and US2.
+- [X] T014 Add the common obligation list/detail query path, repository boundary, and Hilt bindings in `app/src/main/java/com/kipu/app/feature/debts/domain/DebtRepository.kt`, `app/src/main/java/com/kipu/app/feature/debts/data/OfflineFirstDebtRepository.kt`, and `app/src/main/java/com/kipu/app/feature/debts/di/DebtsModule.kt`.
 
 ---
 
@@ -58,15 +58,15 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 - [X] T015 [P] [US1] Add PAYABLE opening, historical opening, and descriptive-edit domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/OpenPayableDebtTest.kt`.
 - [X] T016 [P] [US1] Add server tests for PAYABLE cash/liability equality, no operating income, account ownership/currency validation, physical-delete guards, and combined Free quota in `supabase/tests/database/debt_payable_opening_test.sql`.
-- [ ] T017 [P] [US1] Add local-first repository tests for offline visibility, retry idempotency, and preservation of existing history in `app/src/androidTest/java/com/kipu/app/feature/debts/data/PayableDebtRepositoryTest.kt`.
-- [ ] T018 [P] [US1] Add Compose acceptance coverage for new/historical PAYABLE entry, descriptive edits, and blocked deletion when history exists in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/PayableDebtFlowTest.kt`.
+- [X] T017 [P] [US1] Add local-first repository tests for offline visibility, retry idempotency, and preservation of existing history in `app/src/androidTest/java/com/kipu/app/feature/debts/data/PayableDebtRepositoryTest.kt`.
+- [X] T018 [P] [US1] Add Compose acceptance coverage for new/historical PAYABLE entry, descriptive edits, and blocked deletion when history exists in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/PayableDebtFlowTest.kt`.
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Implement PAYABLE validation and new-versus-historical cash/liability behavior in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/OpenPayableDebt.kt` and the PAYABLE handler dispatched by `OPEN_DEBT` in `supabase/migrations/20261008130000_s5_open_payable_debt.sql`.
-- [ ] T020 [US1] Implement descriptive edits and conditional deletion that calls `DELETE_DEBT_IF_UNREFERENCED` and rejects any debt with financial history in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/EditDebtDetails.kt`, `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/DeleteDebtIfUnreferenced.kt`, and `supabase/migrations/20261008140000_s5_debt_history_guard.sql`.
-- [ ] T021 [US1] Connect PAYABLE form state to the repository without placing financial calculations in Compose in `app/src/main/java/com/kipu/app/feature/debts/presentation/PayableDebtViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/PayableDebtFormScreen.kt`.
-- [ ] T022 [US1] Render PAYABLE balance, opening basis, and non-destructive lifecycle actions from repository projections in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtListScreen.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtDetailScreen.kt`.
+- [X] T019 [US1] Implement PAYABLE validation and new-versus-historical cash/liability behavior in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/OpenPayableDebt.kt` and the PAYABLE handler dispatched by `OPEN_DEBT` in `supabase/migrations/20261008130000_s5_open_payable_debt.sql`.
+- [X] T020 [US1] Implement descriptive edits and conditional deletion that calls `DELETE_DEBT_IF_UNREFERENCED` and rejects any debt with financial history in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/EditDebtDetails.kt`, `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/DeleteDebtIfUnreferenced.kt`, and `supabase/migrations/20261008140000_s5_debt_history_guard.sql`.
+- [X] T021 [US1] Connect PAYABLE form state to the repository without placing financial calculations in Compose in `app/src/main/java/com/kipu/app/feature/debts/presentation/PayableDebtViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/PayableDebtFormScreen.kt`.
+- [X] T022 [US1] Render PAYABLE balance, opening basis, and non-destructive lifecycle actions from repository projections in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtListScreen.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtDetailScreen.kt`.
 
 **Checkpoint**: New and historical PAYABLE openings must have correct cash/liability effects; edits and quota failures must leave financial history unchanged.
 
@@ -80,16 +80,16 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 ### Tests for User Story 2
 
-- [ ] T023 [P] [US2] Add RECEIVABLE opening and historical-opening domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/OpenReceivableDebtTest.kt`.
-- [ ] T024 [P] [US2] Add server tests for cash-to-receivable movement, no operating expense, invalid account rejection, and historical basis in `supabase/tests/database/debt_receivable_opening_test.sql`.
-- [ ] T025 [P] [US2] Add local-first repository retry and offline collection-balance preservation tests in `app/src/androidTest/java/com/kipu/app/feature/debts/data/ReceivableDebtRepositoryTest.kt`.
-- [ ] T026 [P] [US2] Add Compose acceptance coverage for account selection, currency validation, and new/historical RECEIVABLE entry in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/ReceivableDebtFlowTest.kt`.
+- [X] T023 [P] [US2] Add RECEIVABLE opening and historical-opening domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/OpenReceivableDebtTest.kt`.
+- [X] T024 [P] [US2] Add server tests for cash-to-receivable movement, no operating expense, invalid account rejection, and historical basis in `supabase/tests/database/debt_receivable_opening_test.sql`.
+- [X] T025 [P] [US2] Add local-first repository retry and offline collection-balance preservation tests in `app/src/androidTest/java/com/kipu/app/feature/debts/data/ReceivableDebtRepositoryTest.kt`.
+- [X] T026 [P] [US2] Add Compose acceptance coverage for account selection, currency validation, and new/historical RECEIVABLE entry in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/ReceivableDebtFlowTest.kt`.
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Implement RECEIVABLE opening validation, same-currency source-account requirements, and the historical/new cash handler dispatched by `OPEN_DEBT` in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/OpenReceivableDebt.kt` and `supabase/migrations/20261008135000_s5_open_receivable_debt.sql`.
-- [ ] T028 [US2] Render RECEIVABLE cash direction, historical-opening basis, account selection, and currency errors in `app/src/main/java/com/kipu/app/feature/debts/presentation/ReceivableDebtViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/ReceivableDebtFormScreen.kt`.
-- [ ] T029 [US2] Define the debt list, detail, and opening destinations for both obligation types in `app/src/main/java/com/kipu/app/navigation/DebtsNavigation.kt`.
+- [X] T027 [US2] Implement RECEIVABLE opening validation, same-currency source-account requirements, and the historical/new cash handler dispatched by `OPEN_DEBT` in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/OpenReceivableDebt.kt` and `supabase/migrations/20261008135000_s5_open_receivable_debt.sql`.
+- [X] T028 [US2] Render RECEIVABLE cash direction, historical-opening basis, account selection, and currency errors in `app/src/main/java/com/kipu/app/feature/debts/presentation/ReceivableDebtViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/ReceivableDebtFormScreen.kt`.
+- [X] T029 [US2] Define the debt list, detail, and opening destinations for both obligation types in `app/src/main/java/com/kipu/app/navigation/DebtsNavigation.kt`.
 
 **Checkpoint**: New RECEIVABLE openings reduce cash and increase receivables equally; historical openings do not move cash; neither creates operating expense.
 
@@ -103,19 +103,19 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Add principal/interest direction, over-settlement, stale revision, and grouped void domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/SettleDebtTest.kt`.
-- [ ] T031 [P] [US3] Add RPC tests for atomic principal plus interest, owner/account/category/installment checks, idempotent retries, overpayment rejection, and void/revision recomputation in `supabase/tests/database/debt_settlement_test.sql`.
-- [ ] T032 [P] [US3] Add repository/outbox integration tests proving a retried settlement creates one event, one principal movement, and at most one interest movement in `app/src/androidTest/java/com/kipu/app/feature/debts/data/DebtSettlementSyncTest.kt`.
-- [ ] T033 [P] [US3] Add regression tests showing principal is absent from operating totals and budget consumption while real interest is included in `app/src/test/java/com/kipu/app/feature/movements/domain/DebtMovementAccountingTest.kt`.
-- [ ] T034 [P] [US3] Add Compose acceptance coverage for principal/interest entry, overpayment errors, and stale-command conflict display in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/DebtSettlementFlowTest.kt`.
+- [X] T030 [P] [US3] Add principal/interest direction, over-settlement, stale revision, and grouped void domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/SettleDebtTest.kt`.
+- [X] T031 [P] [US3] Add RPC tests for atomic principal plus interest, owner/account/category/installment checks, idempotent retries, overpayment rejection, and void/revision recomputation in `supabase/tests/database/debt_settlement_test.sql`.
+- [X] T032 [P] [US3] Add repository/outbox integration tests proving a retried settlement creates one event, one principal movement, and at most one interest movement in `app/src/androidTest/java/com/kipu/app/feature/debts/data/DebtSettlementSyncTest.kt`.
+- [X] T033 [P] [US3] Add regression tests showing principal is absent from operating totals and budget consumption while real interest is included in `app/src/test/java/com/kipu/app/feature/movements/domain/DebtMovementAccountingTest.kt`.
+- [X] T034 [P] [US3] Add Compose acceptance coverage for principal/interest entry, overpayment errors, and stale-command conflict display in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/DebtSettlementFlowTest.kt`.
 
 ### Implementation for User Story 3
 
-- [ ] T035 [US3] Implement principal and interest validation, current-balance checks, and direction-aware settlement planning in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/SettleDebt.kt`.
-- [ ] T036 [US3] Implement server-side `SETTLE_DEBT` as one idempotent transaction for debt event, principal movement, optional categorized interest movement, ledger, installment allocation, receipt, and sync feed in `supabase/migrations/20261008150000_s5_settle_debt.sql`.
-- [ ] T037 [US3] Extend server and movement correction/void handling to invalidate the linked principal and interest pair together and recalculate debt, installment, and lifecycle projections in `supabase/migrations/20261008150000_s5_settle_debt.sql`, `app/src/main/java/com/kipu/app/feature/debts/data/OfflineFirstDebtRepository.kt`, and `app/src/main/java/com/kipu/app/feature/movements/domain/VoidTransaction.kt`.
-- [ ] T038 [US3] Implement settlement entry and server conflict/retry states in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtSettlementViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtSettlementSheet.kt`.
-- [ ] T039 [US3] Show separate principal and interest amounts and their distinct operating effects in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtDetailScreen.kt`.
+- [X] T035 [US3] Implement principal and interest validation, current-balance checks, and direction-aware settlement planning in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/SettleDebt.kt`.
+- [X] T036 [US3] Implement server-side `SETTLE_DEBT` as one idempotent transaction for debt event, principal movement, optional categorized interest movement, ledger, installment allocation, receipt, and sync feed in `supabase/migrations/20261008150000_s5_settle_debt.sql`.
+- [X] T037 [US3] Extend server and movement correction/void handling to invalidate the linked principal and interest pair together and recalculate debt, installment, and lifecycle projections in `supabase/migrations/20261008150000_s5_settle_debt.sql`, `app/src/main/java/com/kipu/app/feature/debts/data/OfflineFirstDebtRepository.kt`, and `app/src/main/java/com/kipu/app/feature/movements/domain/VoidTransaction.kt`.
+- [X] T038 [US3] Implement settlement entry and server conflict/retry states in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtSettlementViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtSettlementSheet.kt`.
+- [X] T039 [US3] Show separate principal and interest amounts and their distinct operating effects in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtDetailScreen.kt`.
 
 **Checkpoint**: Principal-only operations never affect operating income/expense; interest is counted once; retries and grouped voids preserve a coherent ledger and derived debt state.
 
@@ -129,19 +129,19 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 ### Tests for User Story 4
 
-- [ ] T040 [P] [US4] Add installment splitting/remainder and no-financial-effect domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/DebtScheduleTest.kt`.
-- [ ] T041 [P] [US4] Add server tests for schedule sum, installment ownership, auditable closure, active-quota release, cancellation, and reopening after void in `supabase/tests/database/debt_schedule_and_closure_test.sql`.
-- [ ] T042 [P] [US4] Add unique-work scheduling, replacement/cancellation, retry deduplication, and notification-permission behavior tests in `app/src/androidTest/java/com/kipu/app/feature/debts/data/DebtReminderSchedulerTest.kt`.
-- [ ] T043 [P] [US4] Add Compose/device acceptance coverage distinguishing planned installments from completed payments and verifying debt reminder destination in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/DebtScheduleAndClosureFlowTest.kt`.
+- [X] T040 [P] [US4] Add installment splitting/remainder and no-financial-effect domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/DebtScheduleTest.kt`.
+- [X] T041 [P] [US4] Add server tests for schedule sum, installment ownership, auditable closure, active-quota release, cancellation, and reopening after void in `supabase/tests/database/debt_schedule_and_closure_test.sql`.
+- [X] T042 [P] [US4] Add unique-work scheduling, replacement/cancellation, retry deduplication, and notification-permission behavior tests in `app/src/androidTest/java/com/kipu/app/feature/debts/data/DebtReminderSchedulerTest.kt`.
+- [X] T043 [P] [US4] Add Compose/device acceptance coverage distinguishing planned installments from completed payments and verifying debt reminder destination in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/DebtScheduleAndClosureFlowTest.kt`.
 
 ### Implementation for User Story 4
 
-- [ ] T044 [US4] Implement exact-sum installment creation, revision validation, and server schedule replacement without ledger effects in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/SetDebtSchedule.kt` and `supabase/migrations/20261008160000_s5_debt_schedule.sql`.
-- [ ] T045 [US4] Implement idempotent debt-specific reminder scheduling and cancellation using stable debt/installment/due-date identity in `app/src/main/java/com/kipu/app/feature/debts/data/sync/DebtReminderScheduler.kt` and `app/src/main/java/com/kipu/app/feature/debts/data/sync/DebtReminderWorker.kt`.
-- [ ] T046 [US4] Implement `CLOSE_DEBT` SETTLE/CANCEL/ADJUST/FORGIVE validation, history retention, and active-count transitions in `supabase/migrations/20261008170000_s5_debt_closure.sql`.
-- [ ] T047 [US4] Recompute installment, debt status, and pending reminder state after grouped settlement correction or void in `app/src/main/java/com/kipu/app/feature/debts/data/OfflineFirstDebtRepository.kt`.
-- [ ] T048 [US4] Implement schedule, reminder lead-time, cancellation, adjustment, forgiveness, and settlement controls in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtScheduleViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtScheduleScreen.kt`.
-- [ ] T049 [US4] Register the debt navigation graph and reminder deep-link destinations in `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt`.
+- [X] T044 [US4] Implement exact-sum installment creation, revision validation, and server schedule replacement without ledger effects in `app/src/main/java/com/kipu/app/feature/debts/domain/usecase/SetDebtSchedule.kt` and `supabase/migrations/20261008160000_s5_debt_schedule.sql`.
+- [X] T045 [US4] Implement idempotent debt-specific reminder scheduling and cancellation using stable debt/installment/due-date identity in `app/src/main/java/com/kipu/app/feature/debts/data/sync/DebtReminderScheduler.kt` and `app/src/main/java/com/kipu/app/feature/debts/data/sync/DebtReminderWorker.kt`.
+- [X] T046 [US4] Implement `CLOSE_DEBT` SETTLE/CANCEL/ADJUST/FORGIVE validation, history retention, and active-count transitions in `supabase/migrations/20261008170000_s5_debt_closure.sql`.
+- [X] T047 [US4] Recompute installment, debt status, and pending reminder state after grouped settlement correction or void in `app/src/main/java/com/kipu/app/feature/debts/data/OfflineFirstDebtRepository.kt`.
+- [X] T048 [US4] Implement schedule, reminder lead-time, cancellation, adjustment, forgiveness, and settlement controls in `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtScheduleViewModel.kt` and `app/src/main/java/com/kipu/app/feature/debts/presentation/DebtScheduleScreen.kt`.
+- [X] T049 [US4] Register the debt navigation graph and reminder deep-link destinations in `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt`.
 
 **Checkpoint**: Schedules and reminders have no accounting effect; no non-zero derived balance is marked settled; cancellation preserves and displays history; voiding a settlement can restore an active balance.
 
@@ -151,9 +151,9 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 **Purpose**: Close cross-epic documentation and release-readiness gaps after the four stories pass their independent verification.
 
-- [ ] T050 Update `C:/Users/Alume/orca/KipuApp/Kipu md/03_Kipu_V4.2_Arquitectura_y_Datos.md` with the approved debt entities, event semantics, movement links, RLS, quota locking, sync, and migration decisions; record the cross-repository review outcome in `specs/013-ep-deu-deudas-prestamos/research.md` because the canonical document is outside this isolated code worktree.
-- [ ] T051 [P] Verify every HU-26–HU-29 acceptance scenario, financial/regression check, migration compatibility result, retry/offline path, RLS boundary, notification-permission state, and accessibility path against `specs/013-ep-deu-deudas-prestamos/quickstart.md` and update the evidence references there.
-- [ ] T052 [P] Run a cross-review of the debt feature implementation and record findings and resolutions in `specs/013-ep-deu-deudas-prestamos/research.md`.
+- [X] T050 Update `C:/Users/Alume/orca/KipuApp/Kipu md/03_Kipu_V4.2_Arquitectura_y_Datos.md` with the approved debt entities, event semantics, movement links, RLS, quota locking, sync, and migration decisions; record the cross-repository review outcome in `specs/013-ep-deu-deudas-prestamos/research.md` because the canonical document is outside this isolated code worktree.
+- [X] T051 [P] Verify every HU-26–HU-29 acceptance scenario, financial/regression check, migration compatibility result, retry/offline path, RLS boundary, notification-permission state, and accessibility path against `specs/013-ep-deu-deudas-prestamos/quickstart.md` and update the evidence references there.
+- [X] T052 [P] Run a cross-review of the debt feature implementation and record findings and resolutions in `specs/013-ep-deu-deudas-prestamos/research.md`.
 
 ---
 
