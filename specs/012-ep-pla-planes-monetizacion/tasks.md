@@ -375,8 +375,8 @@ The smallest safe integrated slice is one recurring test purchase through HU-53 
 ### Phase S4.4: Integration, security and DoD
 
 - [X] T111 [HU-58/HU-59] Add integration coverage for verified purchase→signed grant→Room cache→capability decision, offline before/at/after expiry, clock manipulation, reboot/boot-count change, session owner change, restored cache, network retry, Free fallback and unchanged financial/outbox data in EP-PLA and EP-MOV JVM/instrumentation tests (FR-048–FR-055; SC-020–SC-024)
-- [ ] T112 [HU-59] Run and validate the additive Room migration and PostgreSQL migration against the local development databases; verify legacy cache denial, no rolling 72h RPC grant, function permissions/RLS, backup exclusion and no destructive financial-data changes; record evidence in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` (FR-053/FR-055; SC-025)
-- [ ] T113 [HU-58/HU-59] Run the S4 domain, Edge Function, Android integration and regression checks; map FR-048–FR-055 and SC-020–SC-025 to evidence, document the production signing-key configuration requirement, and update `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (FR-048–FR-055; SC-020–SC-025)
+- [X] T112 [HU-59] Run and validate the additive Room migration and PostgreSQL migration against the local development databases; verify legacy cache denial, no rolling 72h RPC grant, function permissions/RLS, backup exclusion and no destructive financial-data changes; record evidence in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` (FR-053/FR-055; SC-025)
+- [X] T113 [HU-58/HU-59] Run the S4 domain, Edge Function, Android integration and regression checks; map FR-048–FR-055 and SC-020–SC-025 to evidence, document the production signing-key configuration requirement, and update `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (FR-048–FR-055; SC-020–SC-025)
 
 ### S4 Dependencies and execution order
 
@@ -385,6 +385,8 @@ The smallest safe integrated slice is one recurring test purchase through HU-53 
 ### S4 acceptance slice
 
 **Execution status (2026-10-02)**: T096–T111 are implemented. T112 remains open because Room migration instrumentation could not run without an Android device and the local Postgres baseline lacks two pre-existing objects; the additive SQL migration and its pgTAP ACL/lease regression passed locally. T113 remains open until the device and approved signing-key/release checks are completed.
+
+**Follow-up validation (2026-10-08)**: T112 and T113 are complete. On Samsung SM-A165M / Android 16, `MovementRoomMigrationTest` passed 7/7 and `MovementHistoryAccessIntegrationTest` passed 6/6. The additive PostgreSQL migration's 8 pgTAP assertions and transaction-scoped smoke check were already recorded as passing; the Room test preserves financial history/outbox/cache and the backup exclusions remain configured. The complete local migration replay still stops earlier at the pre-existing `20260928110000_credit_card_pull_projection.sql` dependency on missing `public.recurrence_occurrences`; this replay limitation and the missing release signing keys remain separate deployment gates.
 
 The smallest safe slice is a successful authenticated provider verification yielding a server-signed, account- and installation-bound grant, validated locally against monotonic time, and consumed by the Free/Premium capability policy. A fixture, client callback, `effectivePremium` boolean, legacy cache, rolling RPC timestamp or civil clock is never sufficient evidence. If signing keys are not configured, the safe result is Kipu Free with a documented reconnection/release-configuration requirement.
 
