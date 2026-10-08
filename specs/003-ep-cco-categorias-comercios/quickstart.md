@@ -43,10 +43,10 @@
 
 - Supabase security/performance advisors were not run.
 - Timed usability evidence for the 2-minute category-to-movement flow and the 1-second merchant search target was not collected.
-- Remote migration application, effective RLS/grant review, and a green full Android instrumentation suite remain release gates; the 2026-10-08 full run had 26 failures outside the CCO categories package.
+- Remote migration application, effective RLS/grant review, and a green full Android instrumentation suite remain release gates. The latest full run and comparison against the clean base are recorded below.
 
 ## 2026-10-08 follow-up - merchant query normalization
 
 - `MerchantSearchUseCasesTest`: 12 tests passed, including punctuation-only input whose normalization is empty.
 - `MerchantPickerTest`: 7 tests passed on Samsung SM-A165M / Android 16, including whitespace-only catalog browsing and punctuation-only provisional text.
-- Full app `connectedDebugAndroidTest`: 267 tests ran; 26 failed in account, movement, notification, and plan packages. No test in the CCO categories package failed. The broad suite is not green; see `app/build/reports/androidTests/connected/debug/index.html` for individual failures.
+- Full app `connectedDebugAndroidTest`: 267 tests ran; 18 failed in account, movement, notification, and plan packages. A full run at clean `origin/main` (`89a117e`) ran 257 tests and had 21 failures. All 18 failures on the CCO branch also failed on the base; the base additionally failed three category tests that pass on this branch. Every CCO category instrumentation test passed. The broad suite remains red, with no branch-only failing test identified.
