@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.FloatingActionButtonDefaults
@@ -55,8 +56,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 
-import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.ui.semantics.disabled
 
 @Composable
 fun KipuNavigationBar(
@@ -65,11 +64,13 @@ fun KipuNavigationBar(
     onNavigateToMovimientos: () -> Unit,
     modifier: Modifier = Modifier,
     onRegisterClick: (() -> Unit)? = null,
+    onNavigateToDeudas: () -> Unit = {},
 ) {
     val isDineroSelected = currentRoute == ACCOUNTS_DASHBOARD_ROUTE
     val isMovimientosSelected = currentRoute == MOVEMENTS_HISTORY_PATTERN ||
         currentRoute == MOVEMENTS_HISTORY_ROUTE ||
         currentRoute?.startsWith("movements/history") == true
+    val isDeudasSelected = currentRoute == DEBT_LIST_ROUTE
 
     val colors = rememberCalmEmeraldColors()
 
@@ -122,20 +123,14 @@ fun KipuNavigationBar(
                         modifier = Modifier.weight(1f),
                     )
 
-                    Column(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .semantics {
-                                contentDescription = "Planificación. Próximamente"
-                                disabled()
-                                role = Role.Tab
-                            },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Icon(Icons.Default.EventNote, contentDescription = null,
-                            tint = colors.navUnselectedContent.copy(alpha = 0.5f))
-                    }
+                    KipuFloatingNavItem(
+                        selected = isDeudasSelected,
+                        onClick = onNavigateToDeudas,
+                        icon = Icons.Default.AccountBalance,
+                        label = "Deudas",
+                        tag = "nav_item_deudas",
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
 

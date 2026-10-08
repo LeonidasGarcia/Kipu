@@ -19,6 +19,13 @@ import com.kipu.app.feature.categories.data.local.CategoryDao
 import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
+import com.kipu.app.feature.debts.data.local.DebtDao
+import com.kipu.app.feature.debts.data.local.DebtEntity
+import com.kipu.app.feature.debts.data.local.DebtEventEntity
+import com.kipu.app.feature.debts.data.local.DebtInstallmentEntity
+import com.kipu.app.feature.debts.data.local.DebtOutboxDao
+import com.kipu.app.feature.debts.data.local.DebtOutboxEntity
+import com.kipu.app.feature.debts.data.local.DebtSyncCheckpointEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
 import com.kipu.app.feature.categories.data.local.MerchantAliasRuleEntity
@@ -80,6 +87,11 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         CategoryConflictEntity::class,
         CategorySyncOutboxEntity::class,
         TransactionEntity::class,
+        DebtEntity::class,
+        DebtInstallmentEntity::class,
+        DebtEventEntity::class,
+        DebtOutboxEntity::class,
+        DebtSyncCheckpointEntity::class,
         TransactionRevisionEntity::class,
         MovementOfficialRevisionEntity::class,
         MovementLedgerEffectEntity::class,
@@ -96,7 +108,7 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         AppNotificationEntity::class,
         NotificationSyncOutboxEntity::class,
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -115,6 +127,8 @@ abstract class KipuDatabase : RoomDatabase() {
     abstract fun merchantCatalogDao(): MerchantCatalogDao
     abstract fun merchantRulesDao(): MerchantRulesDao
     abstract fun movementDao(): MovementDao
+    abstract fun debtDao(): DebtDao
+    abstract fun debtOutboxDao(): DebtOutboxDao
     abstract fun creditDao(): CreditDao
     abstract fun appNotificationDao(): AppNotificationDao
     abstract fun notificationSyncOutboxDao(): NotificationSyncOutboxDao

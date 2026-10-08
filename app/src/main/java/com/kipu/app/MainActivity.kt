@@ -64,6 +64,7 @@ import com.kipu.app.navigation.AuthDeepLinkHandler
 import com.kipu.app.navigation.BIOMETRIC_ROUTE
 import com.kipu.app.navigation.CARD_FORM_ROUTE
 import com.kipu.app.navigation.DeepLinkResult
+import com.kipu.app.navigation.DEBT_LIST_ROUTE
 import com.kipu.app.navigation.KipuNavigationBar
 import com.kipu.app.navigation.MOVEMENTS_HISTORY_PATTERN
 import com.kipu.app.navigation.MOVEMENTS_HISTORY_ROUTE
@@ -72,6 +73,7 @@ import com.kipu.app.navigation.PLAN_PURCHASE_ROUTE
 import com.kipu.app.navigation.PLAN_SELECTION_ROUTE
 import com.kipu.app.navigation.PROFILE_SETTINGS_ROUTE
 import com.kipu.app.navigation.accountsDestinations
+import com.kipu.app.navigation.debtDestinations
 import com.kipu.app.navigation.authDestinations
 import com.kipu.app.navigation.movementDestinations
 import com.kipu.app.navigation.movementsDestinations
@@ -121,6 +123,7 @@ class MainActivity : FragmentActivity() {
     lateinit var onboardingPreferences: OnboardingPreferences
 
     private var pendingDeepLink by mutableStateOf<DeepLinkResult?>(null)
+    private var pendingDebtReminderId by mutableStateOf<String?>(null)
     private var restorationJob: Job? = null
     private val authCallbackViewModel: AuthCallbackViewModel by viewModels()
 
@@ -130,6 +133,7 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
 
         pendingDeepLink = intent?.data?.let { authDeepLinkHandler.handleDeepLink(it) }
+        pendingDebtReminderId = debtReminderId(intent)
 
         setContent {
             val scope = rememberCoroutineScope()
@@ -182,7 +186,8 @@ class MainActivity : FragmentActivity() {
                 val restored = authRepository.restoreSession().getOrNull() as? AuthResult.Success
                 if (!hasActionableDeepLink) {
                     val destination = if (restored != null) {
-                        postAuthDestination(restored.userId) ?: AUTH_LOGIN_ROUTE
+                        pendingDebtReminderId?.let { "debts/detail/$it" }
+                            ?: postAuthDestination(restored.userId) ?: AUTH_LOGIN_ROUTE
                     } else if (onboardingPreferences.checkpoint.first().completed) {
                         AUTH_LOGIN_ROUTE
                     } else AUTH_INTRO_ROUTE
@@ -192,6 +197,17 @@ class MainActivity : FragmentActivity() {
                         popUpTo(AUTH_START_ROUTE) { inclusive = true }
                         launchSingleTop = true
                     }
+                }
+            }
+
+            LaunchedEffect(currentUserId, pendingDebtReminderId) {
+                val debtId = pendingDebtReminderId
+                if (currentUserId != null && debtId != null) {
+                    navController.navigate("debts/detail/$debtId") {
+                        popUpTo(0) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                    pendingDebtReminderId = null
                 }
             }
 
@@ -227,6 +243,7 @@ class MainActivity : FragmentActivity() {
                             val currentRoute = navBackStackEntry?.destination?.route
 
                             val isRootDestination = currentRoute == ACCOUNTS_DASHBOARD_ROUTE ||
+                                currentRoute == DEBT_LIST_ROUTE ||
                                 currentRoute == MOVEMENTS_HISTORY_PATTERN ||
                                 currentRoute == MOVEMENTS_HISTORY_ROUTE ||
                                 currentRoute?.startsWith("movements/history") == true
@@ -251,9 +268,16 @@ class MainActivity : FragmentActivity() {
                                                 }
                                             },
                                             onNavigateToMovimientos = {
-                                                // Root tabs share a retained composition; no navigation transaction.
                                                 if (currentRoute == ACCOUNTS_DASHBOARD_ROUTE) {
                                                     movementsSelected.value = true
+                                                } else if (currentRoute != MOVEMENTS_HISTORY_ROUTE) {
+                                                    navController.navigate(MOVEMENTS_HISTORY_ROUTE) { launchSingleTop = true }
+                                                }
+                                            },
+                                            onNavigateToDeudas = {
+                                                movementsSelected.value = false
+                                                if (currentRoute != DEBT_LIST_ROUTE) {
+                                                    navController.navigate(DEBT_LIST_ROUTE) { launchSingleTop = true }
                                                 }
                                             },
                                             onRegisterClick = {
@@ -341,11 +365,12 @@ class MainActivity : FragmentActivity() {
                                         navController = navController,
                                         onAuthenticated = { userId ->
                                             scope.launch {
-                                                postAuthDestination(userId)?.let { destination ->
+                                                (pendingDebtReminderId?.let { "debts/detail/$it" } ?: postAuthDestination(userId))?.let { destination ->
                                                     navController.navigate(destination) {
                                                         popUpTo(0) { inclusive = true }
                                                         launchSingleTop = true
                                                     }
+                                                    pendingDebtReminderId = null
                                                 }
                                             }
                                         },
@@ -378,6 +403,7 @@ class MainActivity : FragmentActivity() {
                                     movementsDestinations(
                                         navController = navController,
                                     )
+                                    debtDestinations(navController = navController)
                                     notificationDestinations(
                                         navController = navController,
                                     )
@@ -412,6 +438,7 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingDeepLink = intent.data?.let { authDeepLinkHandler.handleDeepLink(it) }
+        pendingDebtReminderId = debtReminderId(intent)
     }
 
     private suspend fun postAuthDestination(rawUserId: String): String? {
@@ -422,6 +449,14 @@ class MainActivity : FragmentActivity() {
             ACCOUNTS_DASHBOARD_ROUTE
         }
     }
+}
+
+private fun debtReminderId(intent: Intent?): String? {
+    val uri = intent?.data ?: return null
+    if (uri.scheme != "kipu" || uri.host != "debts") return null
+    val segments = uri.pathSegments
+    if (segments.size != 2 || segments.firstOrNull() != "detail") return null
+    return runCatching { UUID.fromString(segments[1]).toString() }.getOrNull()
 }
 
 private fun isDetailRoute(route: String?): Boolean {
@@ -437,6 +472,7 @@ private fun isDetailRoute(route: String?): Boolean {
 private fun isTopLevelRoute(route: String?): Boolean {
     if (route == null) return false
     return route == ACCOUNTS_DASHBOARD_ROUTE ||
+        route == DEBT_LIST_ROUTE ||
         route == MOVEMENTS_HISTORY_PATTERN ||
         route == MOVEMENTS_HISTORY_ROUTE ||
         route.startsWith("movements/history")

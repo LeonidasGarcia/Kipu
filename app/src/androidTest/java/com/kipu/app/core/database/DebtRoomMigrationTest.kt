@@ -15,7 +15,7 @@ class DebtRoomMigrationTest {
 
     @Test
     fun versionEighteenFinancialHistorySurvivesAndDebtTablesStartEmpty() {
-        val name = "debt-v18-to-v19"
+        val name = "debt-v18-to-v20"
         helper.createDatabase(name, 18).use { db ->
             db.execSQL(
                 """INSERT INTO accounts (
@@ -43,7 +43,7 @@ class DebtRoomMigrationTest {
             )
         }
 
-        helper.runMigrationsAndValidate(name, 19, true, MIGRATION_18_19).use { db ->
+        helper.runMigrationsAndValidate(name, 20, true, MIGRATION_18_19, MIGRATION_19_20).use { db ->
             assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM accounts WHERE id='cash-1' AND initial_balance_minor_units=100000"))
             assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM transactions WHERE id='legacy-movement' AND amount_minor=1250 AND status='ACTIVE'"))
             assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM financial_movements WHERE id='movement-1' AND amount_minor_units=-1250"))

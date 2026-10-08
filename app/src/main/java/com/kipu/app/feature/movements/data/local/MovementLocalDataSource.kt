@@ -362,7 +362,9 @@ class MovementLocalDataSource @Inject constructor(
         }
         val payload = MovementRevisionPayload(
             type = MovementType.valueOf(entity.type),
-            operationKind = entity.operationKind,
+            operationKind = entity.operationKind ?: entity.legacyKind?.takeIf {
+                it.equals("DEBT_DISBURSEMENT", ignoreCase = true) || it.equals("DEBT_PAYMENT", ignoreCase = true)
+            },
             amountMinor = entity.amountMinor,
             currency = entity.currencyCode,
             sourceAccountId = entity.sourceAccountId,
@@ -722,6 +724,21 @@ class MovementLocalDataSource @Inject constructor(
                 )
             }
 
+            val settlementEvent = if (txEntity.operationKind in setOf("DEBT_PAYMENT", "DEBT_AMORTIZATION")) {
+                database.debtDao().getSettlementEventForTransaction(userId, txEntity.id)
+                    ?.takeIf { it.eventType == "PAYMENT" }
+            } else null
+            if (settlementEvent != null) {
+                return@withTransaction commitGroupedDebtSettlementVoid(
+                    userId = userId,
+                    command = command,
+                    requestHash = requestHash,
+                    selected = txEntity,
+                    selectedHead = currentHead,
+                    event = settlementEvent,
+                )
+            }
+
             val hasSpecializedRelations = txEntity.cardId != null ||
                 txEntity.installmentCount != null ||
                 !txEntity.legacyKind.isNullOrBlank()
@@ -899,6 +916,219 @@ class MovementLocalDataSource @Inject constructor(
         val filtered = if (query.categoryIds.isEmpty()) expenses else expenses.filter { it.categoryId in query.categoryIds }
         val totalMinor = filtered.sumOf { it.amountMinor }
         return ExpenseConsumptionResult(totalMinor, datasetVersion = 1L)
+    }
+
+    private suspend fun commitGroupedDebtSettlementVoid(
+        userId: String,
+        command: MovementRevisionCommand.Void,
+        requestHash: String,
+        selected: TransactionEntity,
+        selectedHead: MovementRevisionHead,
+        event: com.kipu.app.feature.debts.data.local.DebtEventEntity,
+    ): MovementMutationResult {
+        val databaseDebtDao = database.debtDao()
+        val transactionIds = listOfNotNull(event.transactionId, event.interestTransactionId).distinct()
+        if (selected.id !in transactionIds || transactionIds.isEmpty()) {
+            return MovementMutationResult.Rejected("SETTLEMENT_LINK_INVALID")
+        }
+        val now = System.currentTimeMillis()
+        val touchedAccounts = mutableSetOf<Pair<String, String>>()
+        var effectOrdinal = 0
+
+        for (transactionId in transactionIds) {
+            val transaction = movementDao.getTransactionById(userId, transactionId)
+                ?: return MovementMutationResult.Rejected("SETTLEMENT_LINK_INVALID")
+            if (transaction.status == "VOIDED") continue
+            val head = if (transaction.id == selected.id) selectedHead else buildRevisionHead(
+                transaction,
+                hasPendingOutbox = movementDao.getPendingOutboxForTransaction(userId, transaction.id).isNotEmpty(),
+            )
+            val groupedCommandId = if (transaction.id == selected.id) command.idempotencyKey else
+                UUID.nameUUIDFromBytes("${command.idempotencyKey}:debt-settlement:${transaction.id}".toByteArray()).toString()
+            val transactionCommand = command.copy(
+                idempotencyKey = groupedCommandId,
+                transactionId = transaction.id,
+                expectedRevision = head.commandBaseRevision,
+                dependsOnCommandId = null,
+            )
+            val references = collectReferences(
+                userId = userId,
+                oldSourceAccountId = transaction.sourceAccountId,
+                oldDestinationAccountId = transaction.destinationAccountId,
+                oldCategoryId = transaction.categoryId,
+                oldMerchantId = transaction.merchantId,
+                newPayload = head.payload,
+            )
+            val effects = movementDao.getLedgerEntriesForTransaction(userId, transaction.id).map { entry ->
+                MovementFinancialEffect(
+                    accountId = entry.accountId,
+                    role = LedgerRole.valueOf(entry.role),
+                    signedAmountMinor = entry.signedAmountMinor,
+                    currency = entry.currencyCode,
+                )
+            }
+            val plan = when (val result = revisionPlanner.plan(
+                owner = userId,
+                head = head,
+                command = transactionCommand,
+                context = MovementMaintenanceContext(hasSpecializedRelations = false, legacyStandardVerified = false),
+                references = references,
+                appliedEffects = effects,
+            )) {
+                is MovementRevisionPlanningResult.Ready -> result.plan
+                is MovementRevisionPlanningResult.AlreadyVoided -> continue
+                is MovementRevisionPlanningResult.Rejected -> return MovementMutationResult.Rejected(result.code)
+            }
+            val revisionId = UUID.randomUUID().toString()
+            val updated = transaction.copy(
+                status = MovementFinancialState.VOIDED.name,
+                revision = plan.proposedRevision,
+                currentRevisionId = revisionId,
+                syncStatus = "PENDING",
+                updatedAt = now,
+            )
+            movementDao.insertRevision(
+                TransactionRevisionEntity(
+                    userId = userId,
+                    revisionId = revisionId,
+                    transactionId = transaction.id,
+                    commandId = groupedCommandId,
+                    commandType = "VOID",
+                    baseRevision = transactionCommand.expectedRevision,
+                    localRevision = plan.proposedRevision,
+                    previousPayload = MovementRevisionSnapshotCodec.encode(transaction),
+                    newPayload = MovementRevisionSnapshotCodec.encode(updated),
+                    changeReason = command.reason,
+                    provenance = "LOCAL",
+                    createdAt = now,
+                ),
+            )
+            for (effect in plan.effects) {
+                val entryId = UUID.randomUUID().toString()
+                movementDao.insertLedgerEntries(listOf(
+                    LedgerEntryEntity(
+                        id = entryId,
+                        userId = userId,
+                        transactionId = transaction.id,
+                        accountId = effect.accountId,
+                        role = effect.role.name,
+                        signedAmountMinor = effect.signedAmountMinor,
+                        currencyCode = effect.currency,
+                        createdAt = now,
+                    ),
+                ))
+                movementDao.insertLedgerEffect(
+                    MovementLedgerEffectEntity(
+                        userId = userId,
+                        commandId = groupedCommandId,
+                        effectOrdinal = effectOrdinal++,
+                        transactionId = transaction.id,
+                        revisionId = revisionId,
+                        ledgerEntryId = entryId,
+                        reversesCommandId = null,
+                        reversesEffectOrdinal = null,
+                    ),
+                )
+                movementDao.insertLedgerAlias(
+                    MovementLedgerAliasEntity(
+                        userId = userId,
+                        physicalEntryId = entryId,
+                        commandId = groupedCommandId,
+                        effectOrdinal = effectOrdinal - 1,
+                    ),
+                )
+                touchedAccounts += effect.accountId to effect.currency
+            }
+            movementDao.updateTransaction(updated)
+        }
+
+        val updatedSelected = movementDao.getTransactionById(userId, selected.id)
+            ?: return MovementMutationResult.Rejected("SETTLEMENT_LINK_INVALID")
+        for ((accountId, currency) in touchedAccounts) {
+            balanceProjectionStore.rebuildBalanceFromLedger(userId, accountId, currency)
+        }
+        database.financialMovementDao().updateOperationStatus(userId, requireNotNull(event.transactionId), "VOIDED")
+
+        val debt = databaseDebtDao.getDebt(userId, event.debtId)
+            ?: return MovementMutationResult.Rejected("SETTLEMENT_DEBT_NOT_FOUND")
+        val events = databaseDebtDao.getEvents(userId, event.debtId)
+        var debtDelta = 0L
+        for (debtEvent in events) {
+            val linked = debtEvent.transactionId?.let { movementDao.getTransactionById(userId, it) }
+            if (debtEvent.transactionId == null || linked?.status != "VOIDED") {
+                debtDelta += debtEvent.principalDeltaMinor
+                    ?: if (debtEvent.eventType == "PAYMENT") -debtEvent.amountMinor else 0L
+            }
+        }
+        val remaining = (debt.totalMinor + debtDelta).coerceIn(0L, debt.totalMinor)
+        databaseDebtDao.updateDebt(
+            debt.copy(
+                status = if (remaining == 0L) "SETTLED" else "ACTIVE",
+                revision = debt.revision + 1,
+                syncState = "PENDING",
+                updatedAt = now,
+            ),
+        )
+        for (installment in databaseDebtDao.getInstallments(userId, event.debtId)) {
+            var paid = 0L
+            for (debtEvent in events) {
+                if (debtEvent.installmentId != installment.id || debtEvent.eventType != "PAYMENT") continue
+                val linked = debtEvent.transactionId?.let { movementDao.getTransactionById(userId, it) }
+                if (debtEvent.transactionId == null || linked?.status != "VOIDED") {
+                    paid = (paid + debtEvent.amountMinor).coerceAtMost(installment.amountMinor)
+                }
+            }
+            databaseDebtDao.upsertInstallment(
+                installment.copy(
+                    status = when {
+                        paid >= installment.amountMinor -> "PAID"
+                        paid > 0L -> "PARTIAL"
+                        else -> "PLANNED"
+                    },
+                    revision = installment.revision + 1,
+                    updatedAt = now,
+                ),
+            )
+        }
+
+        movementDao.insertOrUpdateReceipt(
+            LocalCommandReceiptEntity(
+                contractVersion = 1,
+                userId = userId,
+                idempotencyKey = command.idempotencyKey,
+                requestHash = requestHash,
+                transactionId = selected.id,
+                status = "APPLIED",
+                responsePayload = null,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+        movementDao.insertOutbox(
+            MovementOutboxEntity(
+                contractVersion = 1,
+                id = UUID.randomUUID().toString(),
+                userId = userId,
+                idempotencyKey = command.idempotencyKey,
+                aggregateId = selected.id,
+                payload = MovementOutboxPayloadFactory.buildVoid(
+                    idempotencyKey = command.idempotencyKey,
+                    transactionId = selected.id,
+                    expectedRevision = command.expectedRevision,
+                    dependsOnCommandId = command.dependsOnCommandId,
+                    reason = command.reason,
+                    requestHash = requestHash,
+                ),
+                state = "PENDING",
+                attemptCount = 0,
+                nextAttemptAt = null,
+                leaseUntil = null,
+                lastErrorCode = null,
+                createdAt = now,
+                updatedAt = now,
+            ),
+        )
+        return MovementMutationResult.Success(buildRevisionHead(updatedSelected, hasPendingOutbox = true), isDuplicate = false)
     }
 
     suspend fun getConflictProposals(userId: String, transactionId: String): List<MovementConflictProposalEntity> {

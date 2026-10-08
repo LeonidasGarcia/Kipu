@@ -5,6 +5,7 @@ import com.kipu.app.feature.movements.domain.model.ExpenseConsumptionResult
 import com.kipu.app.feature.movements.domain.model.MovementFinancialState
 import com.kipu.app.feature.movements.domain.model.MovementRevisionHead
 import com.kipu.app.feature.movements.domain.model.MovementType
+import java.util.Locale
 
 /**
  * Pure in-memory calculation of expense consumption over authoritative movement revision heads.
@@ -20,6 +21,7 @@ object ExpenseConsumptionCalculator {
             .filter { head ->
                 (head.financialState == MovementFinancialState.CONFIRMED || head.financialState == MovementFinancialState.REVISED) &&
                     head.payload.type == MovementType.EXPENSE &&
+                    head.payload.operationKind?.uppercase(Locale.ROOT) !in setOf("DEBT_DISBURSEMENT", "DEBT_PAYMENT") &&
                     head.payload.currency == query.currency &&
                     head.payload.occurredAt >= query.fromInclusive &&
                     head.payload.occurredAt < query.toExclusive &&

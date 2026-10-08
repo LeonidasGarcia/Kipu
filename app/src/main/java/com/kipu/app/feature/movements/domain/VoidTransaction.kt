@@ -10,8 +10,8 @@ import com.kipu.app.feature.movements.domain.model.MovementRevisionReferences
 import javax.inject.Inject
 
 /**
- * Use case to void a standard financial movement (HU-21 / US5).
- * Validates constraints, plans compensatory ledger effects, and atomically commits the void.
+ * Voids a supported movement and commits its compensating ledger effects atomically.
+ * Debt settlement groups are reversed together by the repository, whether the selected row is principal or interest.
  */
 class VoidTransaction @Inject constructor(
     private val repository: MovementMaintenanceRepository,
