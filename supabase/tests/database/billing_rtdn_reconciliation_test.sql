@@ -1,5 +1,5 @@
 begin;
-select plan(47);
+select plan(58);
 
 select ok(
   to_regclass('internal.billing_event_receipts') is not null,
@@ -160,6 +160,50 @@ select is((select lease_owner from internal.billing_reconciliation_jobs where pu
 select is((select effective_premium from rtdn_atomic_result), true, 'shared writer returns current account entitlement');
 select is((select count(*)::integer from internal.billing_events where purchase_token_hash = repeat('9', 64)), 1, 'shared writer appends one sanitized verification event');
 select ok(not ((select raw_payload::text from internal.billing_events where purchase_token_hash = repeat('9', 64)) like '%purchaseToken%'), 'billing event contains no raw token');
+
+create temporary table rtdn_newer_event as
+select * from public.begin_billing_rtdn_event(
+  repeat('1', 64), 'pgtap-newer-event-first', repeat('9', 64), 'SUBSCRIPTION'
+);
+create temporary table rtdn_older_event as
+select * from public.begin_billing_rtdn_event(
+  repeat('2', 64), 'pgtap-older-event-second', repeat('9', 64), 'SUBSCRIPTION'
+);
+select isnt((select receipt_id from rtdn_newer_event), (select receipt_id from rtdn_older_event), 'out-of-order message has its own receipt');
+select is((select job_id from rtdn_newer_event), (select job_id from rtdn_older_event), 'same token deliveries share one reconciliation job');
+select is((select receipt_status from rtdn_older_event), 'RETRYABLE', 'out-of-order event waits while a verification lease is active');
+select is((select lease_owner from rtdn_older_event), null::uuid, 'busy out-of-order event receives no concurrent lease');
+create temporary table rtdn_newer_state_result as
+select * from public.persist_verified_rtdn_billing_purchase(
+  '73000000-0000-4000-8000-000000000003',
+  'kipu_pro_monthly', repeat('9', 64), 'GPA.RTDN-NEWER', 'PURCHASED', 'ACTIVE',
+  'ACKNOWLEDGED', now(), now() + interval '30 days',
+  '{"provider":"GOOGLE_PLAY","productId":"kipu_pro_monthly","purchaseState":"PURCHASED","entitlementState":"ACTIVE"}'::jsonb,
+  (select receipt_id from rtdn_newer_event),
+  (select job_id from rtdn_newer_event),
+  (select lease_owner from rtdn_newer_event)
+);
+select is((select effective_premium from rtdn_newer_state_result), true, 'first current provider snapshot completes and releases the lease');
+create temporary table rtdn_older_retry as
+select * from public.begin_billing_rtdn_event(
+  repeat('2', 64), 'pgtap-older-event-second', repeat('9', 64), 'SUBSCRIPTION'
+);
+select is((select duplicate from rtdn_older_retry), true, 'out-of-order redelivery reuses its stable receipt');
+select is((select receipt_status from rtdn_older_retry), 'PROCESSING', 'out-of-order redelivery acquires a lease after the active one completes');
+select ok((select lease_owner is not null from rtdn_older_retry), 'retried out-of-order event owns the current verification lease');
+create temporary table rtdn_current_state_result as
+select * from public.persist_verified_rtdn_billing_purchase(
+  '73000000-0000-4000-8000-000000000003',
+  'kipu_pro_monthly', repeat('9', 64), 'GPA.RTDN-CURRENT', 'PURCHASED', 'EXPIRED',
+  'ACKNOWLEDGED', now() - interval '40 days', now() - interval '1 day',
+  '{"provider":"GOOGLE_PLAY","productId":"kipu_pro_monthly","purchaseState":"PURCHASED","entitlementState":"EXPIRED"}'::jsonb,
+  (select receipt_id from rtdn_older_retry),
+  (select job_id from rtdn_older_retry),
+  (select lease_owner from rtdn_older_retry)
+);
+select is((select effective_premium from rtdn_current_state_result), false, 'current Play state from the later verification controls effective access');
+select is((select entitlement_state from public.billing_purchases where purchase_token_hash = repeat('9', 64)), 'EXPIRED', 'older notification cannot restore the stale active snapshot');
+select is((select receipt_status from internal.billing_event_receipts where event_identity_hash = repeat('2', 64)), 'COMPLETED', 'out-of-order receipt completes with the current provider result');
 
 create temporary table restore_waiting_result as
 select * from public.begin_billing_rtdn_event(
