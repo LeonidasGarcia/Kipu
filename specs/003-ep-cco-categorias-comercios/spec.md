@@ -4,7 +4,9 @@
 
 **Created**: 2026-09-22
 
-**Status**: Draft
+**Status**: Refined
+
+**Refined**: 2026-10-08 — Se agrega al alcance de EP-CCO el incremento Sprint 5 de HU-16 y HU-17, conservando HU-14/HU-15 como base histórica de Sprint 2 y HU-50 como alcance futuro de Sprint 8.
 
 **Input**: User description: "Épica EP-CCO: Categorías, Subcategorías y Comercios. Alcance exclusivo Sprint 2: HU-14 categorías y subcategorías; HU-15 comercios y servicios."
 
@@ -26,6 +28,11 @@
 - Las categorías predeterminadas del sistema (`SYSTEM`, como Alimentación, Transporte, Servicios) y las subcategorías están exentas de cupo (incluso cuando se personaliza su nombre, icono o color).
 - Toda categoría raíz personalizada de tipo `GENERAL` consume 1 cupo en ambos límites (1 en gastos y 1 en ingresos).
 - Al descender de plan (downgrade) o seleccionar cupo (HU-57), el usuario puede elegir hasta 5 raíces de gastos y 5 raíces de ingresos para mantener activas; las excedentes pasan a `LOCKED_BY_PLAN` sin borrarse ni alterar movimientos históricos.
+
+### Session 2026-10-08
+
+- Q: ¿Qué plan permite crear una regla personal de alias nueva en HU-16? → A: Solo Premium; el procesamiento de una nueva señal capturada además requiere entitlement y consentimiento vigentes.
+- Decisión Sprint 5: Las reglas alias comparan igualdad exacta después de normalizar mayúsculas/minúsculas, acentos y espacios (recortar extremos y colapsar secuencias); la puntuación se conserva. No se habilitan comodines, prefijos, subcadenas ni coincidencia difusa.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -95,6 +102,41 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 
 ---
 
+### User Story 5 - Conservar texto original y reutilizar alias de comercio (Priority: P1)
+
+Como usuario Premium, quiero conservar el texto exacto de una señal y asociarlo mediante un alias personal a un comercio del catálogo, para reconocerlo sin perder la evidencia de origen.
+
+**Why this priority**: Un alias mejora el reconocimiento futuro sin sustituir el texto observado ni alterar el catálogo compartido.
+
+**Independent Test**: Un usuario Premium guarda el alias normalizado `IZIPAY*TAMBO` para Tambo; al evaluar después una señal autorizada con ese texto, se propone Tambo y la cadena original permanece intacta. El usuario también puede verificar un resultado sin coincidencia y un conflicto que requiere revisión.
+
+**Acceptance Scenarios**:
+
+1. **Given** una señal con texto original y un usuario Premium que confirma manualmente el comercio canónico, **When** acepta guardar un alias, **Then** se muestra y guarda la regla personal vinculada al comercio existente, sin modificar el catálogo general.
+2. **Given** un alias cuyo patrón y texto de origen son iguales tras normalizar mayúsculas, minúsculas, acentos y espacios, **When** una nueva señal autorizada se evalúa, **Then** se propone el comercio canónico y se conserva el texto original exacto como dato separado.
+3. **Given** que no existe un alias con coincidencia exacta normalizada, **When** se evalúa la señal, **Then** no se inventa ni asigna un comercio y el texto queda disponible para revisión como provisional.
+4. **Given** que varias reglas elegibles coinciden con el texto normalizado pero apuntan a comercios distintos, **When** se evalúa la señal, **Then** se solicita revisión humana y no se selecciona un comercio arbitrariamente.
+5. **Given** un usuario Free o una señal cuyo procesamiento no está autorizado por plan o consentimiento, **When** intenta crear una regla nueva o procesar esa señal, **Then** se bloquea la creación de la regla o el procesamiento no autorizado; el registro manual y la búsqueda del catálogo siguen disponibles.
+6. **Given** una regla personal que se edita o elimina, **When** se consulta una clasificación ya confirmada, **Then** sus datos históricos no cambian y la modificación afecta solo sugerencias futuras.
+
+---
+
+### User Story 6 - Aplicar preferencias personales de categoría por comercio (Priority: P1)
+
+Como usuario de Kipu, quiero definir la categoría que prefiero para un comercio, para reutilizar mi decisión en operaciones futuras sin modificar la historia ni la preferencia de otra persona.
+
+**Why this priority**: Reutilizar una elección explícita reduce trabajo repetido y mantiene la clasificación bajo control de cada usuario.
+
+**Independent Test**: El usuario define Tambo → Alimentación, luego recibe otra operación compatible de Tambo y verifica que su preferencia prevalece sobre una sugerencia general; los movimientos anteriores y las preferencias de otro usuario permanecen intactos.
+
+**Acceptance Scenarios**:
+
+1. **Given** un comercio identificado y una operación futura, **When** el usuario guarda una preferencia personal, **Then** se conserva la relación privada comercio → categoría sin cambiar el catálogo ni la presentación general del comercio.
+2. **Given** una preferencia que apunta a una categoría compatible y elegible, **When** una operación futura del mismo usuario y comercio recibe una sugerencia general distinta, **Then** se propone la preferencia personal.
+3. **Given** que la categoría preferida fue inactivada, bloqueada por plan o no es compatible con el tipo de la nueva operación, **When** se evalúa la preferencia, **Then** no se aplica automáticamente y se pide elegir una categoría activa y compatible.
+4. **Given** una preferencia que se crea, cambia o elimina, **When** el usuario consulta movimientos confirmados antes de ese cambio, **Then** sus comercios y categorías conservan la clasificación histórica original.
+5. **Given** dos usuarios que usan el mismo comercio, **When** cada uno guarda o consulta su preferencia, **Then** cada usuario ve y aplica solo su propia relación.
+
 ### Edge Cases
 
 - Una categoría raíz no puede ser su propia subcategoría, directa ni indirectamente.
@@ -106,6 +148,13 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - Si el catálogo de comercios no está disponible, el usuario distingue entre resultados guardados potencialmente desactualizados y la ausencia total de catálogo; ninguna de ambas situaciones crea coincidencias ni asignaciones automáticas.
 - El texto provisional de comercio no crea, modifica ni incorpora un comercio al catálogo general.
 - Los formularios, filtros y datos de clasificación no contienen campos ni relaciones de etiquetas o tags.
+- Un alias vacío, ligado a un comercio inexistente/inactivo o que intente modificar el catálogo general se rechaza sin crear una regla.
+- La comparación de alias usa igualdad exacta después de normalizar mayúsculas, minúsculas, acentos y espacios; no usa comodines, prefijos, subcadenas, equivalencias semánticas ni coincidencia difusa.
+- Si varias reglas aplicables producen comercios canónicos diferentes, el caso queda pendiente de revisión humana aunque una regla tenga mayor prioridad.
+- La pérdida o expiración de Premium impide crear nuevas reglas de alias; una nueva señal automática no se procesa si falta entitlement vigente o consentimiento, pero la búsqueda/registro manual continúa disponible.
+- Una preferencia deja de ser elegible cuando la categoría o su raíz se inactiva, queda bloqueada por plan o no corresponde al tipo de movimiento; no reclasifica datos existentes.
+- Los reintentos o cambios sincronizados fuera de orden no deben crear reglas/preferencias duplicadas ni sobrescribir en silencio una edición más reciente.
+- El alcance actual comprende solo HU-16 y HU-17 de Sprint 5. HU-14/HU-15 continúan como entregables históricos de Sprint 2; HU-50, Aprendizaje desde correcciones, continúa en Sprint 8 y no forma parte de este incremento.
 
 ## Requirements *(mandatory)*
 
@@ -127,7 +176,7 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - **FR-014**: El sistema DEBE mostrar solo comercios respaldados por coincidencia válida con el texto de búsqueda normalizado y NO DEBE inventar ni sugerir coincidencias automáticas sin evidencia.
 - **FR-015**: Cuando no haya comercios coincidentes, el sistema DEBE mostrar un resultado vacío y permitir que el usuario conserve el texto ingresado como texto provisional del movimiento.
 - **FR-016**: El texto provisional de comercio DEBE permanecer independiente del catálogo general y NO DEBE crear un comercio, alias, texto original ni preferencia personal.
-- **FR-017**: El alcance de este Sprint NO DEBE incluir alias de comercios, captura o gestión de texto original de comercio, ni preferencias personales de categoría; estas capacidades se difieren para Sprint 5.
+- **FR-017**: El incremento original de Sprint 2 DEBE conservar su límite histórico en HU-14 y HU-15. Este refinamiento agrega únicamente HU-16 y HU-17 para Sprint 5; HU-50 y el aprendizaje desde correcciones permanecen fuera de alcance hasta Sprint 8.
 - **FR-018**: Si se sincronizan ediciones incompatibles de una misma categoría realizadas sin conexión en dispositivos distintos, incluidas cambios de presentación o de estado activo/inactivo, el sistema DEBE conservar ambas versiones y solicitar al usuario que elija cuál aplicar; NO DEBE sobrescribir una versión automáticamente.
 - **FR-019**: El sistema DEBE considerar como evidencia válida una coincidencia parcial del texto normalizado dentro del nombre normalizado de un comercio, pero NO DEBE usar alias ni equivalencias semánticas para generar resultados.
 - **FR-020**: El sistema DEBE obtener un catálogo inicial de comercios, conservar la última versión disponible para búsquedas sin conexión y actualizarlo cuando la conectividad se restablezca; DEBE comunicar si los resultados proceden de una versión potencialmente desactualizada o si no hay catálogo disponible.
@@ -136,6 +185,20 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - **FR-023**: Las pestañas Gastos e Ingresos DEBEN mostrar su tipo y las categorías `GENERAL`; una raíz nueva DEBE tomar el tipo seleccionado.
 - **FR-024**: Una subcategoría DEBE heredar el tipo de su raíz y el sistema DEBE rechazar una subcategoría con tipo incompatible.
 - **FR-025**: Las transacciones nuevas de tipo Transferencia NO DEBEN tener categoría; las categorías `GENERAL` pueden clasificar tanto gastos como ingresos.
+- **FR-026**: Al evaluar una señal con texto de comercio, el sistema DEBE conservar el texto fuente exacto separado del comercio canónico y de cualquier copia normalizada usada para comparar; la normalización NO DEBE reemplazar el texto fuente.
+- **FR-027**: El sistema DEBE permitir que un usuario Premium guarde una regla personal de alias únicamente después de confirmar manualmente el comercio canónico; el alias DEBE referenciar un comercio existente y NO DEBE modificar el catálogo general.
+- **FR-028**: El sistema DEBE comparar un alias mediante igualdad exacta del patrón y del texto normalizados para mayúsculas/minúsculas, acentos y espacios (recorta espacios extremos y colapsa secuencias); la puntuación se conserva. NO DEBE usar comodines, prefijos, subcadenas, coincidencia difusa ni equivalencias semánticas.
+- **FR-029**: Cuando ninguna regla personal de alias coincida exactamente, el sistema NO DEBE inventar ni asignar un comercio; DEBE conservar el texto para revisión como provisional.
+- **FR-030**: Cuando las reglas elegibles coincidan con el texto normalizado pero apunten a comercios distintos, el sistema DEBE solicitar revisión humana y NO DEBE escoger un destino automáticamente por orden o prioridad.
+- **FR-031**: La creación, edición y eliminación de alias DEBE quedar limitada al propietario; un cambio de regla DEBE afectar solo sugerencias futuras y NO DEBE modificar movimientos ya confirmados.
+- **FR-032**: El sistema DEBE impedir que un usuario sin Premium cree reglas nuevas de alias. La evaluación de señales capturadas DEBE requerir entitlement y consentimiento vigentes; su ausencia NO DEBE bloquear la búsqueda manual ni el registro manual.
+- **FR-033**: Las reglas personales de alias DEBEN sincronizarse con identidad estable, revisiones y operaciones idempotentes; una actualización incompatible NO DEBE sobrescribir silenciosamente el estado más reciente.
+- **FR-034**: El sistema DEBE permitir guardar una preferencia personal por comercio identificado y categoría elegible sin cambiar el catálogo, el valor predeterminado general del comercio ni las preferencias de otros usuarios.
+- **FR-035**: Una preferencia personal de categoría DEBE aplicarse solo a una operación futura del mismo usuario y comercio cuando su categoría sea compatible con el tipo de la operación y esté elegible para nuevas asignaciones.
+- **FR-036**: Una preferencia elegible DEBE prevalecer sobre una sugerencia general distinta para esa operación futura.
+- **FR-037**: Si la categoría preferida o su raíz está inactiva, bloqueada por plan o no es compatible con el tipo de operación, el sistema NO DEBE aplicarla automáticamente y DEBE solicitar una categoría activa y compatible.
+- **FR-038**: Crear, cambiar o eliminar una preferencia personal NO DEBE reclasificar movimientos confirmados ni alterar su historia.
+- **FR-039**: Las preferencias personales DEBEN ser owner-scoped; un usuario solo puede leer y cambiar sus propias preferencias, y sus comandos de sincronización DEBEN ser idempotentes.
 
 ### Key Entities
 
@@ -145,6 +208,9 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - **Movimiento**: Registro financiero histórico que puede mantener, de manera independiente, una relación con una categoría y una relación con un comercio, además de un texto provisional de comercio.
 - **Comercio**: Identidad incluida en el catálogo general administrado por Kipu y disponible para asignarse a movimientos.
 - **Texto provisional de comercio**: Texto ingresado por el usuario cuando la búsqueda no encuentra un comercio; se conserva en el movimiento sin convertirse en comercio del catálogo.
+- **Texto original de comercio**: Cadena exacta recibida desde una señal antes de normalizar o proponer un comercio; se conserva separada de los campos de comercio y de texto provisional.
+- **Regla personal de alias**: Relación privada usuario → patrón normalizado → comercio canónico existente; solo opera con igualdad exacta normalizada y no modifica el catálogo.
+- **Preferencia personal de categoría**: Relación privada usuario → comercio → categoría elegible; modifica sugerencias futuras, no movimientos históricos ni la categoría predeterminada general del comercio.
 - **Plan efectivo**: Condición Free o Premium que determina el cupo de categorías raíz personalizadas activas sin alterar categorías ni movimientos históricos.
 
 ## Success Criteria *(mandatory)*
@@ -160,6 +226,12 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - **SC-007**: En pruebas de edición de movimientos, el 100% de los cambios de categoría conserva el comercio previamente asignado y el 100% de los cambios de comercio conserva la categoría previamente asignada.
 - **SC-008**: En pruebas con dos dispositivos sin conexión, el 100% de los conflictos de presentación o de estado activo/inactivo de una categoría conserva ambas versiones y exige una decisión explícita del usuario.
 - **SC-009**: En una evaluación de aceptación, al menos el 95% de los participantes completa la creación de una categoría raíz, una subcategoría y su asignación a un movimiento en menos de 2 minutos; la búsqueda de hasta 100 comercios guardados muestra resultados o el estado de disponibilidad correcto en menos de 1 segundo.
+- **SC-010**: En el 100% de las evaluaciones de alias, el texto fuente exacto permanece intacto y separado del patrón normalizado y del comercio canónico propuesto.
+- **SC-011**: En el 100% de las pruebas, un usuario Free no puede crear una regla de alias; cuando entitlement o consentimiento no autorizan una nueva señal, el 100% de esas señales se detiene mientras el acceso al flujo manual continúa.
+- **SC-012**: En el 100% de las pruebas sin coincidencia o con reglas coincidentes que llevan a comercios distintos, no se asigna un comercio automáticamente y se muestra la vía de revisión correspondiente.
+- **SC-013**: En el 100% de las pruebas de edición/eliminación de alias y preferencias, los movimientos confirmados conservan la clasificación que tenían antes del cambio.
+- **SC-014**: En el 100% de las pruebas con una preferencia vigente, elegible y compatible, la preferencia personal prevalece sobre una sugerencia general; una preferencia no elegible nunca se aplica automáticamente.
+- **SC-015**: En las pruebas con dos usuarios, el 100% de las consultas y cambios de alias/preferencias queda aislado por propietario y los reintentos no producen duplicados.
 
 ## Assumptions
 
@@ -167,5 +239,8 @@ Como usuario, organizo categorías de gastos y de ingresos en pestañas separada
 - Las categorías predeterminadas iniciales incluyen Alimentación, Transporte y Servicios, además de otras categorías que Kipu pueda definir dentro del mismo catálogo inicial.
 - "Categorías personalizadas" son las creadas por el usuario y se distinguen de las categorías predeterminadas para calcular el cupo Free.
 - Para usuarios Free que excedan el cupo tras perder Premium, se aplica un modelo de bloqueo de nuevas activaciones y creaciones, sin eliminar ni alterar datos históricos.
-- La normalización de búsqueda busca tolerar diferencias de formato, no establecer equivalencias semánticas ni reconocer alias; los alias y el texto original se difieren explícitamente a Sprint 5.
+- La búsqueda directa del catálogo continúa usando subcadena normalizada y no consulta alias; las reglas personales de alias se aplican solo al flujo de texto de señal descrito en HU-16.
 - La gestión administrativa con la que Kipu actualiza el catálogo general de comercios no forma parte de la experiencia de usuario de este Sprint; el Sprint sí incluye su consulta, conservación local y actualización al recuperar conectividad.
+- HU-14 y HU-15 corresponden a la base histórica entregada en Sprint 2; este refinamiento incrementa el alcance de la misma épica con HU-16 y HU-17 únicamente para Sprint 5.
+- HU-50 (Aprendizaje desde correcciones) sigue asignada a Sprint 8; este incremento prepara reglas y preferencias reutilizables, pero no agrega ingestión de señales, bandeja, aprendizaje automático de correcciones ni otras historias de EP-AUT.
+- Las preferencias personales no agregan una puerta Premium independiente; solo se aplican cuando la categoría ya es elegible para el tipo de operación y no está bloqueada por plan.

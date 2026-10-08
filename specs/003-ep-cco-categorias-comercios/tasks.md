@@ -5,6 +5,10 @@ description: "Task list for EP-CCO implementation"
 
 # Tasks: EP-CCO Categorías, Subcategorías y Comercios
 
+**Propagated**: 2026-10-08 — Added only the Sprint 5 work for HU-16/HU-17; completed S2 tasks remain historical.
+
+**Scope history**: Phases 1–7 preserve the implemented S2 foundation and subsequent HU-14 type work, including the original HU-14/HU-15 exclusions. Phase 8 onward is the current S5 increment. HU-50 remains S8 and has no implementation tasks here.
+
 **Input**: Design documents from `specs/003-ep-cco-categorias-comercios/`
 
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`, `contracts/`, and `quickstart.md`
@@ -50,7 +54,7 @@ description: "Task list for EP-CCO implementation"
 - [X] T018 Bind the repository, worker factory, and DAOs through Hilt in `app/src/main/java/com/kipu/app/feature/categories/di/CategoriesModule.kt` and `app/src/main/java/com/kipu/app/core/di/CoreModule.kt`.
 - [X] T019 [P] Add repository and worker tests for commit-before-success, duplicate receipt, retryable failure, `Protected`/`NoOwner`, presentation/lifecycle conflict persistence, catalog hydration, and stale-cache recovery in `app/src/test/java/com/kipu/app/feature/categories/data/OfflineFirstCategoriesRepositoryTest.kt` and `app/src/androidTest/java/com/kipu/app/feature/categories/data/sync/SyncCategoryCommandsWorkerTest.kt`.
 
-**Checkpoint**: Room v4, the remote security boundary, owner-aware repository, and idempotent synchronization are ready for story increments.
+**Historical S2 checkpoint**: Room v4, the initial remote security boundary, owner-aware repository, and idempotent synchronization were delivered as the original S2 baseline.
 
 ---
 
@@ -130,7 +134,7 @@ description: "Task list for EP-CCO implementation"
 
 **Purpose**: Complete regression coverage, migration validation, accessibility, and release evidence across all stories.
 
-- [X] T044 [P] Add regression coverage ensuring no category, merchant, movement form, or filter model introduces tags, aliases, original merchant text, or personal category preferences in `app/src/test/java/com/kipu/app/feature/categories/ScopeBoundaryTest.kt`.
+- [X] T044 [P] Add S2 baseline regression coverage ensuring no category, merchant, movement form, or filter model introduces tags, aliases, original merchant text, or personal category preferences in `app/src/test/java/com/kipu/app/feature/categories/ScopeBoundaryTest.kt`.
 - [X] T045 [P] Add cross-feature tests that category/merchant classification never changes movement amount, status, ledger effects, or account/card balances in `app/src/test/java/com/kipu/app/feature/accounts/MovementClassificationIntegrityTest.kt`.
 - [X] T046 Add end-to-end offline/reconnect, process-death, retry, duplicate-receipt, catalog refresh, and two-device presentation/lifecycle conflict scenarios to `app/src/androidTest/java/com/kipu/app/feature/categories/EpCcoEndToEndTest.kt`.
 - [X] T047 Run and record the Room v3-to-v4 migration and exported-schema review in `app/src/androidTest/java/com/kipu/app/core/database/KipuDatabaseSchemaTest.kt`.
@@ -140,7 +144,7 @@ description: "Task list for EP-CCO implementation"
 
 ---
 
-## Dependencies and Execution Order
+## Historical S2 Dependencies and Execution Order (Phases 1–7)
 
 ### Phase Dependencies
 
@@ -164,7 +168,7 @@ description: "Task list for EP-CCO implementation"
 - Within US2: T037/T038 and T039 can run in parallel.
 - T044 and T045 can run in parallel during polish.
 
-## Parallel Execution Examples
+## Historical S2 Parallel Execution Examples
 
 ### User Story 1
 
@@ -191,7 +195,7 @@ T038 Presentation RPC and persistence tests
 T039 Presentation and conflict use cases
 ```
 
-## Implementation Strategy
+## Historical S2 Implementation Strategy (completed baseline)
 
 ### MVP First
 
@@ -210,7 +214,7 @@ T039 Presentation and conflict use cases
 
 - All tasks use strict checkbox, sequential-ID, optional-parallel, story-label, and exact-path formatting.
 - `[P]` denotes only work that can avoid conflicting incomplete files after its documented prerequisite is satisfied.
-- Do not introduce Sprint 5 aliases, original merchant text, or personal category preferences while executing these tasks.
+- Phases 1–7 retain the original S2 boundary: aliases, original merchant text, and personal category preferences were excluded at that time. Phase 8 onward adds only the authorized S5 HU-16/HU-17 increment.
 
 ## Phase 7: HU-14 expense/income category types
 
@@ -221,3 +225,96 @@ T039 Presentation and conflict use cases
 - [x] T053 Implement real Gastos/Ingresos filters, selected-tab root creation, inherited subcategory type, and type-filtered movement choices in `app/src/main/java/com/kipu/app/feature/categories/presentation/categories/CategoriesScreen.kt`, `app/src/main/java/com/kipu/app/feature/categories/presentation/categories/CategoriesViewModel.kt`, and `app/src/main/java/com/kipu/app/feature/movements/presentation/QuickMovementViewModel.kt`.
 - [x] T054 Add domain, repository payload, Room migration, movement validation, and pgTAP regression coverage in `app/src/test/java/com/kipu/app/feature/categories/domain/CategoryRulesTest.kt`, `app/src/androidTest/java/com/kipu/app/feature/categories/data/local/CategoryTypeMigrationTest.kt`, and `supabase/tests/database/category_type_test.sql`.
 - [x] T055 Run the updated Compose category screen tests and category-selector acceptance flow on a connected device/emulator; verified on connected physical device (Samsung SM-S926B, Android 16) with remote database and live account.
+
+---
+
+## Phase 8: Sprint 5 shared foundation for HU-16 and HU-17
+
+**Purpose**: Extend the S2/S4 EP-CCO baseline with source-text preservation, private merchant rules/preferences, local-first persistence, and a verified remote authorization boundary. S5 work below is implementation; tests are authored and run before their corresponding production code.
+
+### Tests first (TDD)
+
+- [ ] T056 [P] Add domain tests for stable IDs, owner/revision/tombstone invariants, source-text preservation, and private preference ownership in `app/src/test/java/com/kipu/app/feature/categories/domain/MerchantRuleModelsTest.kt`.
+- [ ] T057 [P] Add Room v18→v19 migration and data-preservation tests for source merchant text, alias rules, preferences, revisions, and outbox state in `app/src/androidTest/java/com/kipu/app/core/database/MerchantRuleDatabaseTest.kt`.
+- [ ] T058 [P] Add pgTAP tests for owner isolation, active merchant/category references, no direct catalog DML, command idempotency, and effective RLS/grants for two users in `supabase/tests/database/merchant_rules_s5.test.sql`.
+
+### Shared implementation
+
+- [ ] T059 Define the source-text, alias-rule, and merchant-category-preference domain models with stable IDs, owner, revision, and tombstone state in `app/src/main/java/com/kipu/app/feature/categories/domain/model/CategoryModels.kt` and `app/src/main/java/com/kipu/app/finance/domain/model/Movement.kt`.
+- [ ] T060 Add a shared text normalizer and exact-equality alias matcher that preserves punctuation and original text, plus explicit no-match and different-destination review outcomes in `app/src/main/java/com/kipu/app/feature/categories/domain/MerchantAliasRules.kt`.
+- [ ] T061 Add Room v18→v19 entities and a non-destructive migration for source merchant text, private alias rules, category preferences, revisions, and outbox commands; export schema 19 in `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt`, `app/src/main/java/com/kipu/app/core/database/RoomMigrations.kt`, `app/src/main/java/com/kipu/app/feature/categories/data/local/MerchantRuleEntities.kt`, and `app/schemas/com.kipu.app.core.database.KipuDatabase/19.json`.
+- [ ] T062 Add a forward-only Supabase migration for the S5 alias/preference command contract, owner-scoped preference persistence, constraints, RPC receipts, and RLS/grants; preserve the Kipu catalog as read-only in `supabase/migrations/20261008120000_ep_cco_s5_alias_preferences.sql`.
+- [ ] T063 Add remote DTOs, typed API methods, repository ports, and outbox/worker mapping for alias and preference commands, using `auth.uid()`-derived ownership and idempotent operation receipts in `app/src/main/java/com/kipu/app/feature/categories/data/remote/MerchantRuleDtos.kt`, `app/src/main/java/com/kipu/app/feature/categories/data/remote/CategoriesApi.kt`, `app/src/main/java/com/kipu/app/feature/categories/data/OfflineFirstCategoriesRepository.kt`, and `app/src/main/java/com/kipu/app/feature/categories/data/sync/SyncCategoryCommandsWorker.kt`.
+- [ ] T064 Update the Supabase readiness procedure to compare live migration history with the local S4/October head and require approved migration application plus effective policy/grant review before S5 integration or release in `specs/003-ep-cco-categorias-comercios/quickstart.md`.
+
+**Checkpoint**: Local v19 persistence and versioned server contracts are defined and testable. The linked/live Supabase project remains a release gate until its migration history is reconciled through the approved process; this task list does not authorize ad hoc remote writes.
+
+---
+
+## Phase 9: User Story 5 — HU-16 conservar texto original y reutilizar alias
+
+**Goal**: Let a Premium user save an alias after confirming its canonical merchant, preserve the source text, and evaluate authorized signals by exact normalized equality.
+
+**Independent Test**: A confirmed `IZIPAY*TAMBO` alias proposes Tambo for a later authorized signal with the same normalized text, leaves the original string unchanged, rejects prefix/substring-only matches, and requests human review if eligible rules resolve to different merchants.
+
+### Tests for User Story 5
+
+- [ ] T065 [P] [US5] Add domain coverage for exact normalized equality, punctuation retention, no match, ambiguity review, source-text preservation, Premium rule creation through a verified bounded offline lease, lease expiry, and signal entitlement/consent gates in `app/src/test/java/com/kipu/app/feature/categories/domain/MerchantAliasRulesTest.kt`.
+- [ ] T066 [P] [US5] Add repository/RPC coverage for manual canonical confirmation, server-verified entitlement/lease checks for new rules, owner-only edit/tombstone, revision conflicts, receipts, and catalog immutability in `supabase/tests/database/merchant_rules_s5.test.sql`.
+- [ ] T067 [P] [US5] Add Compose coverage for Premium gating, source/canonical separation, exact-match explanation, no-match, review choice, TalkBack semantics, and manual-flow availability when signal processing is unauthorized in `app/src/androidTest/java/com/kipu/app/feature/categories/presentation/MerchantAliasRulesScreenTest.kt`.
+
+### Implementation for User Story 5
+
+- [ ] T068 [US5] Implement alias create/update/remove use cases and the server RPC; require verified Premium entitlement or a verified bounded offline lease only for creating a new rule, require manual canonical-merchant confirmation, and keep edits future-only in `app/src/main/java/com/kipu/app/feature/categories/domain/usecase/SaveMerchantAliasRule.kt`, `app/src/main/java/com/kipu/app/feature/categories/domain/usecase/DeleteMerchantAliasRule.kt`, and `supabase/migrations/20261008130000_ep_cco_s5_alias_rpc.sql`.
+- [ ] T069 [US5] Implement evaluation only for an authorized, provenance-bearing `CaptureCandidate` after current entitlement and consent checks; return no match or explicit review for different canonical destinations without priority tie-breaking in `app/src/main/java/com/kipu/app/feature/categories/domain/usecase/EvaluateMerchantAlias.kt` and `app/src/main/java/com/kipu/app/feature/categories/data/OfflineFirstCategoriesRepository.kt`.
+- [ ] T070 [US5] Add a private alias-management screen that displays source pattern and canonical merchant separately, gates new-rule creation for Premium, handles no-match/ambiguity, and never edits confirmed movements or the shared catalog in `app/src/main/java/com/kipu/app/feature/categories/presentation/merchant-rules/MerchantAliasRulesScreen.kt` and `app/src/main/java/com/kipu/app/feature/categories/presentation/merchant-rules/MerchantAliasRulesViewModel.kt`.
+
+**Checkpoint**: HU-16 is independently demonstrable without a notification/OCR capture pipeline; only an already available signal that passes entitlement and consent checks can be evaluated.
+
+---
+
+## Phase 10: User Story 6 — HU-17 preferencia personal de categoría por comercio
+
+**Goal**: Let each user choose an eligible category per merchant for future operations, ahead of a general suggestion, without a separate Premium gate or historical reclassification.
+
+**Independent Test**: User A's eligible Tambo preference takes precedence on a compatible future operation for A, remains invisible to user B, and stops auto-applying when the category is inactive, plan-blocked, or incompatible; confirmed history stays unchanged.
+
+### Tests for User Story 6
+
+- [ ] T071 [P] [US6] Add domain tests for owner isolation, preference-over-general precedence, future-only behavior, movement-type compatibility, active-root eligibility, and plan-blocked categories in `app/src/test/java/com/kipu/app/feature/categories/domain/MerchantCategoryPreferenceTest.kt`.
+- [ ] T072 [P] [US6] Add database/RPC coverage for one preference per owner/merchant, category reference validation, two-user RLS, idempotent updates/tombstones, and history preservation in `supabase/tests/database/merchant_rules_s5.test.sql`.
+- [ ] T073 [P] [US6] Add Compose coverage for preference precedence, owner-specific state, inactive/plan-blocked/incompatible recovery, no Premium prompt, and preserved confirmed history in `app/src/androidTest/java/com/kipu/app/feature/categories/presentation/MerchantCategoryPreferenceScreenTest.kt`.
+
+### Implementation for User Story 6
+
+- [ ] T074 [US6] Implement save/remove/resolve preference use cases and server RPCs with no independent Premium gate and future-operation-only semantics in `app/src/main/java/com/kipu/app/feature/categories/domain/usecase/SetMerchantCategoryPreference.kt`, `app/src/main/java/com/kipu/app/feature/categories/domain/usecase/ResolvePreferredCategory.kt`, and `supabase/migrations/20261008140000_ep_cco_s5_preference_rpc.sql`.
+- [ ] T075 [US6] Implement owner-scoped local persistence and sync for merchant-category preferences, validating active category/root, plan eligibility, and movement type before applying any suggestion in `app/src/main/java/com/kipu/app/feature/categories/data/OfflineFirstCategoriesRepository.kt` and `app/src/main/java/com/kipu/app/feature/categories/data/local/MerchantCategoryPreferenceDao.kt`.
+- [ ] T076 [US6] Add preference controls to merchant detail/management UI with only eligible category choices, explicit inactive/ineligible recovery, and future-only explanatory text in `app/src/main/java/com/kipu/app/feature/categories/presentation/merchant-rules/MerchantCategoryPreferenceScreen.kt` and `app/src/main/java/com/kipu/app/feature/categories/presentation/merchant-rules/MerchantCategoryPreferenceViewModel.kt`.
+
+**Checkpoint**: HU-17 supplies a private, eligible, future-only preference that is separate from merchant catalog presentation and from general rule metadata.
+
+---
+
+## Phase 11: Sprint 5 regression and release evidence
+
+**Purpose**: Update S2 boundary assertions to reflect the approved S5 increment while preserving S2 history and HU-50's S8 exclusion.
+
+- [ ] T077 [P] Update the S2 `ScopeBoundaryTest` so it allows HU-16/HU-17 source text, private aliases, and personal category preferences while continuing to prohibit tags and HU-50 learning-from-corrections behavior in `app/src/test/java/com/kipu/app/feature/categories/ScopeBoundaryTest.kt`.
+- [ ] T078 [P] Add cross-feature regression coverage proving alias/preference changes never alter movement amount, status, ledger effects, balances, or confirmed historical classification in `app/src/test/java/com/kipu/app/feature/accounts/MovementClassificationIntegrityTest.kt`.
+- [ ] T079 [P] Extend offline/reconnect and two-user acceptance coverage for raw-text retention, exact alias matching, ambiguity review, consent/entitlement gates, preference precedence, tombstones, and history preservation in `app/src/androidTest/java/com/kipu/app/feature/categories/EpCcoEndToEndTest.kt`.
+- [ ] T080 Record S5 test/device evidence and the Supabase live migration/RLS/grant readiness decision; do not mark release-ready while migration history remains behind the local S4/October head in `specs/003-ep-cco-categorias-comercios/quickstart.md`.
+- [ ] T081 Recheck HU-16/HU-17 FR/SC traceability, S2 historical boundaries, S8 HU-50 exclusion, constitution compliance, and reviewer-owned checklist ownership in `specs/003-ep-cco-categorias-comercios/spec.md` and `specs/003-ep-cco-categorias-comercios/checklists/requirements.md`.
+
+### S5 dependencies
+
+- Phase 8 blocks Phases 9–11. Complete tests T056–T058 before their implementation T059–T063; remote integration/release is additionally blocked until the Supabase migration/RLS gate is cleared.
+- In Phase 9, tests T065–T067 precede implementation T068–T070. T069 depends on the entitlement/consent ports from T063.
+- In Phase 10, tests T071–T073 precede implementation T074–T076. T075 depends on the category eligibility model from T059.
+- Alias and preference work may proceed in parallel only in separate files; shared repository/worker edits must be coordinated and sequential.
+- Phase 11 requires both user-story phases. HU-50 remains excluded from this dependency graph.
+
+### S5 parallel opportunities
+
+- T056–T058 and T065–T067 are independent test files and may be authored in parallel before implementation.
+- T071–T073 are independent test files and may be authored in parallel before implementation.
+- T076/T077 can proceed independently after the domain model settles; T078/T079 require both story flows.
