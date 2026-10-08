@@ -21,6 +21,7 @@
 | --- | --- | --- |
 | contract_version | sí | Versión de contrato soportada. |
 | operation_id, request_hash | sí | Idempotencia. |
+| event_id | sí | UUID estable del evento de apertura, derivado de operation_id y compartido por el outbox local y el servidor. |
 | debt_id | sí | UUID estable del cliente. |
 | obligation_type | sí | PAYABLE o RECEIVABLE. |
 | counterparty_name | sí | Texto no vacío después de normalización de espacios. |
@@ -75,7 +76,7 @@
 - Recibe debt_id, expected_revision, operación idempotente y una lista ordenada de installment_id, número, due_date y principal_minor.
 - La suma de cuotas debe igualar el principal planificado. Secuencia y fechas son válidas; importes son positivos.
 - Guardar o alcanzar un vencimiento no crea pago ni reduce principal.
-- Reemplazar/cancelar el cronograma elimina o reprograma solo recordatorios pendientes asociados; el resultado es idempotente.
+- Reemplazar/cancelar el cronograma cancela cuotas PENDING y PARTIAL y elimina o reprograma solo recordatorios pendientes asociados; el resultado es idempotente.
 
 ## Cierre — `CLOSE_DEBT`
 
@@ -87,8 +88,9 @@
 
 ## Borrado condicional — `DELETE_DEBT_IF_UNREFERENCED`
 
-- Solo permitido cuando la obligación no tiene liquidaciones, movimientos de caja ni historia financiera que se perdería.
-- Si hay cualquier liquidación, ajuste, condonación o movimiento relacionado, responde `REJECTED/HISTORY_PRESERVED` y propone mantener/cancelar/cerrar.
+- Solo permitido cuando la obligación no tiene eventos de apertura, liquidaciones, ajustes, condonaciones ni otra historia que se perdería.
+- Cualquier evento asociado responde `REJECTED/HISTORY_PRESERVED`; la apertura también protege el saldo pendiente y el historial.
+- Una deuda heredada sin operacion ni evento asociado puede eliminarse aunque conserve principal, conforme a HU-26 AC4.
 - El borrado elimina la obligación y sus elementos puramente planificados en una sola transacción; no usa una cascada directa desde la tabla.
 
 ## Sync y consultas

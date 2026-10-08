@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(17);
+SELECT plan(18);
 
 CREATE TEMP TABLE debt_history_ids (
     owner_id uuid,
@@ -29,11 +29,6 @@ INSERT INTO public.debts (id, user_id, obligation_type, counterparty_name, total
 SELECT unreferenced_debt_id, owner_id, 'PAYABLE'::public.obligation_type, 'Planned only', 1000, 'PEN' FROM debt_history_ids
 UNION ALL
 SELECT other_debt_id, other_id, 'PAYABLE'::public.obligation_type, 'Other owner', 1500, 'PEN' FROM debt_history_ids;
-INSERT INTO public.debt_events (
-    id, user_id, debt_id, event_type, amount_minor, principal_delta_minor, occurred_at, created_at
-)
-SELECT extensions.gen_random_uuid(), owner_id, unreferenced_debt_id, 'DISBURSEMENT', 1000, 0, now(), now()
-FROM debt_history_ids;
 GRANT SELECT ON debt_history_ids TO authenticated;
 
 SELECT has_function('public', 'edit_debt_details_v1', ARRAY['jsonb'], 'descriptive edit RPC is installed');
@@ -46,6 +41,7 @@ SELECT lives_ok($$
     SELECT public.open_debt_v1(jsonb_build_object(
         'contract_version', 1,
         'operation_id', (SELECT open_operation FROM debt_history_ids),
+        'event_id', '83000000-0000-4000-8000-000000000009',
         'request_hash', repeat('a',64),
         'debt_id', (SELECT debt_id FROM debt_history_ids),
         'obligation_type', 'PAYABLE',
@@ -130,15 +126,18 @@ SELECT throws_ok($$
     ));
 $$, 'P0001', 'HISTORY_PRESERVED', 'conditional delete keeps a debt that has financial history');
 
-SELECT is(
-    public.delete_debt_if_unreferenced_v1(jsonb_build_object(
+SELECT lives_ok($$
+    SELECT public.delete_debt_if_unreferenced_v1(jsonb_build_object(
         'operation_id', extensions.gen_random_uuid(),
         'request_hash', repeat('f',64),
         'debt_id', (SELECT unreferenced_debt_id FROM debt_history_ids)
-    ))->>'status', 'APPLIED', 'conditional delete removes a historical opening without a linked cash movement');
+    ));
+$$, 'eventless legacy principal can be removed under the no-history rule');
 
 RESET ROLE;
 SELECT is((SELECT count(*)::integer FROM public.debts WHERE id=(SELECT unreferenced_debt_id FROM debt_history_ids)), 0,
-    'unreferenced debt is physically deleted');
+    'eventless legacy debt is removed');
+SELECT is((SELECT remaining_minor FROM public.v_debt_summary WHERE debt_id=(SELECT unreferenced_debt_id FROM debt_history_ids)), NULL::numeric,
+    'deleted eventless debt no longer appears in the summary');
 SELECT * FROM finish();
 ROLLBACK;

@@ -18,6 +18,9 @@ import com.kipu.app.feature.debts.domain.model.DebtScheduleItem
 import com.kipu.app.feature.debts.domain.model.SetDebtScheduleCommand
 import com.kipu.app.feature.debts.domain.model.OpenDebtCommand
 import java.time.LocalDate
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -70,6 +73,12 @@ class DebtLocalDataSourceTest {
         assertEquals(1L, database.openHelper.writableDatabase.scalarLong("SELECT COUNT(*) FROM local_command_receipts WHERE command_type='OPEN_DEBT'"))
         assertEquals(0L, database.openHelper.writableDatabase.scalarLong("SELECT COUNT(*) FROM transactions"))
         assertEquals(0L, database.openHelper.writableDatabase.scalarLong("SELECT COUNT(*) FROM ledger_entries"))
+        val openingEvent = database.debtDao().getEvents("owner", command.debtId).single()
+        val outbox = database.debtOutboxDao().get("owner", command.identity.operationId)!!
+        assertEquals(
+            openingEvent.id,
+            Json.parseToJsonElement(outbox.payload).jsonObject["event_id"]?.jsonPrimitive?.content,
+        )
     }
 
     @Test

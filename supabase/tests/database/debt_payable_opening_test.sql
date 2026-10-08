@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(18);
+SELECT plan(23);
 
 CREATE TEMP TABLE payable_opening_ids (
     owner_id uuid,
@@ -45,6 +45,7 @@ SELECT lives_ok($$
     WITH input AS (SELECT jsonb_build_object(
         'contract_version', 1,
         'operation_id', (SELECT operation_one FROM payable_opening_ids),
+        'event_id', '82000000-0000-4000-8000-000000000010',
         'user_id', (SELECT other_id FROM payable_opening_ids),
         'debt_id', (SELECT new_debt_id FROM payable_opening_ids),
         'obligation_type', 'PAYABLE',
@@ -77,6 +78,9 @@ SELECT is((SELECT remaining_minor FROM public.v_debt_summary
 SELECT is((SELECT opening_mode FROM public.debts
     WHERE id = (SELECT new_debt_id FROM payable_opening_ids)), 'NEW_CASH_FLOW',
     'new payable persists its opening basis');
+SELECT is((SELECT id FROM public.debt_events WHERE debt_id = (SELECT new_debt_id FROM payable_opening_ids)),
+    '82000000-0000-4000-8000-000000000010'::uuid,
+    'new payable uses the client-stable opening event id');
 SELECT is((SELECT count(*)::integer FROM public.transactions
     WHERE user_id = (SELECT owner_id FROM payable_opening_ids) AND operation_kind = 'STANDARD'), 0,
     'principal opening does not create an operating-income transaction');
@@ -89,6 +93,7 @@ SELECT throws_ok($$
         SELECT jsonb_build_object(
             'contract_version', 1,
             'operation_id', extensions.gen_random_uuid(),
+            'event_id', extensions.gen_random_uuid(),
             'debt_id', extensions.gen_random_uuid(),
             'obligation_type', 'PAYABLE',
             'counterparty_name', 'Cuenta USD',
@@ -109,6 +114,7 @@ SELECT throws_ok($$
         SELECT jsonb_build_object(
             'contract_version', 1,
             'operation_id', extensions.gen_random_uuid(),
+            'event_id', extensions.gen_random_uuid(),
             'debt_id', extensions.gen_random_uuid(),
             'obligation_type', 'PAYABLE',
             'counterparty_name', 'Cuenta ajena',
@@ -128,6 +134,7 @@ SELECT lives_ok($$
     WITH body AS (SELECT jsonb_build_object(
         'contract_version', 1,
         'operation_id', (SELECT operation_two FROM payable_opening_ids),
+        'event_id', '82000000-0000-4000-8000-000000000011',
         'debt_id', (SELECT historical_debt_id FROM payable_opening_ids),
         'obligation_type', 'PAYABLE',
         'counterparty_name', 'Deuda histórica',
@@ -144,6 +151,9 @@ RESET ROLE;
 SELECT is((SELECT opening_mode FROM public.debts
     WHERE id = (SELECT historical_debt_id FROM payable_opening_ids)), 'HISTORICAL',
     'historical payable persists its opening basis');
+SELECT is((SELECT id FROM public.debt_events WHERE debt_id = (SELECT historical_debt_id FROM payable_opening_ids)),
+    '82000000-0000-4000-8000-000000000011'::uuid,
+    'historical payable uses the client-stable opening event id');
 SELECT is((SELECT count(*)::integer FROM public.transactions
     WHERE user_id = (SELECT owner_id FROM payable_opening_ids)), 1,
     'historical opening creates no second cash transaction');
@@ -154,6 +164,7 @@ SELECT throws_ok($$
     WITH body AS (SELECT jsonb_build_object(
         'contract_version', 1,
         'operation_id', extensions.gen_random_uuid(),
+        'event_id', extensions.gen_random_uuid(),
         'debt_id', extensions.gen_random_uuid(),
         'obligation_type', 'RECEIVABLE',
         'counterparty_name', 'Tercera obligación',
@@ -174,6 +185,19 @@ SELECT throws_ok($$
         'debt_id', (SELECT new_debt_id FROM payable_opening_ids)
     ));
 $$, 'P0001', 'HISTORY_PRESERVED', 'debt with a cash movement cannot be physically deleted');
+SELECT throws_ok($$
+    SELECT public.delete_debt_if_unreferenced_v1(jsonb_build_object(
+        'operation_id', extensions.gen_random_uuid(),
+        'request_hash', repeat('e', 64),
+        'debt_id', (SELECT historical_debt_id FROM payable_opening_ids)
+    ));
+$$, 'P0001', 'HISTORY_PRESERVED', 'historical opening event prevents deleting outstanding principal');
+SELECT is((SELECT remaining_minor FROM public.v_debt_summary
+    WHERE debt_id = (SELECT historical_debt_id FROM payable_opening_ids)), 9000::numeric,
+    'rejected historical deletion preserves its outstanding principal');
+SELECT is((SELECT count(*)::integer FROM public.debt_events
+    WHERE debt_id = (SELECT historical_debt_id FROM payable_opening_ids)), 1,
+    'rejected historical deletion preserves its opening event');
 
 RESET ROLE;
 SELECT is((SELECT count(*)::integer FROM public.debts

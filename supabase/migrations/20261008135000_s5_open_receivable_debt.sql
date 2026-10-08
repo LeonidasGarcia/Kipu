@@ -9,6 +9,7 @@ AS $open_receivable$
 DECLARE
     v_user_id uuid := auth.uid();
     v_debt_id uuid := NULLIF(p_payload->>'debt_id', '')::uuid;
+    v_event_id uuid := NULLIF(p_payload->>'event_id', '')::uuid;
     v_operation_id uuid := NULLIF(p_payload->>'operation_id', '')::uuid;
     v_account_id uuid := NULLIF(p_payload->>'account_id', '')::uuid;
     v_principal bigint := NULLIF(p_payload->>'total_minor', '')::bigint;
@@ -20,7 +21,6 @@ DECLARE
     v_reminder_lead_days smallint := NULLIF(p_payload->>'reminder_lead_days', '')::smallint;
     v_account public.accounts%ROWTYPE;
     v_transaction_id uuid;
-    v_event_id uuid;
     v_created_at timestamptz := clock_timestamp();
 BEGIN
     IF v_user_id IS NULL THEN
@@ -29,7 +29,7 @@ BEGIN
     IF upper(NULLIF(btrim(p_payload->>'obligation_type'), '')) <> 'RECEIVABLE' THEN
         RAISE EXCEPTION 'WRONG_OBLIGATION_TYPE' USING ERRCODE = '22023';
     END IF;
-    IF v_debt_id IS NULL OR v_operation_id IS NULL OR v_principal IS NULL
+    IF v_debt_id IS NULL OR v_event_id IS NULL OR v_operation_id IS NULL OR v_principal IS NULL
        OR v_principal NOT BETWEEN 1 AND 99999999999999 OR v_currency NOT IN ('PEN', 'USD')
        OR v_opened_on IS NULL OR v_opening_mode NOT IN ('NEW_CASH_FLOW', 'HISTORICAL')
        OR v_counterparty = '' THEN
@@ -83,7 +83,6 @@ BEGIN
         FROM public.transactions t WHERE t.id = v_transaction_id AND t.user_id = v_user_id;
     END IF;
 
-    v_event_id := extensions.gen_random_uuid();
     INSERT INTO public.debt_events (
         id, user_id, debt_id, transaction_id, installment_id, event_type,
         amount_minor, principal_delta_minor, occurred_at, created_at

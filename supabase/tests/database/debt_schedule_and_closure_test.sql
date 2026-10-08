@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(28);
+SELECT plan(29);
 
 CREATE TEMP TABLE debt_schedule_ids (
     owner_id uuid,
@@ -106,8 +106,15 @@ SELECT throws_ok($$SELECT public.set_debt_schedule_v1(schedule_payload) FROM deb
 RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub',(SELECT owner_id::text FROM debt_schedule_ids),true);
+RESET ROLE;
+UPDATE public.debt_installments
+SET status = 'PARTIAL'
+WHERE id = '68000000-0000-4000-8000-000000000020';
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub',(SELECT owner_id::text FROM debt_schedule_ids),true);
 SELECT is((SELECT public.set_debt_schedule_v1(cancel_plan_payload)->>'status' FROM debt_schedule_ids),'APPLIED','schedule can be cancelled independently of the debt');
-SELECT is((SELECT count(*)::integer FROM public.debt_installments WHERE debt_id=(SELECT schedule_debt_id FROM debt_schedule_ids) AND status='PENDING'),0,'schedule cancellation clears pending installments');
+SELECT is((SELECT count(*)::integer FROM public.debt_installments WHERE debt_id=(SELECT schedule_debt_id FROM debt_schedule_ids) AND status IN ('PENDING','PARTIAL')),0,'schedule cancellation clears pending and partial installments');
+SELECT is((SELECT count(*)::integer FROM public.debt_installments WHERE debt_id=(SELECT schedule_debt_id FROM debt_schedule_ids) AND status='CANCELLED'),3,'all installments in the replaced schedule retain cancelled history');
 SELECT is((SELECT public.close_debt_v1(cancel_debt_payload)->>'status' FROM debt_schedule_ids),'APPLIED','cancellation is an explicit closure action');
 SELECT is((SELECT status FROM public.debts WHERE id=(SELECT schedule_debt_id FROM debt_schedule_ids)),'CANCELLED','cancelled debt is not shown as settled');
 SELECT is((SELECT remaining_minor FROM public.v_debt_summary WHERE debt_id=(SELECT schedule_debt_id FROM debt_schedule_ids)),10001::numeric,'debt cancellation preserves the outstanding balance');

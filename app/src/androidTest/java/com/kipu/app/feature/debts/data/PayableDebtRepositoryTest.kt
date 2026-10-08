@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kipu.app.core.database.KipuDatabase
+import com.kipu.app.feature.debts.data.local.DebtEntity
 import com.kipu.app.feature.debts.data.local.DebtEventEntity
 import com.kipu.app.feature.debts.data.local.DebtLocalDataSource
 import com.kipu.app.feature.debts.data.sync.DebtSyncScheduler
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -126,7 +128,7 @@ class PayableDebtRepositoryTest {
     }
 
     @Test
-    fun historicalOpeningWithoutFinancialHistoryCanBeRemovedLocallyAndQueued() = runBlocking {
+    fun historicalOpeningEventPreservesBalanceAndBlocksPhysicalDeletion() = runBlocking {
         repository.openDebt("owner", command(), hasPremiumAccess = false)
         val identity = DebtCommandIdentity(
             "84000000-0000-4000-8000-000000000011",
@@ -135,9 +137,38 @@ class PayableDebtRepositoryTest {
 
         val result = repository.deleteDebtIfUnreferenced("owner", DEBT_ID, identity)
 
+        assertEquals(DebtDeleteResult.Rejected("HISTORY_PRESERVED"), result)
+        assertEquals(5_000L, repository.observeDebt("owner", DEBT_ID).first()?.remainingPrincipalMinor)
+        assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debts WHERE id='$DEBT_ID'"))
+        assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_events WHERE debt_id='$DEBT_ID'"))
+        assertEquals(0L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox WHERE command_type='DELETE_DEBT_IF_UNREFERENCED'"))
+        assertEquals(true, database.debtDao().observeHasFinancialHistory("owner", DEBT_ID).first())
+    }
+
+    @Test
+    fun legacyDebtWithoutEventsCanBeRemovedEvenWhenItHasPositivePrincipal() = runBlocking {
+        database.debtDao().insertDebt(
+            DebtEntity(
+                id = DEBT_ID,
+                userId = "owner",
+                obligationType = "PAYABLE",
+                counterpartyName = "Deuda heredada",
+                totalMinor = 2_500L,
+                currencyCode = "PEN",
+                openedOn = "2026-10-01",
+            ),
+        )
+        val identity = DebtCommandIdentity(
+            "84000000-0000-4000-8000-000000000012",
+            DebtCommandHasher.sha256("delete-legacy:$DEBT_ID"),
+        )
+
+        assertEquals(false, database.debtDao().observeHasFinancialHistory("owner", DEBT_ID).first())
+
+        val result = repository.deleteDebtIfUnreferenced("owner", DEBT_ID, identity)
+
         assertEquals(DebtDeleteResult.Deleted(DEBT_ID), result)
-        assertEquals(null, repository.observeDebt("owner", DEBT_ID).first())
-        assertEquals(0L, scalarLong("SELECT COUNT(*) FROM debts WHERE id='$DEBT_ID'"))
+        assertNull(repository.observeDebt("owner", DEBT_ID).first())
         assertEquals(0L, scalarLong("SELECT COUNT(*) FROM debt_events WHERE debt_id='$DEBT_ID'"))
         assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox WHERE command_type='DELETE_DEBT_IF_UNREFERENCED'"))
     }

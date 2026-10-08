@@ -749,12 +749,11 @@ class DebtLocalDataSource @Inject constructor(
         val debt = debtDao.getDebt(userId, debtId)
             ?: return@withTransaction DebtDeleteResult.Rejected("DEBT_NOT_FOUND")
         val events = debtDao.getEvents(userId, debtId)
-        if (events.any { it.eventType != DebtEventType.DISBURSEMENT.name || it.transactionId != null }) {
+        if (events.isNotEmpty()) {
             return@withTransaction DebtDeleteResult.Rejected("HISTORY_PRESERVED")
         }
 
         val now = clock.millis()
-        debtDao.deleteHistoricalOpeningEvents(userId, debtId)
         debtDao.deleteUnreferencedInstallments(userId, debtId)
         if (debtDao.deleteDebtIfUnreferenced(userId, debtId) != 1) {
             return@withTransaction DebtDeleteResult.Conflict(debt.revision)
@@ -866,6 +865,7 @@ class DebtLocalDataSource @Inject constructor(
     private fun openPayload(command: OpenDebtCommand, normalizedName: String) = buildJsonObject {
         put("contract_version", command.identity.contractVersion)
         put("operation_id", command.identity.operationId)
+        put("event_id", stableEventId(command.identity.operationId))
         put("request_hash", command.identity.requestHash)
         put("debt_id", command.debtId)
         put("obligation_type", command.obligationType.name)

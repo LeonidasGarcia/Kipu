@@ -179,7 +179,7 @@ BEGIN
 
     UPDATE public.debt_installments
     SET status = 'CANCELLED', revision = revision + 1, updated_at = v_now
-    WHERE user_id = v_user_id AND debt_id = v_debt_id AND status = 'PENDING' AND deleted_at IS NULL;
+    WHERE user_id = v_user_id AND debt_id = v_debt_id AND status IN ('PENDING', 'PARTIAL') AND deleted_at IS NULL;
     INSERT INTO internal.sync_changes(user_id, entity_type, entity_id, revision, operation, payload)
     SELECT v_user_id, 'DEBT_INSTALLMENT', i.id, i.revision, 'UPSERT', to_jsonb(i)
     FROM public.debt_installments i

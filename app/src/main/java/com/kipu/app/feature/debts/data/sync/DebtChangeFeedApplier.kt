@@ -154,10 +154,9 @@ class DebtChangeFeedApplier @Inject constructor(
         val existing = debtDao.getDebtIncludingDeleted(userId, remote.id) ?: return
         if (remote.revision < existing.revision) throw StaleDebtRevision(remote.id, existing.revision, remote.revision)
         val events = debtDao.getEvents(userId, remote.id)
-        if (events.any { it.eventType != DebtEventType.DISBURSEMENT.name || it.transactionId != null }) {
+        if (events.isNotEmpty()) {
             throw InvalidDebtChangePage("REMOTE_DELETE_WOULD_REMOVE_FINANCIAL_HISTORY")
         }
-        debtDao.deleteHistoricalOpeningEvents(userId, remote.id)
         debtDao.deleteUnreferencedInstallments(userId, remote.id)
         if (debtDao.deleteDebtIfUnreferenced(userId, remote.id) != 1) {
             throw InvalidDebtChangePage("REMOTE_DELETE_DEBT_STILL_REFERENCED")
@@ -201,8 +200,14 @@ class DebtChangeFeedApplier @Inject constructor(
             createdAt = remote.createdAt?.let(::parseInstantMillis) ?: clock.millis(),
         )
         val existing = debtDao.getEvent(userId, remote.id)
-        if (existing != null && existing != event) throw InvalidDebtChangePage("DEBT_EVENT_ID_REUSED")
-        if (existing == null) debtDao.insertEvent(event)
+        if (existing != null && !sameEventContent(existing, event)) {
+            throw InvalidDebtChangePage("DEBT_EVENT_ID_REUSED")
+        }
+        if (existing == null) {
+            debtDao.insertEvent(event)
+        } else if (existing.createdAt != event.createdAt) {
+            debtDao.upsertEvent(event)
+        }
     }
 
     private suspend fun applyInstallmentChange(userId: String, change: SyncChangeItemDto) {
@@ -252,6 +257,17 @@ class DebtChangeFeedApplier @Inject constructor(
             left.notes == right.notes &&
             left.status == right.status &&
             left.deletedAt == right.deletedAt
+
+    private fun sameEventContent(left: DebtEventEntity, right: DebtEventEntity): Boolean =
+        left.userId == right.userId &&
+            left.debtId == right.debtId &&
+            left.transactionId == right.transactionId &&
+            left.interestTransactionId == right.interestTransactionId &&
+            left.installmentId == right.installmentId &&
+            left.eventType == right.eventType &&
+            left.amountMinor == right.amountMinor &&
+            left.principalDeltaMinor == right.principalDeltaMinor &&
+            left.occurredAt == right.occurredAt
 
     private fun parseInstantMillis(value: String): Long =
         runCatching { Instant.parse(value).toEpochMilli() }.getOrElse {

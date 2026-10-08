@@ -7,6 +7,7 @@ import com.kipu.app.core.database.KipuDatabase
 import com.kipu.app.feature.accounts.data.remote.PullChangesResponseDto
 import com.kipu.app.feature.accounts.data.remote.SyncChangeItemDto
 import com.kipu.app.feature.debts.data.local.DebtEntity
+import com.kipu.app.feature.debts.data.local.DebtEventEntity
 import com.kipu.app.feature.debts.data.sync.DebtChangeFeedApplier
 import com.kipu.app.feature.debts.data.sync.DebtChangeApplyResult
 import kotlinx.coroutines.runBlocking
@@ -54,6 +55,51 @@ class DebtChangeFeedTest {
     }
 
     @Test
+    fun serverEchoOfOpeningEventUpdatesTimestampWithoutDuplicatingHistory() = runBlocking {
+        database.debtDao().insertDebt(
+            DebtEntity(
+                id = DEBT_ID,
+                userId = "owner",
+                obligationType = "PAYABLE",
+                counterpartyName = "Proveedor",
+                totalMinor = 5_000L,
+                currencyCode = "PEN",
+                openedOn = "2026-10-01",
+                openingMode = "HISTORICAL",
+            ),
+        )
+        database.debtDao().insertEvent(
+            DebtEventEntity(
+                id = EVENT_ID,
+                userId = "owner",
+                debtId = DEBT_ID,
+                eventType = "DISBURSEMENT",
+                amountMinor = 5_000L,
+                principalDeltaMinor = 0L,
+                occurredAt = 1_790_812_800_000L,
+                createdAt = 1L,
+            ),
+        )
+
+        val result = applier.applyPage(
+            "owner",
+            page(
+                change(
+                    1,
+                    "DEBT_EVENT",
+                    EVENT_ID,
+                    """{"id":"$EVENT_ID","user_id":"owner","debt_id":"$DEBT_ID","event_type":"DISBURSEMENT","amount_minor":5000,"principal_delta_minor":0,"occurred_at":"2026-10-01T00:00:00Z","created_at":"2026-10-02T00:00:00Z"}""",
+                ),
+                nextSequence = 1L,
+            ),
+        )
+
+        assertTrue(result is DebtChangeApplyResult.Applied)
+        assertEquals(1, database.debtDao().getEvents("owner", DEBT_ID).size)
+        assertEquals(1_790_899_200_000L, database.debtDao().getEvent("owner", EVENT_ID)?.createdAt)
+    }
+
+    @Test
     fun olderRemoteRevisionSurfacesConflictAndPreservesLocalValue() = runBlocking {
         database.debtDao().insertDebt(
             DebtEntity(
@@ -93,7 +139,7 @@ class DebtChangeFeedTest {
     }
 
     @Test
-    fun ownerScopedDeleteChangeRemovesUnreferencedHistoricalDebtAndAdvancesCheckpoint() = runBlocking {
+    fun ownerScopedDeleteChangeRemovesUnreferencedLegacyDebt() = runBlocking {
         database.debtDao().insertDebt(
             DebtEntity(
                 id = DEBT_ID,
@@ -116,9 +162,50 @@ class DebtChangeFeedTest {
             ),
         )
 
-        assertTrue(result is DebtChangeApplyResult.Applied)
+        assertEquals(DebtChangeApplyResult.Applied(nextSequence = 1L, appliedChanges = 1), result)
         assertNull(database.debtDao().getDebtIncludingDeleted("owner", DEBT_ID))
         assertEquals(1L, database.debtDao().getSyncCheckpoint("owner")?.sequence)
+    }
+
+    @Test
+    fun ownerScopedDeleteChangeWithFinancialHistoryIsRejectedWithoutLosingEvents() = runBlocking {
+        database.debtDao().insertDebt(
+            DebtEntity(
+                id = DEBT_ID,
+                userId = "owner",
+                obligationType = "PAYABLE",
+                counterpartyName = "Historica con apertura",
+                totalMinor = 5_000L,
+                currencyCode = "PEN",
+                openedOn = "2026-10-01",
+                openingMode = "HISTORICAL",
+            ),
+        )
+        database.debtDao().insertEvent(
+            DebtEventEntity(
+                id = EVENT_ID,
+                userId = "owner",
+                debtId = DEBT_ID,
+                eventType = "DISBURSEMENT",
+                amountMinor = 5_000L,
+                principalDeltaMinor = 0L,
+                occurredAt = 1_791_000_000_000L,
+            ),
+        )
+
+        val result = applier.applyPage(
+            "owner",
+            page(
+                change(1, "DEBT", DEBT_ID, """{"id":"$DEBT_ID","user_id":"owner","revision":2}""", revision = 2L)
+                    .copy(operation = "DELETE"),
+                nextSequence = 1L,
+            ),
+        )
+
+        assertEquals(DebtChangeApplyResult.Rejected("REMOTE_DELETE_WOULD_REMOVE_FINANCIAL_HISTORY"), result)
+        assertEquals(5_000L, database.debtDao().getDebtIncludingDeleted("owner", DEBT_ID)?.totalMinor)
+        assertEquals(EVENT_ID, database.debtDao().getEvent("owner", EVENT_ID)?.id)
+        assertNull(database.debtDao().getSyncCheckpoint("owner"))
     }
 
     private fun page(vararg changes: SyncChangeItemDto, nextSequence: Long) = PullChangesResponseDto(

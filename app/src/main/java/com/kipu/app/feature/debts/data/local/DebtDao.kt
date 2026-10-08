@@ -13,6 +13,8 @@ data class DebtSettlementActivityRow(
     val interestMinor: Long,
     val occurredAt: Long,
     val isVoided: Boolean,
+    val eventType: String,
+    val principalDeltaMinor: Long?,
 )
 
 @Dao
@@ -70,7 +72,6 @@ interface DebtDao {
         SELECT EXISTS(
             SELECT 1 FROM debt_events
             WHERE user_id = :userId AND debt_id = :debtId
-              AND (transaction_id IS NOT NULL OR event_type <> 'DISBURSEMENT')
         )
     """)
     fun observeHasFinancialHistory(userId: String, debtId: String): Flow<Boolean>
@@ -86,6 +87,14 @@ interface DebtDao {
 
     @Query("SELECT * FROM debt_installments WHERE user_id = :userId AND debt_id = :debtId AND deleted_at IS NULL ORDER BY installment_number ASC")
     fun observeInstallments(userId: String, debtId: String): Flow<List<DebtInstallmentEntity>>
+
+    @Query("""
+        SELECT * FROM debt_installments
+        WHERE user_id = :userId AND deleted_at IS NULL
+          AND status IN ('PENDING', 'PARTIAL', 'PAID')
+        ORDER BY due_date ASC, installment_number ASC
+    """)
+    fun observeInstallmentHighlights(userId: String): Flow<List<DebtInstallmentEntity>>
 
     @Query("SELECT * FROM debt_installments WHERE user_id = :userId AND debt_id = :debtId AND deleted_at IS NULL ORDER BY installment_number ASC")
     suspend fun getInstallments(userId: String, debtId: String): List<DebtInstallmentEntity>
@@ -116,11 +125,13 @@ interface DebtDao {
     @Query("""
         SELECT e.id AS eventId, e.amount_minor AS principalMinor,
                COALESCE(i.amount_minor, 0) AS interestMinor, e.occurred_at AS occurredAt,
-               CASE WHEN p.status = 'VOIDED' THEN 1 ELSE 0 END AS isVoided
+               CASE WHEN p.status = 'VOIDED' THEN 1 ELSE 0 END AS isVoided,
+               e.event_type AS eventType, e.principal_delta_minor AS principalDeltaMinor
         FROM debt_events e
         LEFT JOIN transactions p ON p.user_id = e.user_id AND p.id = e.transaction_id
         LEFT JOIN transactions i ON i.user_id = e.user_id AND i.id = e.interest_transaction_id
-        WHERE e.user_id = :userId AND e.debt_id = :debtId AND e.event_type = 'PAYMENT'
+        WHERE e.user_id = :userId AND e.debt_id = :debtId
+          AND e.event_type IN ('PAYMENT', 'ADJUSTMENT', 'FORGIVENESS')
         ORDER BY e.occurred_at DESC, e.id DESC
     """)
     fun observeSettlementActivities(userId: String, debtId: String): Flow<List<DebtSettlementActivityRow>>
@@ -176,9 +187,6 @@ interface DebtDao {
 
     @Query("DELETE FROM debt_installments WHERE user_id = :userId AND debt_id = :debtId AND NOT EXISTS (SELECT 1 FROM debt_events e WHERE e.user_id = :userId AND e.debt_id = :debtId AND e.installment_id = debt_installments.id)")
     suspend fun deleteUnreferencedInstallments(userId: String, debtId: String): Int
-
-    @Query("DELETE FROM debt_events WHERE user_id = :userId AND debt_id = :debtId AND event_type = 'DISBURSEMENT' AND transaction_id IS NULL")
-    suspend fun deleteHistoricalOpeningEvents(userId: String, debtId: String): Int
 
     @Query("DELETE FROM debts WHERE user_id = :userId AND id = :debtId AND NOT EXISTS (SELECT 1 FROM debt_events e WHERE e.user_id = :userId AND e.debt_id = :debtId)")
     suspend fun deleteDebtIfUnreferenced(userId: String, debtId: String): Int

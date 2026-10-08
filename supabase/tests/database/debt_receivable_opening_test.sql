@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(15);
+SELECT plan(17);
 
 CREATE TEMP TABLE receivable_opening_ids (
     owner_id uuid,
@@ -44,6 +44,7 @@ SELECT lives_ok($$
     WITH body AS (SELECT jsonb_build_object(
         'contract_version', 1,
         'operation_id', (SELECT operation_one FROM receivable_opening_ids),
+        'event_id', '82500000-0000-4000-8000-000000000010',
         'debt_id', (SELECT new_debt_id FROM receivable_opening_ids),
         'obligation_type', 'RECEIVABLE',
         'counterparty_name', 'Amiga del barrio',
@@ -75,6 +76,9 @@ SELECT is((SELECT remaining_minor FROM public.v_debt_summary
 SELECT is((SELECT opening_mode FROM public.debts
     WHERE id = (SELECT new_debt_id FROM receivable_opening_ids)), 'NEW_CASH_FLOW',
     'new receivable persists its opening basis');
+SELECT is((SELECT id FROM public.debt_events WHERE debt_id = (SELECT new_debt_id FROM receivable_opening_ids)),
+    '82500000-0000-4000-8000-000000000010'::uuid,
+    'new receivable uses the client-stable opening event id');
 SELECT is((SELECT count(*)::integer FROM public.transactions
     WHERE user_id = (SELECT owner_id FROM receivable_opening_ids) AND operation_kind = 'STANDARD'), 0,
     'principal opening does not create an operating-expense transaction');
@@ -87,6 +91,7 @@ SELECT throws_ok($$
         SELECT jsonb_build_object(
             'contract_version', 1,
             'operation_id', extensions.gen_random_uuid(),
+            'event_id', extensions.gen_random_uuid(),
             'debt_id', extensions.gen_random_uuid(),
             'obligation_type', 'RECEIVABLE',
             'counterparty_name', 'Cuenta USD',
@@ -107,6 +112,7 @@ SELECT throws_ok($$
         SELECT jsonb_build_object(
             'contract_version', 1,
             'operation_id', extensions.gen_random_uuid(),
+            'event_id', extensions.gen_random_uuid(),
             'debt_id', extensions.gen_random_uuid(),
             'obligation_type', 'RECEIVABLE',
             'counterparty_name', 'Cuenta ajena',
@@ -126,6 +132,7 @@ SELECT throws_ok($$
     WITH body AS (SELECT jsonb_build_object(
         'contract_version', 1,
         'operation_id', extensions.gen_random_uuid(),
+        'event_id', extensions.gen_random_uuid(),
         'debt_id', extensions.gen_random_uuid(),
         'obligation_type', 'RECEIVABLE',
         'counterparty_name', 'Cuenta faltante',
@@ -143,6 +150,7 @@ SELECT lives_ok($$
     WITH body AS (SELECT jsonb_build_object(
         'contract_version', 1,
         'operation_id', (SELECT operation_two FROM receivable_opening_ids),
+        'event_id', '82500000-0000-4000-8000-000000000011',
         'debt_id', (SELECT historical_debt_id FROM receivable_opening_ids),
         'obligation_type', 'RECEIVABLE',
         'counterparty_name', 'Historial de préstamo',
@@ -156,6 +164,9 @@ SELECT lives_ok($$
     )) FROM body;
 $$, 'historical receivable records principal without repeating a cash deduction');
 RESET ROLE;
+SELECT is((SELECT id FROM public.debt_events WHERE debt_id = (SELECT historical_debt_id FROM receivable_opening_ids)),
+    '82500000-0000-4000-8000-000000000011'::uuid,
+    'historical receivable uses the client-stable opening event id');
 SELECT is((SELECT count(*)::integer FROM public.transactions
     WHERE user_id = (SELECT owner_id FROM receivable_opening_ids)), 1,
     'historical opening creates no additional cash transaction');

@@ -28,6 +28,7 @@ FROM (
     SELECT jsonb_build_object(
     'contract_version', 1,
     'operation_id', operation_id,
+    'event_id', '66000000-0000-4000-8000-000000000011',
     'debt_id', debt_id,
     'obligation_type', 'PAYABLE',
     'counterparty_name', 'Proveedor',
@@ -80,6 +81,7 @@ SELECT throws_ok($$
         SELECT jsonb_build_object(
             'contract_version', 1,
             'operation_id', extensions.gen_random_uuid(),
+            'event_id', extensions.gen_random_uuid(),
             'debt_id', extensions.gen_random_uuid(),
             'obligation_type', 'RECEIVABLE',
             'counterparty_name', 'Otra persona',
@@ -126,6 +128,7 @@ SELECT throws_ok($$
         SELECT jsonb_build_object(
             'contract_version', 1,
             'operation_id', extensions.gen_random_uuid(),
+            'event_id', extensions.gen_random_uuid(),
             'debt_id', extensions.gen_random_uuid(),
             'obligation_type', 'RECEIVABLE',
             'counterparty_name', 'Tercera obligación',

@@ -48,6 +48,7 @@ $jobs = foreach ($operation in $operations) {
         $request = @{
             contract_version = 1
             operation_id = $operationId
+            event_id = [guid]::NewGuid().ToString()
             request_hash = $requestHash
             debt_id = $debtId
             obligation_type = "PAYABLE"

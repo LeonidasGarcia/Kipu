@@ -114,7 +114,6 @@ BEGIN
     IF EXISTS (
         SELECT 1 FROM public.debt_events e
         WHERE e.user_id = v_user_id AND e.debt_id = v_debt_id
-          AND (e.event_type <> 'DISBURSEMENT' OR e.transaction_id IS NOT NULL)
     ) THEN
         RAISE EXCEPTION 'HISTORY_PRESERVED' USING ERRCODE = 'P0001';
     END IF;
@@ -124,9 +123,6 @@ BEGIN
         v_user_id, 'DEBT', v_debt_id, v_debt.revision + 1, 'DELETE',
         jsonb_build_object('id', v_debt_id, 'user_id', v_user_id, 'revision', v_debt.revision + 1)
     );
-    DELETE FROM public.debt_events
-    WHERE user_id = v_user_id AND debt_id = v_debt_id
-      AND event_type = 'DISBURSEMENT' AND transaction_id IS NULL;
     DELETE FROM public.debt_installments WHERE user_id = v_user_id AND debt_id = v_debt_id;
     DELETE FROM public.debts WHERE id = v_debt_id AND user_id = v_user_id;
 
