@@ -56,8 +56,8 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 ### Tests for User Story 1
 
-- [ ] T015 [P] [US1] Add PAYABLE opening, historical opening, and descriptive-edit domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/OpenPayableDebtTest.kt`.
-- [ ] T016 [P] [US1] Add server tests for PAYABLE cash/liability equality, no operating income, account ownership/currency validation, physical-delete guards, and combined Free quota in `supabase/tests/database/debt_payable_opening_test.sql`.
+- [X] T015 [P] [US1] Add PAYABLE opening, historical opening, and descriptive-edit domain tests in `app/src/test/java/com/kipu/app/feature/debts/domain/OpenPayableDebtTest.kt`.
+- [X] T016 [P] [US1] Add server tests for PAYABLE cash/liability equality, no operating income, account ownership/currency validation, physical-delete guards, and combined Free quota in `supabase/tests/database/debt_payable_opening_test.sql`.
 - [ ] T017 [P] [US1] Add local-first repository tests for offline visibility, retry idempotency, and preservation of existing history in `app/src/androidTest/java/com/kipu/app/feature/debts/data/PayableDebtRepositoryTest.kt`.
 - [ ] T018 [P] [US1] Add Compose acceptance coverage for new/historical PAYABLE entry, descriptive edits, and blocked deletion when history exists in `app/src/androidTest/java/com/kipu/app/feature/debts/presentation/PayableDebtFlowTest.kt`.
 
