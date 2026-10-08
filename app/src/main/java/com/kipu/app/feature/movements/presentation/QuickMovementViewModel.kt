@@ -14,19 +14,23 @@ import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.usecase.ObserveFinancialDashboard
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
 import com.kipu.app.feature.accounts.domain.usecase.ConfirmCreditPurchase
+import com.kipu.app.feature.categories.domain.MerchantPreferenceResolution
+import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.usecase.CreateCategory
 import com.kipu.app.feature.categories.domain.usecase.EnsureInitialCategoryCatalog
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
-import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
+import com.kipu.app.feature.categories.domain.usecase.ResolvePreferredCategory
 import com.kipu.app.feature.movements.domain.RegisterTransaction
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
 import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionCommand
 import com.kipu.app.feature.movements.domain.model.RegisterTransactionResult
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -105,6 +109,7 @@ class QuickMovementViewModel @Inject constructor(
     private val observeInstruments: ObserveInstruments,
     private val observeFinancialDashboard: ObserveFinancialDashboard,
     private val observeCategories: ObserveCategories,
+    private val resolvePreferredCategory: ResolvePreferredCategory,
     private val createCategoryUseCase: CreateCategory,
     private val ensureInitialCategoryCatalog: EnsureInitialCategoryCatalog,
     private val categorySyncScheduler: CategorySyncScheduler,
@@ -116,6 +121,9 @@ class QuickMovementViewModel @Inject constructor(
 
     private var allCategoryOptions: List<CategoryOption> = emptyList()
     private val rememberedMerchantCategories = mutableMapOf<String, String>()
+    private var merchantPreferenceJob: Job? = null
+    private var categorySelectionRevision = 0L
+    private var categoryWasExplicitlySelected = false
 
     private val _events = Channel<QuickMovementUiEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
@@ -210,6 +218,9 @@ class QuickMovementViewModel @Inject constructor(
     }
 
     fun onTypeSelected(type: MovementType) {
+        categorySelectionRevision++
+        categoryWasExplicitlySelected = false
+        merchantPreferenceJob?.cancel()
         _uiState.update { current ->
             val options = categoriesFor(type)
             val selection = if (current.type == type) {
@@ -291,6 +302,9 @@ class QuickMovementViewModel @Inject constructor(
 
     fun onCategorySelected(category: CategoryOption) {
         if (category !in _uiState.value.availableCategories || _uiState.value.type == MovementType.TRANSFER) return
+        categorySelectionRevision++
+        categoryWasExplicitlySelected = true
+        merchantPreferenceJob?.cancel()
         _uiState.update {
             it.copy(
                 selectedCategoryId = category.id,
@@ -353,6 +367,9 @@ class QuickMovementViewModel @Inject constructor(
                         rememberedMerchantCategories[normalizeMerchantName(merchant)] = option.id
                     }
                 }
+                categorySelectionRevision++
+                categoryWasExplicitlySelected = true
+                merchantPreferenceJob?.cancel()
                 categorySyncScheduler.scheduleSync(ownerId.value)
                 _uiState.update { state ->
                     val options = categoriesFor(state.type)
@@ -394,30 +411,78 @@ class QuickMovementViewModel @Inject constructor(
     )
 
     fun onMerchantSelected(merchant: MerchantCatalogEntry) {
-        _uiState.update {
-            val remembered = rememberedCategoryFor(merchant.name, it.availableCategories)
-            it.copy(
+        merchantPreferenceJob?.cancel()
+        val before = _uiState.value
+        val shouldResolveSuggestion = !categoryWasExplicitlySelected && before.type != MovementType.TRANSFER
+        val generalSuggestion = if (shouldResolveSuggestion) {
+            merchant.defaultCategoryId?.value?.let { id -> before.availableCategories.firstOrNull { it.id == id } }
+                ?: rememberedCategoryFor(merchant.name, before.availableCategories)
+        } else null
+        val requestRevision = categorySelectionRevision
+        _uiState.update { current ->
+            val selected = if (categoryWasExplicitlySelected) {
+                current.availableCategories.find { it.id == current.selectedCategoryId }
+            } else generalSuggestion
+            current.copy(
                 merchantName = merchant.name,
                 selectedMerchantId = merchant.id.value,
                 merchantProvisionalText = null,
-                selectedCategoryId = remembered?.id ?: it.selectedCategoryId,
-                selectedCategoryName = remembered?.displayName ?: it.selectedCategoryName,
-                selectedCategoryIcon = remembered?.icon ?: it.selectedCategoryIcon,
+                selectedCategoryId = selected?.id,
+                selectedCategoryName = selected?.displayName,
+                selectedCategoryIcon = selected?.icon,
             )
+        }
+        val ownerId = getUserId()?.let(::UserId) ?: return
+        if (!shouldResolveSuggestion) return
+
+        merchantPreferenceJob = viewModelScope.launch {
+            val resolution = resolvePreferredCategory(
+                ownerId = ownerId,
+                merchantId = merchant.id,
+                movementType = before.type,
+                generalSuggestion = generalSuggestion?.let { CategoryId(it.id) },
+            )
+            val resolvedCategoryId = when (resolution) {
+                is MerchantPreferenceResolution.Preferred -> resolution.categoryId.value
+                is MerchantPreferenceResolution.Suggested -> resolution.categoryId.value
+                MerchantPreferenceResolution.NeedsNewChoice,
+                MerchantPreferenceResolution.Unclassified -> null
+            }
+            val latest = _uiState.value
+            if (categoryWasExplicitlySelected || categorySelectionRevision != requestRevision ||
+                latest.selectedMerchantId != merchant.id.value
+            ) return@launch
+
+            val resolved = resolvedCategoryId?.let { id -> latest.availableCategories.firstOrNull { it.id == id } }
+            _uiState.update { current ->
+                if (current.selectedMerchantId != merchant.id.value || categorySelectionRevision != requestRevision) {
+                    current
+                } else {
+                    current.copy(
+                        selectedCategoryId = resolved?.id,
+                        selectedCategoryName = resolved?.displayName,
+                        selectedCategoryIcon = resolved?.icon,
+                    )
+                }
+            }
         }
     }
 
     fun onMerchantProvisionalText(text: String) {
         val name = text.trim()
+        merchantPreferenceJob?.cancel()
         _uiState.update {
-            val remembered = rememberedCategoryFor(name, it.availableCategories)
+            val remembered = if (categoryWasExplicitlySelected) null else rememberedCategoryFor(name, it.availableCategories)
+            val selected = if (categoryWasExplicitlySelected) {
+                it.availableCategories.find { option -> option.id == it.selectedCategoryId }
+            } else remembered
             it.copy(
                 merchantName = name,
                 selectedMerchantId = null,
                 merchantProvisionalText = name.takeIf(String::isNotBlank),
-                selectedCategoryId = remembered?.id ?: it.selectedCategoryId,
-                selectedCategoryName = remembered?.displayName ?: it.selectedCategoryName,
-                selectedCategoryIcon = remembered?.icon ?: it.selectedCategoryIcon,
+                selectedCategoryId = selected?.id,
+                selectedCategoryName = selected?.displayName,
+                selectedCategoryIcon = selected?.icon,
             )
         }
     }
@@ -598,6 +663,9 @@ class QuickMovementViewModel @Inject constructor(
     }
 
     fun resetForm() {
+        categorySelectionRevision++
+        categoryWasExplicitlySelected = false
+        merchantPreferenceJob?.cancel()
         _uiState.update { current ->
             QuickMovementUiState(
                 type = MovementType.EXPENSE,
