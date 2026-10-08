@@ -217,7 +217,7 @@ class CategoriesScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("Activas en tu plan: 5 de 5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Gastos: 5/5 • Ingresos: 0/5").assertIsDisplayed()
         composeTestRule.onNodeWithText(
             "Límite del plan Gratuito alcanzado. Desactiva una categoría para activar otra."
         ).assertIsDisplayed()
@@ -239,7 +239,7 @@ class CategoriesScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Activas en tu plan: 3 de 5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Gastos: 3/5 • Ingresos: 0/5").assertIsDisplayed()
     }
 
     @Test
