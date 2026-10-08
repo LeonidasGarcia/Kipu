@@ -26,9 +26,15 @@ SELECT owner_id, owner_id::text || '@debt-edit.kipu.test' FROM debt_history_ids
 UNION ALL
 SELECT other_id, other_id::text || '@debt-edit.kipu.test' FROM debt_history_ids;
 INSERT INTO public.debts (id, user_id, obligation_type, counterparty_name, total_minor, currency_code)
-SELECT unreferenced_debt_id, owner_id, 'PAYABLE', 'Planned only', 1000, 'PEN' FROM debt_history_ids
+SELECT unreferenced_debt_id, owner_id, 'PAYABLE'::public.obligation_type, 'Planned only', 1000, 'PEN' FROM debt_history_ids
 UNION ALL
-SELECT other_debt_id, other_id, 'PAYABLE', 'Other owner', 1500, 'PEN' FROM debt_history_ids;
+SELECT other_debt_id, other_id, 'PAYABLE'::public.obligation_type, 'Other owner', 1500, 'PEN' FROM debt_history_ids;
+INSERT INTO public.debt_events (
+    id, user_id, debt_id, event_type, amount_minor, principal_delta_minor, occurred_at, created_at
+)
+SELECT extensions.gen_random_uuid(), owner_id, unreferenced_debt_id, 'DISBURSEMENT', 1000, 0, now(), now()
+FROM debt_history_ids;
+GRANT SELECT ON debt_history_ids TO authenticated;
 
 SELECT has_function('public', 'edit_debt_details_v1', ARRAY['jsonb'], 'descriptive edit RPC is installed');
 SELECT has_function('public', 'delete_debt_if_unreferenced_v1', ARRAY['jsonb'], 'conditional delete RPC is installed');
@@ -120,7 +126,7 @@ SELECT is(
         'operation_id', extensions.gen_random_uuid(),
         'request_hash', repeat('f',64),
         'debt_id', (SELECT unreferenced_debt_id FROM debt_history_ids)
-    ))->>'status', 'APPLIED', 'conditional delete removes only the unreferenced planned debt');
+    ))->>'status', 'APPLIED', 'conditional delete removes a historical opening without a linked cash movement');
 
 RESET ROLE;
 SELECT is((SELECT count(*)::integer FROM public.debts WHERE id=(SELECT unreferenced_debt_id FROM debt_history_ids)), 0,
