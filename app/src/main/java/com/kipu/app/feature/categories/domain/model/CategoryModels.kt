@@ -2,6 +2,7 @@ package com.kipu.app.feature.categories.domain.model
 
 import com.kipu.app.core.finance.domain.model.MovementId
 import com.kipu.app.core.finance.domain.model.UserId
+import java.time.Instant
 import java.util.UUID
 
 @JvmInline
@@ -22,6 +23,58 @@ value class MerchantId(val value: String) {
     companion object {
         fun generate(): MerchantId = MerchantId(UUID.randomUUID().toString())
     }
+}
+
+@JvmInline
+value class MerchantAliasRuleId(val value: String) {
+    init {
+        require(value.isNotBlank()) { "MerchantAliasRuleId cannot be blank" }
+    }
+
+    companion object {
+        fun generate(): MerchantAliasRuleId = MerchantAliasRuleId(UUID.randomUUID().toString())
+    }
+}
+
+/** Exact source text from a bank signal; callers must keep normalization in a separate value. */
+@JvmInline
+value class SourceMerchantText(val value: String)
+
+data class MerchantAliasRule(
+    val id: MerchantAliasRuleId,
+    val ownerId: UserId,
+    val normalizedPattern: String,
+    val merchantId: MerchantId,
+    val revision: Long = 1L,
+    val deletedAt: Instant? = null,
+    val syncState: MerchantRuleSyncState = MerchantRuleSyncState.PENDING,
+) {
+    init {
+        require(normalizedPattern.isNotBlank()) { "Alias pattern cannot be blank" }
+        require(revision > 0L) { "Alias revision must be positive" }
+    }
+}
+
+/** One future-only merchant choice per owner and canonical merchant. */
+data class MerchantCategoryPreference(
+    val ownerId: UserId,
+    val merchantId: MerchantId,
+    val categoryId: CategoryId,
+    val revision: Long = 1L,
+    val deletedAt: Instant? = null,
+    val id: String = UUID.randomUUID().toString(),
+    val syncState: MerchantRuleSyncState = MerchantRuleSyncState.PENDING,
+) {
+    init {
+        require(revision > 0L) { "Preference revision must be positive" }
+    }
+}
+
+enum class MerchantRuleSyncState {
+    PENDING,
+    SYNCED,
+    CONFLICT,
+    FAILED,
 }
 
 @JvmInline
@@ -96,7 +149,8 @@ data class MovementClassification(
     val movementId: MovementId,
     val categoryId: CategoryId? = null,
     val merchantId: MerchantId? = null,
-    val merchantProvisionalText: String? = null
+    val merchantProvisionalText: String? = null,
+    val merchantRawText: String? = null,
 ) {
     init {
         if (merchantId != null) {

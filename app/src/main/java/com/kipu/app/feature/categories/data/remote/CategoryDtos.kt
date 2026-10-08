@@ -77,6 +77,50 @@ data class UpdateMovementClassificationRequestDto(
 )
 
 @Serializable
+data class PreserveMerchantSourceTextRequestDto(
+    @SerialName("operation_id") val operationId: String,
+    @SerialName("movement_id") val movementId: String,
+    @SerialName("merchant_raw_text") val merchantRawText: String,
+    @SerialName("payload_hash") val payloadHash: String,
+)
+
+@Serializable
+data class UpsertMerchantAliasRuleRequestDto(
+    @SerialName("operation_id") val operationId: String,
+    @SerialName("rule_id") val ruleId: String,
+    @SerialName("normalized_pattern") val normalizedPattern: String,
+    @SerialName("merchant_id") val merchantId: String,
+    @SerialName("expected_revision") val expectedRevision: Long? = null,
+    @SerialName("payload_hash") val payloadHash: String,
+)
+
+@Serializable
+data class DeleteMerchantAliasRuleRequestDto(
+    @SerialName("operation_id") val operationId: String,
+    @SerialName("rule_id") val ruleId: String,
+    @SerialName("expected_revision") val expectedRevision: Long,
+    @SerialName("payload_hash") val payloadHash: String,
+)
+
+@Serializable
+data class UpsertMerchantCategoryPreferenceRequestDto(
+    @SerialName("operation_id") val operationId: String,
+    @SerialName("preference_id") val preferenceId: String,
+    @SerialName("merchant_id") val merchantId: String,
+    @SerialName("category_id") val categoryId: String,
+    @SerialName("expected_revision") val expectedRevision: Long? = null,
+    @SerialName("payload_hash") val payloadHash: String,
+)
+
+@Serializable
+data class DeleteMerchantCategoryPreferenceRequestDto(
+    @SerialName("operation_id") val operationId: String,
+    @SerialName("preference_id") val preferenceId: String,
+    @SerialName("expected_revision") val expectedRevision: Long,
+    @SerialName("payload_hash") val payloadHash: String,
+)
+
+@Serializable
 data class ResolveCategoryConflictRequestDto(
     @SerialName("operation_id") val operationId: String,
     @SerialName("conflict_id") val conflictId: String,
@@ -102,4 +146,8 @@ data class CategoryCommandResponseDto(
     @SerialName("success") val success: Boolean = true,
     @SerialName("status") val status: String? = null,
     @SerialName("error") val error: String? = null,
+    @SerialName("code") val code: String? = null,
+    @SerialName("rule_id") val ruleId: String? = null,
+    @SerialName("preference_id") val preferenceId: String? = null,
+    @SerialName("revision") val revision: Long? = null,
 )

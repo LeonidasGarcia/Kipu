@@ -37,6 +37,7 @@ object CoreModule {
                 com.kipu.app.core.database.MIGRATION_15_16,
                 com.kipu.app.core.database.MIGRATION_16_17,
                 com.kipu.app.core.database.MIGRATION_17_18,
+                com.kipu.app.core.database.MIGRATION_18_19,
             )
             .build()
 
@@ -58,6 +59,7 @@ object CoreModule {
     @Provides fun instrumentSyncDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.InstrumentSyncDao = database.instrumentSyncDao()
     @Provides fun categoryDao(database: KipuDatabase): com.kipu.app.feature.categories.data.local.CategoryDao = database.categoryDao()
     @Provides fun merchantCatalogDao(database: KipuDatabase): com.kipu.app.feature.categories.data.local.MerchantCatalogDao = database.merchantCatalogDao()
+    @Provides fun merchantRulesDao(database: KipuDatabase): com.kipu.app.feature.categories.data.local.MerchantRulesDao = database.merchantRulesDao()
     @Provides fun movementDao(database: KipuDatabase): com.kipu.app.feature.movements.data.local.MovementDao = database.movementDao()
     @Provides fun creditDao(database: KipuDatabase): com.kipu.app.feature.accounts.data.local.CreditDao = database.creditDao()
     @Provides fun appNotificationDao(database: KipuDatabase): com.kipu.app.feature.notifications.data.local.AppNotificationDao = database.appNotificationDao()

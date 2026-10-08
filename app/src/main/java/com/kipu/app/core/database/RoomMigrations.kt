@@ -930,6 +930,48 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
     }
 }
 
+/** Sprint 5 merchant source preservation and owner-scoped alias/preference state. */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `financial_movements` ADD COLUMN `merchant_raw_text` TEXT")
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `merchant_alias_rules` (
+                `id` TEXT NOT NULL,
+                `user_id` TEXT NOT NULL,
+                `normalized_pattern` TEXT NOT NULL,
+                `merchant_id` TEXT NOT NULL,
+                `remote_revision` INTEGER NOT NULL,
+                `deleted_at` INTEGER,
+                `updated_at` INTEGER NOT NULL,
+                `sync_state` TEXT NOT NULL DEFAULT 'PENDING',
+                `sync_error` TEXT,
+                PRIMARY KEY(`user_id`, `id`),
+                CHECK(`remote_revision` > 0),
+                CHECK(length(trim(`normalized_pattern`)) > 0)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_merchant_alias_rules_user_id_normalized_pattern_deleted_at` ON `merchant_alias_rules` (`user_id`, `normalized_pattern`, `deleted_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_merchant_alias_rules_user_id_merchant_id` ON `merchant_alias_rules` (`user_id`, `merchant_id`)")
+        db.execSQL("""
+            CREATE TABLE IF NOT EXISTS `merchant_category_preferences` (
+                `user_id` TEXT NOT NULL,
+                `merchant_id` TEXT NOT NULL,
+                `id` TEXT NOT NULL,
+                `category_id` TEXT NOT NULL,
+                `remote_revision` INTEGER NOT NULL,
+                `deleted_at` INTEGER,
+                `updated_at` INTEGER NOT NULL,
+                `sync_state` TEXT NOT NULL DEFAULT 'PENDING',
+                `sync_error` TEXT,
+                PRIMARY KEY(`user_id`, `merchant_id`),
+                CHECK(`remote_revision` > 0)
+            )
+        """.trimIndent())
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_merchant_category_preferences_user_id_category_id` ON `merchant_category_preferences` (`user_id`, `category_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_merchant_category_preferences_user_id_deleted_at` ON `merchant_category_preferences` (`user_id`, `deleted_at`)")
+    }
+}
+
 /** Used by both upgrades and fresh production databases. */
 fun ensureMovementEvidenceGuards(db: SupportSQLiteDatabase) {
     for (table in listOf("transaction_revisions","movement_official_revisions","movement_ledger_effects","movement_ledger_aliases")) {

@@ -60,6 +60,8 @@ data class FinancialMovementEntity(
     val merchantId: String? = null,
     @ColumnInfo(name = "merchant_provisional_text")
     val merchantProvisionalText: String? = null,
+    @ColumnInfo(name = "merchant_raw_text")
+    val merchantRawText: String? = null,
     @ColumnInfo(name = "created_at")
     val createdAt: Long,
 )
