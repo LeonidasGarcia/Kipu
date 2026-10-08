@@ -45,7 +45,7 @@ class PayableDebtFlowTest {
         compose.onNodeWithText("El saldo de la cuenta aumenta por el principal.").assertIsDisplayed()
         compose.onNodeWithTag("opening-historical").performClick()
         compose.onNodeWithText("El saldo ya lo refleja; no habrá un segundo movimiento.").assertIsDisplayed()
-        compose.onNodeWithText("Registrar deuda").performClick()
+        compose.onNodeWithTag("save-debt").performClick()
 
         assertEquals(DebtOpeningMode.HISTORICAL, submittedMode)
     }
