@@ -22,8 +22,8 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 **Purpose**: Establish the safe starting point for the debt feature and its migration work.
 
-- [ ] T001 Reconcile local and remote migration histories, debt constraints, and legacy event semantics; record the go/no-go findings and any unresolved blocker in `specs/013-ep-deu-deudas-prestamos/research.md` without applying remote DDL.
-- [ ] T002 Create the `app/src/main/java/com/kipu/app/feature/debts/` package layout for domain, data, presentation, and DI boundaries described in `plan.md`.
+- [X] T001 Reconcile local and remote migration histories, debt constraints, and legacy event semantics; record the local-development GO, remote rollout NO-GO, and unresolved blockers in `specs/013-ep-deu-deudas-prestamos/research.md` without applying remote DDL.
+- [X] T002 Create the `app/src/main/java/com/kipu/app/feature/debts/` package layout for domain, data, presentation, and DI boundaries described in `plan.md`.
 
 ---
 
@@ -33,10 +33,10 @@ description: "Dependency-ordered implementation tasks for EP-DEU Sprint 5"
 
 **Checkpoint**: Do not begin user-story acceptance until the migration gate passes, Room can open from v18, and debt changes can be stored and synchronized without duplicate effects.
 
-- [ ] T003 [P] Add preflight and post-migration assertions against representative legacy rows, including ADJUSTMENT/FORGIVENESS semantics, installment uniqueness drift, and unchanged IDs, balances, ownership, and history, in `supabase/tests/database/debt_sprint5_migration_test.sql`.
-- [ ] T004 [P] Add pure domain and movement-accounting tests for signed principal deltas, legacy PAYMENT compatibility, zero-balance derivation, voided linked transactions, principal exclusion, and real-interest inclusion in `app/src/test/java/com/kipu/app/feature/debts/domain/DebtPrincipalCalculatorTest.kt` and `app/src/test/java/com/kipu/app/feature/movements/domain/DebtMovementAccountingTest.kt`.
-- [ ] T005 [P] Add Room v18-to-v19 upgrade and data-preservation coverage in `app/src/androidTest/java/com/kipu/app/core/database/DebtRoomMigrationTest.kt`.
-- [ ] T006 [P] Add database contract tests for owner isolation across debt/account/installment/transaction references, SECURITY DEFINER ownership checks, command idempotency, and concurrent Free quota enforcement in `supabase/tests/database/debt_sprint5_security_and_idempotency_test.sql`.
+- [X] T003 [P] Add preflight and post-migration assertions against representative legacy rows, including ADJUSTMENT/FORGIVENESS semantics, installment uniqueness drift, and unchanged IDs, balances, ownership, and history, in `supabase/tests/database/debt_sprint5_migration_test.sql`.
+- [X] T004 [P] Add pure domain and movement-accounting tests for signed principal deltas, legacy PAYMENT compatibility, zero-balance derivation, voided linked transactions, principal exclusion, and real-interest inclusion in `app/src/test/java/com/kipu/app/feature/debts/domain/DebtPrincipalCalculatorTest.kt` and `app/src/test/java/com/kipu/app/feature/movements/domain/DebtMovementAccountingTest.kt`.
+- [X] T005 [P] Add Room v18-to-v19 upgrade and data-preservation coverage in `app/src/androidTest/java/com/kipu/app/core/database/DebtRoomMigrationTest.kt`.
+- [X] T006 [P] Add database contract tests for owner isolation across debt/account/installment/transaction references, SECURITY DEFINER ownership checks, command idempotency, and concurrent Free quota enforcement in `supabase/tests/database/debt_sprint5_security_and_idempotency_test.sql`.
 - [ ] T007 Create the additive debt lifecycle migration in `supabase/migrations/20261008120000_s5_debt_lifecycle.sql` only after T001 confirms a safe migration path; add opening/reminder/event-delta fields, update the debt summary and category constraint, and preserve existing IDs, history, RLS, grants, and valid balances.
 - [ ] T008 Add `DebtEntity`, `DebtInstallmentEntity`, `DebtEventEntity`, their DAOs, indexes, and the v18-to-v19 registration in `app/src/main/java/com/kipu/app/core/database/KipuDatabase.kt` and `app/src/main/java/com/kipu/app/core/database/RoomMigrations.kt`.
 - [ ] T009 Define shared debt command IDs, request hashes, revision checks, owner-safe results, retry/conflict errors, and the pure signed-delta principal projection in `app/src/main/java/com/kipu/app/feature/debts/domain/model/DebtCommandModels.kt`, `app/src/main/java/com/kipu/app/feature/debts/domain/DebtCommandHasher.kt`, and `app/src/main/java/com/kipu/app/feature/debts/domain/DebtPrincipalCalculator.kt`.
