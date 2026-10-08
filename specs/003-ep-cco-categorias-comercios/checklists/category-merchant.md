@@ -10,51 +10,51 @@
 
 ## Requirement Completeness
 
-- [ ] CHK001 Are create, edit, activation, inactivation, and reactivation requirements defined for both category levels? [Completeness, Spec §FR-001, §FR-009]
-- [ ] CHK002 Are the required attributes and stable identity rules for custom and predetermined categories documented without relying on implied behavior? [Completeness, Spec §FR-003 to §FR-005, Key Entities]
-- [ ] CHK003 Are the rules that distinguish a custom root from a predetermined root specified clearly enough to calculate the Free quota? [Completeness, Spec §FR-006, Assumptions]
-- [ ] CHK004 Are the category and merchant associations on a movement defined independently, including their respective clearing behavior? [Completeness, Spec §FR-011, User Story 3]
-- [ ] CHK005 Are the ownership and catalog-authority requirements for private categories, user presentation, and Kipu-managed merchants explicitly documented? [Completeness, Plan §Remote boundary, Spec §FR-005, §FR-012]
+- [x] CHK001 Are create, edit, activation, inactivation, and reactivation requirements defined for both category levels? [Completeness, Spec §FR-001, §FR-009]
+- [x] CHK002 Are the required attributes and stable identity rules for custom and predetermined categories documented without relying on implied behavior? [Completeness, Spec §FR-003 to §FR-005, Key Entities]
+- [x] CHK003 Are the rules that distinguish a custom root from a predetermined root specified clearly enough to calculate the Free quota? [Completeness, Spec §FR-006, Assumptions]
+- [x] CHK004 Are the category and merchant associations on a movement defined independently, including their respective clearing behavior? [Completeness, Spec §FR-011, User Story 3]
+- [x] CHK005 Are the ownership and catalog-authority requirements for private categories, user presentation, and Kipu-managed merchants explicitly documented? [Completeness, Plan §Remote boundary, Spec §FR-005, §FR-012]
 
 ## Requirement Clarity
 
-- [ ] CHK006 Is "active custom root" defined precisely enough to decide whether an existing category consumes the Free quota? [Clarity, Spec §FR-006 to §FR-009]
-- [ ] CHK007 Is the phrase "availability of its category raíz" unambiguous for subcategory creation, visibility, and new movement assignment? [Clarity, Spec §FR-007, Clarifications]
-- [ ] CHK008 Is the allowed partial-match behavior for merchant search bounded clearly enough to distinguish a substring match from an alias or semantic match? [Clarity, Spec §FR-013, §FR-014, §FR-019]
-- [ ] CHK009 Is the condition for retaining provisional merchant text specified precisely when a catalog merchant is selected, changed, or cleared? [Clarity, Spec §FR-015, §FR-016, Plan §Domain and lifecycle]
-- [ ] CHK010 Are "both versions" and the user choice in a category presentation conflict defined with sufficient information to identify the versions and the valid resolution outcome? [Clarity, Spec §FR-018, Clarifications]
+- [x] CHK006 Is "active custom root" defined precisely enough to decide whether an existing category consumes the Free quota? [Clarity, Spec §FR-006 to §FR-009]
+- [x] CHK007 Is the phrase "availability of its category raíz" unambiguous for subcategory creation, visibility, and new movement assignment? [Clarity, Spec §FR-007, Clarifications]
+- [x] CHK008 Is the allowed partial-match behavior for merchant search bounded clearly enough to distinguish a substring match from an alias or semantic match? [Clarity, Spec §FR-013, §FR-014, §FR-019]
+- [x] CHK009 Is the condition for retaining provisional merchant text specified precisely when a catalog merchant is selected, changed, or cleared? [Clarity, Spec §FR-015, §FR-016, Plan §Domain and lifecycle]
+- [x] CHK010 Are "both versions" and the user choice in a category presentation conflict defined with sufficient information to identify the versions and the valid resolution outcome? [Clarity, Spec §FR-018, Clarifications]
 
 ## Requirement Consistency
 
-- [ ] CHK011 Are the two-level hierarchy rules consistent between the primary story, edge cases, functional requirements, and success criteria? [Consistency, Spec §User Story 1, Edge Cases, §FR-002, §SC-001]
-- [ ] CHK012 Are the requirements for editing predetermined category presentation consistent with preserving historical movement identity? [Consistency, Spec §FR-005, Key Entities, §SC-003]
-- [ ] CHK013 Are Free-limit requirements consistent for initial creation, reactivation, downgrade from Premium, and inherited subcategory availability? [Consistency, Spec §FR-006 to §FR-009, Edge Cases, Assumptions]
-- [ ] CHK014 Are the merchant no-result requirements consistent with allowing normalized partial matches while prohibiting invented suggestions? [Consistency, Spec §FR-014 to §FR-019, Edge Cases, Clarifications]
-- [ ] CHK015 Are all references to tags, aliases, original merchant text, and personal category preferences consistently excluded from Sprint 2? [Consistency, Spec §FR-010, §FR-016 to §FR-017, Assumptions]
+- [x] CHK011 Are the two-level hierarchy rules consistent between the primary story, edge cases, functional requirements, and success criteria? [Consistency, Spec §User Story 1, Edge Cases, §FR-002, §SC-001]
+- [x] CHK012 Are the requirements for editing predetermined category presentation consistent with preserving historical movement identity? [Consistency, Spec §FR-005, Key Entities, §SC-003]
+- [x] CHK013 Are Free-limit requirements consistent for initial creation, reactivation, downgrade from Premium, and inherited subcategory availability? [Consistency, Spec §FR-006 to §FR-009, Edge Cases, Assumptions]
+- [x] CHK014 Are the merchant no-result requirements consistent with allowing normalized partial matches while prohibiting invented suggestions? [Consistency, Spec §FR-014 to §FR-019, Edge Cases, Clarifications]
+- [x] CHK015 Are all references to tags, aliases, original merchant text, and personal category preferences consistently excluded from Sprint 2? [Consistency, Spec §FR-010, §FR-016 to §FR-017, Assumptions]
 
 ## Acceptance Criteria Quality
 
-- [ ] CHK016 Can the hierarchy rejection outcome be objectively assessed for a third level, a cycle, and self-reference without relying on implementation details? [Measurability, Spec §SC-001]
-- [ ] CHK017 Is the Free-limit outcome measurable for every qualifying root state, including categories preserved after downgrade? [Measurability, Spec §SC-002, Edge Cases]
-- [ ] CHK018 Are the historical-preservation criteria explicit enough to determine which category identity and presentation users should continue to see? [Measurability, Spec §SC-003, §FR-005]
-- [ ] CHK019 Are the search success and empty-result criteria measured against a representative set of clear, partial, and absent normalized queries? [Measurability, Spec §SC-005 to §SC-006]
-- [ ] CHK020 Is the category/merchant independence criterion stated so that each direction of change and removal is objectively distinguishable? [Measurability, Spec §SC-007, User Story 3]
+- [x] CHK016 Can the hierarchy rejection outcome be objectively assessed for a third level, a cycle, and self-reference without relying on implementation details? [Measurability, Spec §SC-001]
+- [x] CHK017 Is the Free-limit outcome measurable for every qualifying root state, including categories preserved after downgrade? [Measurability, Spec §SC-002, Edge Cases]
+- [x] CHK018 Are the historical-preservation criteria explicit enough to determine which category identity and presentation users should continue to see? [Measurability, Spec §SC-003, §FR-005]
+- [x] CHK019 Are the search success and empty-result criteria measured against a representative set of clear, partial, and absent normalized queries? [Measurability, Spec §SC-005 to §SC-006]
+- [x] CHK020 Is the category/merchant independence criterion stated so that each direction of change and removal is objectively distinguishable? [Measurability, Spec §SC-007, User Story 3]
 
 ## Scenario and Edge Case Coverage
 
-- [ ] CHK021 Are requirements defined for the category branch when a root is inactivated, reactivated, or exceeds the Free limit after a plan change? [Coverage, Spec §FR-008 to §FR-009, Edge Cases]
-- [ ] CHK022 Are requirements defined for movement classifications that reference an inactive category, an unavailable merchant, or provisional text without a catalog result? [Coverage, Spec §FR-009, §FR-012 to §FR-016, Edge Cases]
-- [ ] CHK023 Are concurrent offline edits and their recovery through explicit conflict resolution specified without leaving a silent-overwrite alternative? [Coverage, Exception and Recovery Flow, Spec §FR-018, Clarifications]
+- [x] CHK021 Are requirements defined for the category branch when a root is inactivated, reactivated, or exceeds the Free limit after a plan change? [Coverage, Spec §FR-008 to §FR-009, Edge Cases]
+- [x] CHK022 Are requirements defined for movement classifications that reference an inactive category, an unavailable merchant, or provisional text without a catalog result? [Coverage, Spec §FR-009, §FR-012 to §FR-016, Edge Cases]
+- [x] CHK023 Are concurrent offline edits and their recovery through explicit conflict resolution specified without leaving a silent-overwrite alternative? [Coverage, Exception and Recovery Flow, Spec §FR-018, Clarifications]
 - [ ] CHK024 Are requirements defined for a search query whose normalization produces an empty or whitespace-only value? [Gap, Edge Case]
-- [ ] CHK025 Are requirements defined for the user-facing state when the Kipu merchant catalog is unavailable or stale during an otherwise local-first flow? [Gap, Non-Functional and Recovery Flow]
+- [x] CHK025 Are requirements defined for the user-facing state when the Kipu merchant catalog is unavailable or stale during an otherwise local-first flow? [Gap, Non-Functional and Recovery Flow]
 
 ## Non-Functional Requirements and Dependencies
 
-- [ ] CHK026 Are local responsiveness and merchant-search timing targets specified for all critical category and merchant journeys, including a no-result search? [Coverage, Plan §Technical Context, Spec §SC-004 to §SC-005]
-- [ ] CHK027 Are authorization requirements explicit for every private category, category presentation, conflict, and movement classification resource? [Security, Plan §Constitution Check, §Remote boundary]
-- [ ] CHK028 Are catalog read-only requirements and the absence of user merchant creation defined consistently with the Kipu-controlled catalog boundary? [Security and Dependency, Spec §FR-012, §FR-016, Plan §Remote boundary]
-- [ ] CHK029 Are accessibility requirements specified for communicating hierarchy, inactive state, Free-limit state, empty search results, and conflict choice without depending on color alone? [Gap, Accessibility]
-- [ ] CHK030 Are assumptions about the initial predetermined-category catalog and Kipu merchant-catalog maintenance documented as dependencies that can be validated before delivery? [Assumption and Dependency, Spec §FR-004, Assumptions]
+- [x] CHK026 Are local responsiveness and merchant-search timing targets specified for all critical category and merchant journeys, including a no-result search? [Coverage, Plan §Technical Context, Spec §SC-004 to §SC-005]
+- [x] CHK027 Are authorization requirements explicit for every private category, category presentation, conflict, and movement classification resource? [Security, Plan §Constitution Check, §Remote boundary]
+- [x] CHK028 Are catalog read-only requirements and the absence of user merchant creation defined consistently with the Kipu-controlled catalog boundary? [Security and Dependency, Spec §FR-012, §FR-016, Plan §Remote boundary]
+- [x] CHK029 Are accessibility requirements specified for communicating hierarchy, inactive state, Free-limit state, empty search results, and conflict choice without depending on color alone? [Gap, Accessibility]
+- [x] CHK030 Are assumptions about the initial predetermined-category catalog and Kipu merchant-catalog maintenance documented as dependencies that can be validated before delivery? [Assumption and Dependency, Spec §FR-004, Assumptions]
 
 ## Notes
 
@@ -63,3 +63,4 @@
 - `/speckit.implement` reads checklist checkbox state as a gate and must not modify markers.
 - `checklists/requirements.md` has a separate built-in lifecycle maintained by `/speckit.specify` and `/speckit.clarify`.
 - Add findings inline with the relevant CHK identifier.
+- Review 2026-10-08: CHK024 remains open because the spec and UI contract do not define the result for an empty or whitespace-only normalized merchant query.
