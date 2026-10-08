@@ -22,6 +22,7 @@ class DebtEditDetailsFlowTest {
                 counterpartyName = "Banco local",
                 principalAmount = "S/ 50.00",
                 currencyCode = "PEN",
+                revision = 1L,
             ),
         )
         var savedName: String? = null
