@@ -30,7 +30,7 @@ class DebtChangeFeedTest {
             InstrumentationRegistry.getInstrumentation().targetContext,
             KipuDatabase::class.java,
         ).allowMainThreadQueries().build()
-        applier = DebtChangeFeedApplier(database, database.debtDao())
+        applier = DebtChangeFeedApplier(database, database.debtDao(), database.movementDao())
     }
 
     @After
@@ -48,6 +48,7 @@ class DebtChangeFeedTest {
 
         assertTrue(result is DebtChangeApplyResult.Applied)
         assertEquals(5_000L, database.debtDao().getDebt("owner", DEBT_ID)?.totalMinor)
+        assertEquals("NEW_CASH_FLOW", database.debtDao().getDebt("owner", DEBT_ID)?.openingMode)
         assertEquals(EVENT_ID, database.debtDao().getEvent("owner", EVENT_ID)?.id)
         assertEquals(2L, database.debtDao().getSyncCheckpoint("owner")?.sequence)
     }
@@ -69,7 +70,7 @@ class DebtChangeFeedTest {
         )
 
         val result = applier.applyPage("owner", page(
-            change(1, "DEBT", DEBT_ID, debtPayload(revision = 2L, counterparty = "Remote stale name")),
+            change(1, "DEBT", DEBT_ID, debtPayload(revision = 2L, counterparty = "Remote stale name"), revision = 2L),
             nextSequence = 1L,
         ))
 
@@ -97,17 +98,17 @@ class DebtChangeFeedTest {
         hasMore = false,
     )
 
-    private fun change(sequence: Long, entityType: String, id: String, payload: String) = SyncChangeItemDto(
+    private fun change(sequence: Long, entityType: String, id: String, payload: String, revision: Long = 1L) = SyncChangeItemDto(
         sequence = sequence,
         entityType = entityType,
         entityId = id,
-        revision = 1L,
+        revision = revision,
         operation = "UPSERT",
         payload = Json.parseToJsonElement(payload),
     )
 
     private fun debtPayload(revision: Long, counterparty: String = "Proveedor") =
-        """{"id":"$DEBT_ID","user_id":"owner","obligation_type":"PAYABLE","counterparty_name":"$counterparty","total_minor":5000,"currency_code":"PEN","opened_on":"2026-10-01","status":"ACTIVE","revision":$revision}"""
+        """{"id":"$DEBT_ID","user_id":"owner","obligation_type":"PAYABLE","counterparty_name":"$counterparty","total_minor":5000,"currency_code":"PEN","opened_on":"2026-10-01","opening_mode":"NEW_CASH_FLOW","status":"ACTIVE","revision":$revision}"""
 
     private fun eventPayload() =
         """{"id":"$EVENT_ID","user_id":"owner","debt_id":"$DEBT_ID","event_type":"DISBURSEMENT","amount_minor":5000,"principal_delta_minor":0,"occurred_at":"2026-10-01T00:00:00Z"}"""

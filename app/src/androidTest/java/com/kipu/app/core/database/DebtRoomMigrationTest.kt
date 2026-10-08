@@ -49,6 +49,7 @@ class DebtRoomMigrationTest {
             assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM financial_movements WHERE id='movement-1' AND amount_minor_units=-1250"))
             assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM ledger_entries WHERE id='ledger-1' AND signed_amount_minor=-1250"))
             assertEquals(0L, db.scalarLong("SELECT COUNT(*) FROM debts"))
+            assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM pragma_table_info('debts') WHERE name='opening_mode'"))
             assertEquals(0L, db.scalarLong("SELECT COUNT(*) FROM debt_installments"))
             assertEquals(0L, db.scalarLong("SELECT COUNT(*) FROM debt_events"))
         }

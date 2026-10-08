@@ -1,5 +1,5 @@
 BEGIN;
-SELECT plan(14);
+SELECT plan(15);
 
 CREATE TEMP TABLE receivable_opening_ids (
     owner_id uuid,
@@ -72,6 +72,9 @@ SELECT is((SELECT signed_amount_minor FROM internal.ledger_entries
 SELECT is((SELECT remaining_minor FROM public.v_debt_summary
     WHERE debt_id = (SELECT new_debt_id FROM receivable_opening_ids)), 5000::numeric,
     'new receivable opens with the full principal outstanding');
+SELECT is((SELECT opening_mode FROM public.debts
+    WHERE id = (SELECT new_debt_id FROM receivable_opening_ids)), 'NEW_CASH_FLOW',
+    'new receivable persists its opening basis');
 SELECT is((SELECT count(*)::integer FROM public.transactions
     WHERE user_id = (SELECT owner_id FROM receivable_opening_ids) AND operation_kind = 'STANDARD'), 0,
     'principal opening does not create an operating-expense transaction');

@@ -62,8 +62,9 @@ class PayableDebtRepositoryTest {
         assertTrue(result is DebtCommandResult.Applied)
         val visible = repository.observeDebts("owner").first()
         assertEquals(1, visible.size)
-        assertEquals("debt-1", visible.single().debtId)
+        assertEquals(DEBT_ID, visible.single().debtId)
         assertEquals(5_000L, visible.single().remainingPrincipalMinor)
+        assertEquals("HISTORICAL", visible.single().openingMode.name)
         assertEquals(listOf("owner"), scheduler.scheduledOwners)
         assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox WHERE state='PENDING'"))
     }
@@ -75,7 +76,7 @@ class PayableDebtRepositoryTest {
             DebtEventEntity(
                 id = "later-adjustment",
                 userId = "owner",
-                debtId = "debt-1",
+                debtId = DEBT_ID,
                 eventType = DebtEventType.ADJUSTMENT.name,
                 amountMinor = 100L,
                 principalDeltaMinor = -100L,
@@ -87,7 +88,7 @@ class PayableDebtRepositoryTest {
         val retry = repository.openDebt("owner", command(), hasPremiumAccess = false)
         val visible = repository.observeDebts("owner").first().single()
 
-        assertEquals(DebtCommandResult.Duplicate("debt-1", 1L, 4_900L), retry)
+        assertEquals(DebtCommandResult.Duplicate(DEBT_ID, 1L, 4_900L), retry)
         assertEquals(4_900L, visible.remainingPrincipalMinor)
         assertEquals(2L, scalarLong("SELECT COUNT(*) FROM debt_events"))
         assertEquals(1L, scalarLong("SELECT COUNT(*) FROM debt_command_outbox"))
@@ -96,9 +97,9 @@ class PayableDebtRepositoryTest {
     private fun command() = OpenDebtCommand(
         identity = DebtCommandIdentity(
             "84000000-0000-4000-8000-000000000001",
-            DebtCommandHasher.sha256("payable:debt-1:5000:PEN"),
+            DebtCommandHasher.sha256("payable:$DEBT_ID:5000:PEN"),
         ),
-        debtId = "debt-1",
+        debtId = DEBT_ID,
         obligationType = DebtObligationType.PAYABLE,
         counterpartyName = "Proveedor local",
         principalMinor = 5_000L,
@@ -117,5 +118,9 @@ class PayableDebtRepositoryTest {
         override fun schedule(userId: String) {
             scheduledOwners += userId
         }
+    }
+
+    private companion object {
+        const val DEBT_ID = "84000000-0000-4000-8000-000000000002"
     }
 }
