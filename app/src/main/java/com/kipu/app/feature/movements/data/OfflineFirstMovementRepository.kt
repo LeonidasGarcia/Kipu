@@ -4,6 +4,8 @@ import com.kipu.app.feature.accounts.data.local.AccountDao
 import com.kipu.app.feature.accounts.data.local.CardDao
 import com.kipu.app.feature.categories.data.local.CategoryDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
+import com.kipu.app.feature.debts.data.sync.DebtSyncScheduler
+import com.kipu.app.feature.debts.data.sync.NoOpDebtSyncScheduler
 import com.kipu.app.feature.movements.data.local.BalanceProjectionStore
 import com.kipu.app.feature.movements.data.local.MovementLocalDataSource
 import com.kipu.app.feature.movements.data.local.TransactionEntity
@@ -35,6 +37,7 @@ class OfflineFirstMovementRepository @Inject constructor(
     private val cardDao: CardDao,
     private val categoryDao: CategoryDao,
     private val merchantDao: MerchantCatalogDao,
+    private val debtSyncScheduler: DebtSyncScheduler = NoOpDebtSyncScheduler,
 ) : MovementRepository, MovementMaintenanceRepository, ExpenseConsumptionRepository, MovementHistoryQueryRepository {
 
     override fun observeTransactions(userId: String): Flow<List<TransactionItem>> =
@@ -135,9 +138,12 @@ class OfflineFirstMovementRepository @Inject constructor(
 
     override suspend fun void(userId: String, command: MovementRevisionCommand.Void): MovementMutationResult {
         val requestHash = revisionHasher.computeHash(command)
+        val target = localDataSource.getTransactionById(userId, command.transactionId)
+        val isDebtSettlement = (target?.operationKind ?: target?.legacyKind) in setOf("DEBT_PAYMENT", "DEBT_AMORTIZATION")
         val result = localDataSource.commitVoidAtomic(userId, command, requestHash)
         if (result is MovementMutationResult.Success && !result.isDuplicate) {
             syncScheduler.scheduleSync(userId)
+            if (isDebtSettlement) debtSyncScheduler.schedule(userId)
         }
         return result
     }

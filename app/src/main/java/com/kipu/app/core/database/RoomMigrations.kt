@@ -972,6 +972,128 @@ val MIGRATION_18_19 = object : Migration(18, 19) {
     }
 }
 
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `debts` (
+            `id` TEXT NOT NULL,
+            `user_id` TEXT NOT NULL,
+            `obligation_type` TEXT NOT NULL,
+            `counterparty_name` TEXT NOT NULL,
+            `total_minor` INTEGER NOT NULL,
+            `currency_code` TEXT NOT NULL,
+            `opened_on` TEXT NOT NULL,
+            `opening_mode` TEXT NOT NULL DEFAULT 'HISTORICAL',
+            `due_date` TEXT,
+            `reminder_lead_days` INTEGER,
+            `notes` TEXT,
+            `status` TEXT NOT NULL DEFAULT 'ACTIVE',
+            `sync_state` TEXT NOT NULL DEFAULT 'PENDING',
+            `revision` INTEGER NOT NULL DEFAULT 1,
+            `deleted_at` INTEGER,
+            `created_at` INTEGER NOT NULL,
+            `updated_at` INTEGER NOT NULL,
+            PRIMARY KEY(`user_id`, `id`)
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debts_user_id_status_due_date` ON `debts` (`user_id`, `status`, `due_date`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debts_user_id_updated_at` ON `debts` (`user_id`, `updated_at`)")
+
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `debt_installments` (
+            `id` TEXT NOT NULL,
+            `user_id` TEXT NOT NULL,
+            `debt_id` TEXT NOT NULL,
+            `installment_number` INTEGER NOT NULL,
+            `due_date` TEXT NOT NULL,
+            `amount_minor` INTEGER NOT NULL,
+            `status` TEXT NOT NULL DEFAULT 'PLANNED',
+            `revision` INTEGER NOT NULL DEFAULT 1,
+            `deleted_at` INTEGER,
+            `created_at` INTEGER NOT NULL,
+            `updated_at` INTEGER NOT NULL,
+            PRIMARY KEY(`user_id`, `id`),
+            FOREIGN KEY(`user_id`, `debt_id`) REFERENCES `debts`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION
+        )""")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_debt_installments_debt_id_installment_number` ON `debt_installments` (`debt_id`, `installment_number`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_installments_user_id_debt_id_due_date` ON `debt_installments` (`user_id`, `debt_id`, `due_date`)")
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_debt_installments_user_id_debt_id_id` ON `debt_installments` (`user_id`, `debt_id`, `id`)")
+
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `debt_events` (
+            `id` TEXT NOT NULL,
+            `user_id` TEXT NOT NULL,
+            `debt_id` TEXT NOT NULL,
+            `transaction_id` TEXT,
+            `installment_id` TEXT,
+            `event_type` TEXT NOT NULL,
+            `amount_minor` INTEGER NOT NULL,
+            `principal_delta_minor` INTEGER,
+            `occurred_at` INTEGER NOT NULL,
+            `created_at` INTEGER NOT NULL,
+            PRIMARY KEY(`user_id`, `id`),
+            FOREIGN KEY(`user_id`, `debt_id`) REFERENCES `debts`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION,
+            FOREIGN KEY(`user_id`, `transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION,
+            FOREIGN KEY(`user_id`, `debt_id`, `installment_id`) REFERENCES `debt_installments`(`user_id`, `debt_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_events_user_id_debt_id_occurred_at_id` ON `debt_events` (`user_id`, `debt_id`, `occurred_at`, `id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_events_user_id_transaction_id` ON `debt_events` (`user_id`, `transaction_id`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_events_user_id_debt_id_installment_id` ON `debt_events` (`user_id`, `debt_id`, `installment_id`)")
+
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `debt_command_outbox` (
+            `user_id` TEXT NOT NULL,
+            `operation_id` TEXT NOT NULL,
+            `debt_id` TEXT NOT NULL,
+            `command_type` TEXT NOT NULL,
+            `request_hash` TEXT NOT NULL,
+            `payload` TEXT NOT NULL,
+            `state` TEXT NOT NULL DEFAULT 'PENDING',
+            `attempt_count` INTEGER NOT NULL DEFAULT 0,
+            `next_attempt_at` INTEGER,
+            `lease_until` INTEGER,
+            `last_error_code` TEXT,
+            `created_at` INTEGER NOT NULL,
+            `updated_at` INTEGER NOT NULL,
+            PRIMARY KEY(`user_id`, `operation_id`)
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_command_outbox_user_id_state_next_attempt_at_created_at` ON `debt_command_outbox` (`user_id`, `state`, `next_attempt_at`, `created_at`)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_debt_command_outbox_user_id_debt_id_created_at` ON `debt_command_outbox` (`user_id`, `debt_id`, `created_at`)")
+
+        db.execSQL("""CREATE TABLE IF NOT EXISTS `debt_sync_checkpoints` (
+            `user_id` TEXT NOT NULL,
+            `sequence` INTEGER NOT NULL,
+            `updated_at` INTEGER NOT NULL,
+            PRIMARY KEY(`user_id`)
+        )""")
+
+        db.execSQL("""CREATE TABLE `debt_events_new` (
+            `id` TEXT NOT NULL,
+            `user_id` TEXT NOT NULL,
+            `debt_id` TEXT NOT NULL,
+            `transaction_id` TEXT,
+            `interest_transaction_id` TEXT,
+            `installment_id` TEXT,
+            `event_type` TEXT NOT NULL,
+            `amount_minor` INTEGER NOT NULL,
+            `principal_delta_minor` INTEGER,
+            `occurred_at` INTEGER NOT NULL,
+            `created_at` INTEGER NOT NULL,
+            PRIMARY KEY(`user_id`, `id`),
+            FOREIGN KEY(`user_id`, `debt_id`) REFERENCES `debts`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION,
+            FOREIGN KEY(`user_id`, `transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION,
+            FOREIGN KEY(`user_id`, `interest_transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION,
+            FOREIGN KEY(`user_id`, `debt_id`, `installment_id`) REFERENCES `debt_installments`(`user_id`, `debt_id`, `id`) ON UPDATE NO ACTION ON DELETE NO ACTION
+        )""")
+        db.execSQL("""INSERT INTO `debt_events_new` (
+            `id`,`user_id`,`debt_id`,`transaction_id`,`interest_transaction_id`,`installment_id`,
+            `event_type`,`amount_minor`,`principal_delta_minor`,`occurred_at`,`created_at`
+        ) SELECT `id`,`user_id`,`debt_id`,`transaction_id`,NULL,`installment_id`,
+            `event_type`,`amount_minor`,`principal_delta_minor`,`occurred_at`,`created_at` FROM `debt_events`""")
+        db.execSQL("DROP TABLE `debt_events`")
+        db.execSQL("ALTER TABLE `debt_events_new` RENAME TO `debt_events`")
+        db.execSQL("CREATE INDEX `index_debt_events_user_id_debt_id_occurred_at_id` ON `debt_events` (`user_id`, `debt_id`, `occurred_at`, `id`)")
+        db.execSQL("CREATE INDEX `index_debt_events_user_id_transaction_id` ON `debt_events` (`user_id`, `transaction_id`)")
+        db.execSQL("CREATE INDEX `index_debt_events_user_id_interest_transaction_id` ON `debt_events` (`user_id`, `interest_transaction_id`)")
+        db.execSQL("CREATE INDEX `index_debt_events_user_id_debt_id_installment_id` ON `debt_events` (`user_id`, `debt_id`, `installment_id`)")
+    }
+}
+
 /** Used by both upgrades and fresh production databases. */
 fun ensureMovementEvidenceGuards(db: SupportSQLiteDatabase) {
     for (table in listOf("transaction_revisions","movement_official_revisions","movement_ledger_effects","movement_ledger_aliases")) {

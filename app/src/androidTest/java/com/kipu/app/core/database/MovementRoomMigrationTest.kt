@@ -25,6 +25,48 @@ class MovementRoomMigrationTest {
     )
 
     @Test
+    fun debtEventInterestLinkMigrationPreservesHistoryAndAddsOwnerScopedForeignKey() {
+        val name = "debt-interest-link-v19"
+        helper.createDatabase(name, 19).use { db ->
+            db.execSQL("""CREATE TABLE debts (
+                id TEXT NOT NULL, user_id TEXT NOT NULL, obligation_type TEXT NOT NULL,
+                counterparty_name TEXT NOT NULL, total_minor INTEGER NOT NULL, currency_code TEXT NOT NULL,
+                opened_on TEXT NOT NULL, opening_mode TEXT NOT NULL DEFAULT 'HISTORICAL', due_date TEXT,
+                reminder_lead_days INTEGER, notes TEXT, status TEXT NOT NULL DEFAULT 'ACTIVE',
+                sync_state TEXT NOT NULL DEFAULT 'PENDING', revision INTEGER NOT NULL DEFAULT 1,
+                deleted_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, id)
+            )""")
+            db.execSQL("""CREATE TABLE debt_installments (
+                id TEXT NOT NULL, user_id TEXT NOT NULL, debt_id TEXT NOT NULL, installment_number INTEGER NOT NULL,
+                due_date TEXT NOT NULL, amount_minor INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'PLANNED',
+                revision INTEGER NOT NULL DEFAULT 1, deleted_at INTEGER, created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL, PRIMARY KEY(user_id, id),
+                FOREIGN KEY(user_id, debt_id) REFERENCES debts(user_id, id) ON UPDATE NO ACTION ON DELETE NO ACTION
+            )""")
+            db.execSQL("CREATE UNIQUE INDEX index_debt_installments_user_id_debt_id_id ON debt_installments(user_id, debt_id, id)")
+            db.execSQL("""CREATE TABLE debt_events (
+                id TEXT NOT NULL, user_id TEXT NOT NULL, debt_id TEXT NOT NULL, transaction_id TEXT,
+                installment_id TEXT, event_type TEXT NOT NULL, amount_minor INTEGER NOT NULL,
+                principal_delta_minor INTEGER, occurred_at INTEGER NOT NULL, created_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, id),
+                FOREIGN KEY(user_id, debt_id) REFERENCES debts(user_id, id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+                FOREIGN KEY(user_id, transaction_id) REFERENCES transactions(user_id, id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+                FOREIGN KEY(user_id, debt_id, installment_id) REFERENCES debt_installments(user_id, debt_id, id) ON UPDATE NO ACTION ON DELETE NO ACTION
+            )""")
+            db.execSQL("""INSERT INTO debts (id,user_id,obligation_type,counterparty_name,total_minor,currency_code,
+                opened_on,opening_mode,created_at,updated_at) VALUES ('debt','owner','PAYABLE','Proveedor',5000,'PEN','2026-10-08','HISTORICAL',1,1)""")
+            db.execSQL("""INSERT INTO debt_events (id,user_id,debt_id,event_type,amount_minor,occurred_at,created_at)
+                VALUES ('event','owner','debt','ADJUSTMENT',0,1,1)""")
+        }
+
+        helper.runMigrationsAndValidate(name, 20, true, MIGRATION_19_20).use { db ->
+            assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM debt_events WHERE id='event' AND interest_transaction_id IS NULL"))
+            assertEquals(4L, db.scalarLong("SELECT COUNT(DISTINCT id) FROM pragma_foreign_key_list('debt_events')"))
+            assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='index_debt_events_user_id_interest_transaction_id'"))
+        }
+    }
+    @Test
     fun freshRoomDatabaseInstallsMovementEvidenceGuards() {
         val database = Room.inMemoryDatabaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,
@@ -126,7 +168,7 @@ class MovementRoomMigrationTest {
     @Test
     fun upgradesSixteenPreservingPendingBytesLedgerAndUncertainFailedHistory() {
         val name = "movement-v16-revisions"
-        val originalPayload = "{\"contract_version\":1,\"request_hash\":\"old-hash\",\"note\":\"ñ;note:b\"}"
+        val originalPayload = "{\"contract_version\":1,\"request_hash\":\"old-hash\",\"note\":\"Ã±;note:b\"}"
         helper.createDatabase(name,16).use { db ->
             db.execSQL("""INSERT INTO accounts (id,user_id,creation_operation_id,alias,type,currency,
                 initial_balance_minor_units,opened_at,is_archived,remote_revision,created_at,updated_at)

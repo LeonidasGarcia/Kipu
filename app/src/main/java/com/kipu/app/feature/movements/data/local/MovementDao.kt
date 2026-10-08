@@ -127,6 +127,9 @@ interface MovementDao {
     @Query("SELECT * FROM local_command_receipts WHERE user_id = :userId AND idempotency_key = :idempotencyKey")
     suspend fun getReceipt(userId: String, idempotencyKey: String): LocalCommandReceiptEntity?
 
+    @Query("UPDATE local_command_receipts SET status = :status, updated_at = :updatedAt WHERE user_id = :userId AND idempotency_key = :idempotencyKey")
+    suspend fun updateCommandReceiptStatus(userId: String, idempotencyKey: String, status: String, updatedAt: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdateReceipt(receipt: LocalCommandReceiptEntity)
 

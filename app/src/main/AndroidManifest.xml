@@ -45,6 +45,12 @@
                     android:host="kipu.app"
                     android:pathPrefix="/auth" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="kipu" android:host="debts" android:pathPrefix="/detail" />
+            </intent-filter>
         </activity>
     </application>
 

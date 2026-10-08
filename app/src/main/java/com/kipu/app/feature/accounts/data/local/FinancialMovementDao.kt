@@ -86,6 +86,9 @@ interface FinancialMovementDao {
     @Query("SELECT * FROM financial_movements WHERE user_id = :userId AND id = :id")
     suspend fun getById(userId: String, id: String): FinancialMovementEntity?
 
+    @Query("UPDATE financial_movements SET status = :status WHERE user_id = :userId AND operation_id = :operationId")
+    suspend fun updateOperationStatus(userId: String, operationId: String, status: String): Int
+
     @Query("""
         SELECT * FROM financial_movements 
         WHERE user_id = :userId AND account_id = :accountId AND status = 'POSTED'

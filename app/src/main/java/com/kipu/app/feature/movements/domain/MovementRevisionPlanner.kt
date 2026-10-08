@@ -18,9 +18,11 @@ class MovementRevisionPlanner {
         if (!validUuid(command.idempotencyKey) || !validUuid(command.transactionId) ||
             (command.dependsOnCommandId != null && !validUuid(requireNotNull(command.dependsOnCommandId)))) return reject("INVALID_COMMAND_ID")
         if (command.expectedRevision != head.commandBaseRevision) return reject("REVISION_CONFLICT")
-        if (context.hasSpecializedRelations ||
+        val debtSettlementVoid = command is MovementRevisionCommand.Void &&
+            head.payload.operationKind in setOf("DEBT_PAYMENT", "DEBT_AMORTIZATION")
+        if ((context.hasSpecializedRelations && !debtSettlementVoid) ||
             !(head.payload.operationKind.equals("STANDARD",true) ||
-                (head.payload.operationKind == null && context.legacyStandardVerified))) return reject("OPERATION_SPECIALIZED")
+                (head.payload.operationKind == null && context.legacyStandardVerified) || debtSettlementVoid)) return reject("OPERATION_SPECIALIZED")
         if (head.financialState == MovementFinancialState.LEGACY_FAILED) return reject("FINANCIAL_EVIDENCE_REQUIRED")
         if (head.financialState == MovementFinancialState.VOIDED) return if (command is MovementRevisionCommand.Void)
             MovementRevisionPlanningResult.AlreadyVoided else reject("ALREADY_VOIDED_FOR_EDIT")
