@@ -2,6 +2,7 @@ package com.kipu.app.feature.categories.domain
 
 import com.kipu.app.core.finance.domain.model.UserId
 import com.kipu.app.feature.categories.domain.model.CaptureCandidate
+import com.kipu.app.feature.categories.domain.model.CaptureConfidence
 import com.kipu.app.feature.categories.domain.model.CaptureProvenance
 import com.kipu.app.feature.categories.domain.model.MerchantAliasRule
 import com.kipu.app.feature.categories.domain.model.MerchantAliasRuleId
@@ -23,21 +24,31 @@ class CaptureCandidateAuthorizationTest {
     )
 
     @Test
+    fun `capture confidence accepts only finite probability scores`() {
+        assertTrue(runCatching { CaptureConfidence(-0.01) }.isFailure)
+        assertTrue(runCatching { CaptureConfidence(1.01) }.isFailure)
+        assertTrue(runCatching { CaptureConfidence(Double.NaN) }.isFailure)
+    }
+
+    @Test
     fun `candidate creation requires current verified Premium and consent`() {
         val noEntitlement = CaptureCandidate.authorize(
             owner, SourceMerchantText("TAMBO"), provenance,
+            CaptureConfidence(0.92),
             EffectiveEntitlement(verified = false, expiresAtEpochMillis = 2_000),
             consentGranted = true,
             nowEpochMillis = 1_000,
         )
         val noConsent = CaptureCandidate.authorize(
             owner, SourceMerchantText("TAMBO"), provenance,
+            CaptureConfidence(0.92),
             EffectiveEntitlement(verified = true, expiresAtEpochMillis = 2_000),
             consentGranted = false,
             nowEpochMillis = 1_000,
         )
         val expired = CaptureCandidate.authorize(
             owner, SourceMerchantText("TAMBO"), provenance,
+            CaptureConfidence(0.92),
             EffectiveEntitlement(verified = true, expiresAtEpochMillis = 1_000),
             consentGranted = true,
             nowEpochMillis = 1_000,
@@ -52,6 +63,7 @@ class CaptureCandidateAuthorizationTest {
     fun `authorized provenance-bearing candidate can be evaluated by exact alias`() {
         val candidate = CaptureCandidate.authorize(
             owner, SourceMerchantText(" IZIPAY*TÁMBO "), provenance,
+            CaptureConfidence(0.92),
             EffectiveEntitlement(verified = true, expiresAtEpochMillis = 2_000),
             consentGranted = true,
             nowEpochMillis = 1_000,
@@ -64,5 +76,6 @@ class CaptureCandidateAuthorizationTest {
         val result = EvaluateMerchantAlias()(candidate, listOf(rule), setOf(merchant))
 
         assertEquals(MerchantAliasEvaluation.Match(merchant), result)
+        assertEquals(CaptureConfidence(0.92), candidate.confidence)
     }
 }
