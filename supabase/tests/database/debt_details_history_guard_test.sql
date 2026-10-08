@@ -57,6 +57,15 @@ SELECT lives_ok($$
     ));
 $$, 'historical debt with an opening event is established for the edit checks');
 
+RESET ROLE;
+INSERT INTO public.debt_events (
+    id, user_id, debt_id, event_type, amount_minor, principal_delta_minor, occurred_at, created_at
+)
+SELECT extensions.gen_random_uuid(), owner_id, debt_id, 'PAYMENT', 1000, -1000, now(), now()
+FROM debt_history_ids;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', (SELECT owner_id::text FROM debt_history_ids), true);
+
 SELECT is(
     public.edit_debt_details_v1(jsonb_build_object(
         'operation_id', (SELECT edit_operation FROM debt_history_ids),
@@ -78,8 +87,8 @@ SELECT is((SELECT opened_on FROM public.debts WHERE id=(SELECT debt_id FROM debt
     'descriptive edit cannot change the opening basis');
 SELECT is((SELECT revision FROM public.debts WHERE id=(SELECT debt_id FROM debt_history_ids)), 2::bigint,
     'descriptive edit increments the debt revision once');
-SELECT is((SELECT count(*)::integer FROM public.debt_events WHERE debt_id=(SELECT debt_id FROM debt_history_ids)), 1,
-    'descriptive edit preserves all financial history');
+SELECT is((SELECT count(*)::integer FROM public.debt_events WHERE debt_id=(SELECT debt_id FROM debt_history_ids)), 2,
+    'descriptive edit preserves the opening event and financial history');
 SELECT is(
     public.edit_debt_details_v1(jsonb_build_object(
         'operation_id', extensions.gen_random_uuid(),
