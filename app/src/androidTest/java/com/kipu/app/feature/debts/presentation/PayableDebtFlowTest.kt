@@ -22,7 +22,9 @@ class PayableDebtFlowTest {
 
     @Test
     fun payableFormExplainsNewAndHistoricalOpeningAndSubmitsTheSelectedBasis() {
-        val state = mutableStateOf(DebtFormUiState())
+        val state = mutableStateOf(
+            DebtFormUiState(counterpartyName = "Banco local", principalAmount = "50.00"),
+        )
         var submittedMode: DebtOpeningMode? = null
         compose.setContent {
             PayableDebtFormScreen(
@@ -63,6 +65,7 @@ class PayableDebtFlowTest {
         }
 
         compose.onNodeWithText("Editar datos").performClick()
+        compose.onNodeWithText("Apertura histórica").assertIsDisplayed()
         compose.onNodeWithText("Eliminar deuda").assertIsNotEnabled()
         compose.onNodeWithText("Con historial financiero no se puede borrar.").assertIsDisplayed()
 
