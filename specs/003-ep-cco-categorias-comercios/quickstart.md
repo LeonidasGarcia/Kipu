@@ -35,8 +35,8 @@
 
 - `.\gradlew.bat testDebugUnitTest`: passed, 472 unit tests.
 - Targeted `connectedDebugAndroidTest` checks passed on Samsung SM-A165M (Android 16); follow-up cases for blank and normalized-empty merchant queries are recorded below.
-- `npx --yes supabase@latest db reset --local`: passed from an empty local database and applied all local migrations, including the three EP-CCO S5 migrations.
-- `npx --yes supabase@latest test db --local supabase/tests/database/merchant_rules_s5.test.sql`: passed, 39 pgTAP checks.
+- Earlier validation recorded `npx --yes supabase@latest db reset --local` as passing from an empty database. The current revalidation could not reproduce that clean history against the shared `supabase_db_kipu`: `migration list --local` shows the three CCO S5 versions (`20261008161406`, `20261008161540`, `20261008161631`) missing from its applied history and a database-only `20261008170000` version. No reset or migration-history edit was made against this divergent shared database.
+- To validate CCO S5 behavior without a reset, the three additive CCO migrations were applied individually in transactions to the local Docker database; no migration-history rows were recorded. Then `npx --yes supabase@latest test db --local supabase/tests/database/category_merchant.test.sql supabase/tests/database/category_type_test.sql supabase/tests/database/merchant_rules_s5.test.sql` passed: **75 pgTAP assertions**. This is targeted schema/contract evidence, not a clean migration replay.
 - No remote Supabase writes were made. The linked/live migration history was observed behind the local S4/October head; reconcile it through the approved release process, then review effective RLS/grants before remote integration.
 
 ## Remaining release evidence
