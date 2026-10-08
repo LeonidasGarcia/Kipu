@@ -45,7 +45,7 @@
 - [x] CHK021 Are requirements defined for the category branch when a root is inactivated, reactivated, or exceeds the Free limit after a plan change? [Coverage, Spec §FR-008 to §FR-009, Edge Cases]
 - [x] CHK022 Are requirements defined for movement classifications that reference an inactive category, an unavailable merchant, or provisional text without a catalog result? [Coverage, Spec §FR-009, §FR-012 to §FR-016, Edge Cases]
 - [x] CHK023 Are concurrent offline edits and their recovery through explicit conflict resolution specified without leaving a silent-overwrite alternative? [Coverage, Exception and Recovery Flow, Spec §FR-018, Clarifications]
-- [ ] CHK024 Are requirements defined for a search query whose normalization produces an empty or whitespace-only value? [Gap, Edge Case]
+- [x] CHK024 Are requirements defined for a search query whose normalization produces an empty or whitespace-only value? [Gap, Edge Case]
 - [x] CHK025 Are requirements defined for the user-facing state when the Kipu merchant catalog is unavailable or stale during an otherwise local-first flow? [Gap, Non-Functional and Recovery Flow]
 
 ## Non-Functional Requirements and Dependencies
@@ -63,4 +63,4 @@
 - `/speckit.implement` reads checklist checkbox state as a gate and must not modify markers.
 - `checklists/requirements.md` has a separate built-in lifecycle maintained by `/speckit.specify` and `/speckit.clarify`.
 - Add findings inline with the relevant CHK identifier.
-- Review 2026-10-08: CHK024 remains open because the spec and UI contract do not define the result for an empty or whitespace-only normalized merchant query.
+- Review 2026-10-08: CHK024 satisfied by spec FR-040/SC-016, the UI contract, and tests T029/T036; whitespace-only input browses the local catalog, while non-empty normalized-empty input has no match and can be kept provisionally.

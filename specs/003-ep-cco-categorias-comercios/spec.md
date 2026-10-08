@@ -7,6 +7,7 @@
 **Status**: Refined
 
 **Refined**: 2026-10-08 — Se agrega al alcance de EP-CCO el incremento Sprint 5 de HU-16 y HU-17, conservando HU-14/HU-15 como base histórica de Sprint 2 y HU-50 como alcance futuro de Sprint 8.
+**Refined**: 2026-10-08 - Clarified empty merchant-query behavior to match catalog browsing and provisional-text handling.
 
 **Input**: User description: "Épica EP-CCO: Categorías, Subcategorías y Comercios. Alcance exclusivo Sprint 2: HU-14 categorías y subcategorías; HU-15 comercios y servicios."
 
@@ -33,6 +34,7 @@
 
 - Q: ¿Qué plan permite crear una regla personal de alias nueva en HU-16? → A: Solo Premium; el procesamiento de una nueva señal capturada además requiere entitlement y consentimiento vigentes.
 - Decisión Sprint 5: Las reglas alias comparan igualdad exacta después de normalizar mayúsculas/minúsculas, acentos y espacios (recortar extremos y colapsar secuencias); la puntuación se conserva. No se habilitan comodines, prefijos, subcadenas ni coincidencia difusa.
+- Q: Que ocurre si la consulta de comercios esta vacia o se normaliza a vacio? -> A: Una consulta vacia o solo con espacios muestra el catalogo local para explorar, sin estado de "sin resultados" ni opcion de texto provisional. Una consulta no vacia que se normaliza a vacio no produce coincidencias; permite conservar el texto recortado como provisional y nunca asigna un comercio automaticamente.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -84,6 +86,7 @@ Como usuario, busco un comercio del catálogo general y lo asigno a un movimient
 3. **Given** una búsqueda sin coincidencias claras en el catálogo, **When** el usuario la realiza, **Then** se muestra una lista vacía y se conserva el texto ingresado como texto provisional del movimiento si el usuario decide guardarlo.
 4. **Given** un movimiento con comercio asignado y categoría seleccionada, **When** el usuario cambia o elimina la categoría, **Then** el comercio permanece sin cambios; y cuando cambia o elimina el comercio, la categoría permanece sin cambios.
 5. **Given** que el catálogo de comercios no puede actualizarse, **When** el usuario abre la búsqueda, **Then** se informa si se muestran resultados guardados que pueden estar desactualizados o si el catálogo no está disponible, sin inventar coincidencias.
+6. **Given** una consulta vacia o solo con espacios, o una consulta no vacia que se normaliza a vacio, **When** el usuario abre o usa el buscador, **Then** la primera muestra el catalogo local para explorar sin opcion provisional y la segunda muestra cero coincidencias y permite guardar el texto recortado como provisional, sin asignacion automatica.
 
 ---
 
@@ -146,6 +149,7 @@ Como usuario de Kipu, quiero definir la categoría que prefiero para un comercio
 - Al bajar de Premium a Free, las categorías raíz personalizadas que excedan el cupo se conservan junto con los movimientos históricos; el usuario no puede activar categorías raíz personalizadas adicionales hasta cumplir el límite.
 - La búsqueda de comercios no presenta resultados cuando el texto normalizado no aparece en el nombre normalizado de ningún comercio del catálogo.
 - Si el catálogo de comercios no está disponible, el usuario distingue entre resultados guardados potencialmente desactualizados y la ausencia total de catálogo; ninguna de ambas situaciones crea coincidencias ni asignaciones automáticas.
+- Una consulta vacia o solo con espacios abre la exploracion del catalogo local; si una consulta no vacia se normaliza a vacio, no devuelve coincidencias y puede conservarse como texto provisional recortado, sin asignacion automatica.
 - El texto provisional de comercio no crea, modifica ni incorpora un comercio al catálogo general.
 - Los formularios, filtros y datos de clasificación no contienen campos ni relaciones de etiquetas o tags.
 - Un alias vacío, ligado a un comercio inexistente/inactivo o que intente modificar el catálogo general se rechaza sin crear una regla.
@@ -199,6 +203,7 @@ Como usuario de Kipu, quiero definir la categoría que prefiero para un comercio
 - **FR-037**: Si la categoría preferida o su raíz está inactiva, bloqueada por plan o no es compatible con el tipo de operación, el sistema NO DEBE aplicarla automáticamente y DEBE solicitar una categoría activa y compatible.
 - **FR-038**: Crear, cambiar o eliminar una preferencia personal NO DEBE reclasificar movimientos confirmados ni alterar su historia.
 - **FR-039**: Las preferencias personales DEBEN ser owner-scoped; un usuario solo puede leer y cambiar sus propias preferencias, y sus comandos de sincronización DEBEN ser idempotentes.
+- **FR-040**: Una consulta de comercios vacia o solo con espacios DEBE mostrar el catalogo local para explorar, sin estado de "sin resultados" ni opcion provisional. Una consulta no vacia que se normaliza a vacio DEBE mostrar cero coincidencias y permitir conservar el texto recortado como provisional; nunca DEBE asignar automaticamente un comercio.
 
 ### Key Entities
 
@@ -232,6 +237,7 @@ Como usuario de Kipu, quiero definir la categoría que prefiero para un comercio
 - **SC-013**: En el 100% de las pruebas de edición/eliminación de alias y preferencias, los movimientos confirmados conservan la clasificación que tenían antes del cambio.
 - **SC-014**: En el 100% de las pruebas con una preferencia vigente, elegible y compatible, la preferencia personal prevalece sobre una sugerencia general; una preferencia no elegible nunca se aplica automáticamente.
 - **SC-015**: En las pruebas con dos usuarios, el 100% de las consultas y cambios de alias/preferencias queda aislado por propietario y los reintentos no producen duplicados.
+- **SC-016**: En el 100% de las pruebas de consulta vacia, consulta solo con espacios y consulta no vacia cuya normalizacion queda vacia, el buscador presenta el estado especificado en FR-040, no asigna un comercio automaticamente y solo ofrece texto provisional cuando la entrada original no esta vacia.
 
 ## Assumptions
 

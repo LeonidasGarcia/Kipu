@@ -18,7 +18,7 @@
 - `CategoryPicker` shows `EXPENSE` and `GENERAL` categories for expenses, `INCOME` and `GENERAL` categories for income, and no category selector for transfers.
 - `MerchantPicker` normalizes accents, spaces and case, then searches catalog substrings. It shows all matching entries without assigning one automatically.
 - **MerchantPicker Filters (UI Taxonomy):** To enhance discovery, catalog merchants are visually grouped into logical macro-categories (e.g., "Restaurantes y Delivery", "Entretenimiento y Streaming", "Supermercados") driven by the presentation layer rather than raw database subcategories.
-- A no-result merchant query shows an empty list and lets the user retain the entered provisional text. Selecting a catalog merchant clears provisional text; clearing a merchant permits provisional text.
+- An empty or whitespace-only merchant query opens the locally cached catalog for browsing and does not show a no-result or provisional-text action. A non-empty raw query that normalizes to empty shows no catalog matches and may be retained as trimmed provisional text. Selecting a catalog merchant clears provisional text; clearing a merchant permits provisional text.
 - Forms and filters contain no tags, label chips, tag controls or tag relations.
 
 ## Sprint 5 alias rules (HU-16)

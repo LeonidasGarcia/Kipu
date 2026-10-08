@@ -6,6 +6,7 @@ description: "Task list for EP-CCO implementation"
 # Tasks: EP-CCO Categorías, Subcategorías y Comercios
 
 **Propagated**: 2026-10-08 — Added only the Sprint 5 work for HU-16/HU-17; completed S2 tasks remain historical.
+**Propagated**: 2026-10-08 - FR-040/SC-016 trazados a las pruebas completadas T029 y T036; no se agregaron tareas.
 
 **Scope history**: Phases 1–7 preserve the implemented S2 foundation and subsequent HU-14 type work, including the original HU-14/HU-15 exclusions. Phase 8 onward is the current S5 increment. HU-50 remains S8 and has no implementation tasks here.
 
@@ -91,7 +92,7 @@ description: "Task list for EP-CCO implementation"
 
 ### Tests for User Story 3
 
-- [X] T029 [P] [US3] Add normalized substring, accent, case, whitespace, no-result, and provisional-text use-case tests in `app/src/test/java/com/kipu/app/feature/categories/domain/MerchantSearchUseCasesTest.kt`.
+- [X] T029 [P] [US3] Add normalized substring, accent, case, whitespace/blank-query, punctuation-only normalization, no-result, and provisional-text use-case tests in `app/src/test/java/com/kipu/app/feature/categories/domain/MerchantSearchUseCasesTest.kt`.
 - [X] T030 [P] [US3] Add contract tests for catalog-only merchant reads, initial catalog availability, stale/unavailable catalog states, and movement-classification validation in `supabase/tests/database/category_merchant.test.sql`.
 
 ### Implementation for User Story 3
@@ -101,7 +102,7 @@ description: "Task list for EP-CCO implementation"
 - [X] T033 [US3] Implement the merchant picker state for query, results, empty result, chosen catalog merchant, provisional text, stale catalog, and unavailable catalog in `app/src/main/java/com/kipu/app/feature/categories/presentation/components/MerchantPickerViewModel.kt`.
 - [X] T034 [US3] Implement the catalog search and provisional-text picker UI with stale/unavailable catalog states, without auto-assignment or tag controls in `app/src/main/java/com/kipu/app/feature/categories/presentation/components/MerchantPicker.kt`.
 - [X] T035 [US3] Create the `movement/edit/{movementId}` route and its independent category/merchant classification editor in `app/src/main/java/com/kipu/app/feature/accounts/presentation/instruments/MovementClassificationEditor.kt`, `app/src/main/java/com/kipu/app/navigation/MovementNavigation.kt`, and `app/src/main/java/com/kipu/app/navigation/KipuNavHost.kt`.
-- [X] T036 [P] [US3] Add Compose coverage for partial search evidence, empty results, provisional text, independent clear actions, stale/unavailable catalog states, and non-color state communication in `app/src/androidTest/java/com/kipu/app/feature/categories/presentation/MerchantPickerTest.kt`.
+- [X] T036 [P] [US3] Add Compose coverage for partial search evidence, whitespace-only catalog browsing, punctuation-only normalized-empty queries with provisional text, empty results, independent clear actions, stale/unavailable catalog states, and non-color state communication in `app/src/androidTest/java/com/kipu/app/feature/categories/presentation/MerchantPickerTest.kt`.
 
 **Checkpoint**: User Story 3 can be demonstrated against the catalog with a pre-existing movement and category; no alias, rule, personal merchant, or automatic suggestion is introduced.
 

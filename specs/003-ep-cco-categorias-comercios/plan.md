@@ -3,6 +3,7 @@
 **Branch**: `003-ep-cco-categorias-comercios` | **Date**: 2026-10-08 | **Spec**: [spec.md](spec.md)
 
 **Propagated**: 2026-10-08 — Updated from the Sprint 5 refinement in spec.md.
+**Propagated**: 2026-10-08 - FR-040/SC-016 aclarados; T029/T036 cubren exploracion con consulta vacia y entrada no vacia normalizada a vacio.
 
 **Input**: Feature specification from `specs/003-ep-cco-categorias-comercios/spec.md`.
 
@@ -49,7 +50,7 @@ La clasificación y evidencia local siguen asociadas a `financial_movements`; no
 | V. Freemium Cannot Alter Truth | PASS | El límite bloquea nuevas reglas alias sin entitlement Premium verificado, sin reducir la disponibilidad del registro manual ni alterar categorías/movimientos históricos. |
 | VI. Financial Lifecycles Preserve History | PASS | Inactivar o personalizar una categoría no rompe las referencias históricas; ninguna operación borra movimientos. |
 | VII. Native Android and Boundaries | PASS | Reglas de jerarquía, cupo, elegibilidad y conflictos se mantienen en dominio Kotlin puro; Room/Supabase/UI permanecen adaptadores. |
-| VIII. Specification-Driven | PASS | El alcance S5 traza HU-16/HU-17 y FR-026 a FR-039. HU-14/HU-15 conservan su trazabilidad S2; HU-50 sigue excluida hasta S8. |
+| VIII. Specification-Driven | PASS | El alcance S5 traza HU-16/HU-17 y FR-026 a FR-040. HU-14/HU-15 conservan su trazabilidad S2; HU-50 sigue excluida hasta S8. |
 | IX. Quality Is Correctness | PASS | Incluye pruebas de dominio, Room v18->v19, sincronización, RLS, migración, accesibilidad y dispositivo real. |
 | X. Product Boundary | PASS | No incorpora etiquetas, IA, pagos, Open Banking ni nuevas clases de movimiento. |
 
@@ -149,7 +150,7 @@ Este árbol refleja el código resultante de la implementación S5. La migració
 ### UI and navigation
 
 - La fila Categorías de ajustes abre la ruta de administración. La pantalla lista raíces y subcategorías, permite editar presentación, activar/inactivar y muestra límite Free.
-- `CategoryPicker` muestra exclusivamente categorías elegibles; `MerchantPicker` busca en el catálogo por subcadena normalizada y muestra estado vacío con opción de guardar texto provisional.
+- `CategoryPicker` muestra exclusivamente categorias elegibles; `MerchantPicker` busca por subcadena normalizada, abre el catalogo local si la consulta esta vacia o contiene solo espacios, y permite texto provisional cuando una consulta no vacia se normaliza a vacio.
 - La gestión de alias solo ofrece guardar una regla tras confirmar manualmente el comercio canónico, muestra el patrón fuente y el comercio destino, exige Premium para cada regla nueva y deja editar/inactivar reglas propias. Un resultado ambiguo o sin regla se presenta para revisión y nunca se autoasigna.
 - La preferencia por comercio se edita mediante categoría activa y compatible; al quedar inactiva/bloqueada/incompatible pide nueva elección. Se explica que la opción rige movimientos futuros y no actualiza el historial.
 - Las señales se evalúan únicamente después de validar entitlement y consentimiento vigentes; no se agrega en S5 el pipeline de captura/ingesta de HU-50.
@@ -161,7 +162,7 @@ Este árbol refleja el código resultante de la implementación S5. La migració
 - Room: migración base S2 v3->v4 (histórica) y migración S5 v18->v19, preservación byte-for-byte de texto fuente, owner-scope, unicidad de preferencia y transacciones/outbox atómicas.
 - Sync: reintentos, colisión de operación, actualizaciones concurrentes de alias/preferencias, tombstones, conflicto explícito, recibos y resolución.
 - PostgreSQL: migraciones sobre el head live alineado, restricciones, RLS/grants, catálogo read-only, RPC de alias/preferencia, Premium/consentimiento, recibos, cross-user y datos existentes.
-- Compose/dispositivo: navegación, TalkBack, objetivo táctil de 48dp, escalado al 200%, offline/reinicio/reconexión y estados límite/vacío/conflicto.
+- Compose/dispositivo: navegacion, TalkBack, objetivo tactil de 48dp, escalado al 200%, offline/reinicio/reconexion, estados limite/vacio/conflicto, modo exploracion para consulta vacia y via provisional para consulta no vacia cuya normalizacion queda vacia.
 
 Las verificaciones ejecutadas y pendientes están registradas en [quickstart.md](quickstart.md). Las pruebas locales no habilitan integración o release Supabase: primero se debe reconciliar el historial remoto atrasado con las migraciones versionadas locales y revisar RLS/grants efectivos.
 

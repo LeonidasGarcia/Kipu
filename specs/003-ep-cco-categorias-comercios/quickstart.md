@@ -33,8 +33,8 @@
 
 ## Sprint 5 implementation evidence (2026-10-08)
 
-- `.\gradlew.bat testDebugUnitTest`: passed, 471 unit tests.
-- Targeted `connectedDebugAndroidTest` checks passed on the Samsung SM-A165M (Android 16): `MerchantAliasRulesScreenTest`, `MerchantCategoryPreferenceScreenTest`, `MerchantRuleDatabaseTest`, `EpCcoEndToEndTest`, and `SyncCategoryCommandsWorkerTest`. The full Android instrumentation suite was not run.
+- `.\gradlew.bat testDebugUnitTest`: passed, 472 unit tests.
+- Targeted `connectedDebugAndroidTest` checks passed on Samsung SM-A165M (Android 16); follow-up cases for blank and normalized-empty merchant queries are recorded below.
 - `npx --yes supabase@latest db reset --local`: passed from an empty local database and applied all local migrations, including the three EP-CCO S5 migrations.
 - `npx --yes supabase@latest test db --local supabase/tests/database/merchant_rules_s5.test.sql`: passed, 39 pgTAP checks.
 - No remote Supabase writes were made. The linked/live migration history was observed behind the local S4/October head; reconcile it through the approved release process, then review effective RLS/grants before remote integration.
@@ -43,4 +43,10 @@
 
 - Supabase security/performance advisors were not run.
 - Timed usability evidence for the 2-minute category-to-movement flow and the 1-second merchant search target was not collected.
-- Remote migration application, effective RLS/grant review, and the full Android instrumentation suite remain release gates. The current S5 implementation is locally verified but is not marked release-ready.
+- Remote migration application, effective RLS/grant review, and a green full Android instrumentation suite remain release gates; the 2026-10-08 full run had 26 failures outside the CCO categories package.
+
+## 2026-10-08 follow-up - merchant query normalization
+
+- `MerchantSearchUseCasesTest`: 12 tests passed, including punctuation-only input whose normalization is empty.
+- `MerchantPickerTest`: 7 tests passed on Samsung SM-A165M / Android 16, including whitespace-only catalog browsing and punctuation-only provisional text.
+- Full app `connectedDebugAndroidTest`: 267 tests ran; 26 failed in account, movement, notification, and plan packages. No test in the CCO categories package failed. The broad suite is not green; see `app/build/reports/androidTests/connected/debug/index.html` for individual failures.
