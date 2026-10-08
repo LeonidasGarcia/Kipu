@@ -52,3 +52,11 @@ La inspección remota fue de solo lectura:
 - No aceptar HU-28 hasta que el principal no aparezca como ingreso/gasto operativo y el interés real sí aparezca una sola vez.
 - No aceptar HU-29 hasta que cancelar o anular una liquidación actualice el principal, la cuota, el estado cerrado y el recordatorio.
 - No contar la presencia de tablas, un mock, una pantalla, o los datos de una cuenta del teléfono como prueba de comportamiento completo.
+
+## Preflight de implementación (2026-10-08)
+
+- **GO solo para desarrollo local**: el historial versionado de este worktree llega a `20261007144500`; la inspección read-only previa registró que el proyecto remoto llegaba a `20260930035146`. La diferencia incluye migraciones S4 y de categorías posteriores. No se aplicará DDL ni se ejecutarán pruebas destructivas contra el proyecto remoto.
+- El stack local compartido tiene aplicado un conjunto distinto de migraciones CCO (`20261008161406`, `20261008161540`, `20261008161631`) que no existe en este worktree. Antes de probar DEU se debe recrear únicamente la base local desde los archivos versionados de esta rama y validar su estado con `supabase migration list --local`.
+- El RPC heredado registra `PAYMENT` con `amount_minor` positivo; el resumen vigente resta esos pagos del principal inicial. Los registros heredados `ADJUSTMENT` y `FORGIVENESS` no tienen una dirección documentada que permita reconstruir su efecto. La migración DEU debe preservar esos registros y abortar si encuentra alguno sin una resolución explícita; no debe inferir del signo de `amount_minor`.
+- El índice único de cuotas difiere entre el catálogo remoto observado y las migraciones locales. Antes de agregarlo, un preflight debe detectar números duplicados por deuda y abortar sin cambiar datos; solo el estado limpio puede recibir la restricción versionada.
+- **NO-GO para integración/release remota** hasta reconciliar la historia de migraciones, revisar datos de deuda heredados y confirmar esquema/RLS/grants efectivos. El alcance de implementación y pruebas de esta rama queda limitado al stack local y no declara el producto listo para despliegue.
