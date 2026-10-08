@@ -19,8 +19,8 @@ class DebtMovementAccountingTest {
             transaction("receivable-opening", MovementType.EXPENSE, 300L, "DEBT_DISBURSEMENT"),
             transaction("payable-principal", MovementType.EXPENSE, 1_000L, "DEBT_PAYMENT"),
             transaction("receivable-principal", MovementType.INCOME, 700L, "DEBT_PAYMENT"),
-            transaction("payable-interest", MovementType.EXPENSE, 30L, "STANDARD"),
-            transaction("receivable-interest", MovementType.INCOME, 10L, "STANDARD"),
+            transaction("payable-interest", MovementType.EXPENSE, 30L, "DEBT_AMORTIZATION"),
+            transaction("receivable-interest", MovementType.INCOME, 10L, "DEBT_AMORTIZATION"),
         )
 
         assertEquals(mapOf("PEN" to BigInteger.valueOf(-20L)), MovementNetFlowCalculator.calculate(movements))
@@ -30,7 +30,7 @@ class DebtMovementAccountingTest {
     fun `budget consumption counts interest expense but excludes debt principal`() {
         val heads = listOf(
             head("principal", amountMinor = 5_000L, operationKind = "DEBT_PAYMENT"),
-            head("interest", amountMinor = 250L, operationKind = "STANDARD"),
+            head("interest", amountMinor = 250L, operationKind = "DEBT_AMORTIZATION"),
         )
 
         val result = ExpenseConsumptionCalculator.calculate(
@@ -48,7 +48,7 @@ class DebtMovementAccountingTest {
         amountMinor = amount,
         currency = "PEN",
         sourceAccountId = "account",
-        categoryId = if (operationKind == "STANDARD" && type == MovementType.EXPENSE) "interest" else null,
+        categoryId = if (operationKind == "DEBT_AMORTIZATION" && type == MovementType.EXPENSE) "interest" else null,
         legacyKind = "DEBT_PRINCIPAL".takeIf { operationKind != "STANDARD" },
         occurredAt = 1L,
         operationKind = operationKind,
@@ -63,7 +63,7 @@ class DebtMovementAccountingTest {
             amountMinor = amountMinor,
             currency = "PEN",
             sourceAccountId = "account",
-            categoryId = if (operationKind == "STANDARD") "interest" else null,
+            categoryId = if (operationKind == "DEBT_AMORTIZATION") "interest" else null,
             occurredAt = 1L,
         ),
         financialState = MovementFinancialState.CONFIRMED,
