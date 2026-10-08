@@ -87,6 +87,8 @@ fun ProfileSettingsScreen(
     onNavigateToPermissions: (() -> Unit)? = null,
     onNavigateToBiometrics: (() -> Unit)? = null,
     onNavigateToCategories: (() -> Unit)? = null,
+    onNavigateToMerchantAliases: (() -> Unit)? = null,
+    onNavigateToMerchantCategoryPreferences: (() -> Unit)? = null,
     onNavigateToMovements: (() -> Unit)? = null,
     onNavigateToAccounts: (() -> Unit)? = null,
     onNavigateToPurchase: (() -> Unit)? = null,
@@ -474,6 +476,24 @@ fun ProfileSettingsScreen(
                     subtitle = "Ingresos, gastos y presupuestos asignados",
                     onClick = { onNavigateToCategories?.invoke() },
                 )
+
+                onNavigateToMerchantAliases?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.Category,
+                        title = "Reglas de alias",
+                        subtitle = "Relaciona un texto de operación con un comercio confirmado",
+                        onClick = it,
+                    )
+                }
+
+                onNavigateToMerchantCategoryPreferences?.let {
+                    SettingsActionCard(
+                        icon = Icons.Default.Category,
+                        title = "Categoría por comercio",
+                        subtitle = "Elige la primera categoría sugerida para operaciones futuras",
+                        onClick = it,
+                    )
+                }
 
                 // 7. Configurar Captura / Permisos
                 SettingsActionCard(

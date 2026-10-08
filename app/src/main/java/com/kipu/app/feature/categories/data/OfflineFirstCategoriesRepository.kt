@@ -19,11 +19,19 @@ import com.kipu.app.feature.plans.domain.model.OfflineEntitlementLeaseDecision
 import com.kipu.app.feature.plans.data.local.PlanQuotaSelectionDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
+import com.kipu.app.feature.categories.data.local.MerchantAliasRuleEntity
+import com.kipu.app.feature.categories.data.local.MerchantCategoryPreferenceEntity
+import com.kipu.app.feature.categories.data.local.MerchantRulesDao
 import com.kipu.app.feature.categories.data.remote.CreateCategoryRequestDto
+import com.kipu.app.feature.categories.data.remote.DeleteMerchantAliasRuleRequestDto
+import com.kipu.app.feature.categories.data.remote.DeleteMerchantCategoryPreferenceRequestDto
 import com.kipu.app.feature.categories.data.remote.ResolveCategoryConflictRequestDto
 import com.kipu.app.feature.categories.data.remote.SetCategoryActiveRequestDto
 import com.kipu.app.feature.categories.data.remote.UpdateCategoryPresentationRequestDto
 import com.kipu.app.feature.categories.data.remote.UpdateMovementClassificationRequestDto
+import com.kipu.app.feature.categories.data.remote.PreserveMerchantSourceTextRequestDto
+import com.kipu.app.feature.categories.data.remote.UpsertMerchantAliasRuleRequestDto
+import com.kipu.app.feature.categories.data.remote.UpsertMerchantCategoryPreferenceRequestDto
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
 import com.kipu.app.feature.categories.domain.CategoriesRepository
 import com.kipu.app.feature.categories.domain.CategoryRules
@@ -37,9 +45,14 @@ import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.CategoryType
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MerchantAliasRule
+import com.kipu.app.feature.categories.domain.model.MerchantAliasRuleId
 import com.kipu.app.feature.categories.domain.model.MerchantCategoryFilter
+import com.kipu.app.feature.categories.domain.model.MerchantCategoryPreference
 import com.kipu.app.feature.categories.domain.model.MerchantId
+import com.kipu.app.feature.categories.domain.model.MerchantRuleSyncState
 import com.kipu.app.feature.categories.domain.model.MovementClassification
+import com.kipu.app.feature.categories.domain.model.SourceMerchantText
 import com.kipu.app.feature.plans.domain.FeatureAccessPolicy
 import com.kipu.app.feature.plans.domain.model.Capability
 import com.kipu.app.feature.plans.domain.model.FeatureAccessDecision
@@ -65,6 +78,7 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     private val transactionRunner: DatabaseTransactionRunner,
     private val categoryDao: CategoryDao,
     private val merchantDao: MerchantCatalogDao,
+    private val merchantRulesDao: MerchantRulesDao,
     private val sessionCoordinator: SessionCoordinator,
     private val syncScheduler: CategorySyncScheduler,
     private val featureAccessPolicy: FeatureAccessPolicy = FeatureAccessPolicy(),
@@ -533,6 +547,239 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         brandColor = entity.brandColor,
     )
 
+    override fun observeMerchantAliasRules(userId: UserId): Flow<List<MerchantAliasRule>> {
+        if (currentUserId() != userId.value) return flowOf(emptyList())
+        return merchantRulesDao.observeAliasRules(userId.value).map { rows -> rows.map { it.toDomain() } }
+    }
+
+    override suspend fun saveMerchantAliasRule(
+        rule: MerchantAliasRule,
+        expectedRevision: Long?,
+    ): Result<Unit> = runCatching {
+        val userId = rule.ownerId.value
+        require(currentUserId() == userId) { "No active owner session" }
+        require(rule.deletedAt == null) { "Use the tombstone command to remove an alias" }
+        require(rule.normalizedPattern == com.kipu.app.feature.categories.domain.MerchantAliasRules.normalize(rule.normalizedPattern)) {
+            "Alias pattern is not normalized"
+        }
+        require(rule.normalizedPattern.length <= 160) { "Alias pattern is too long" }
+        val merchant = merchantDao.getMerchantById(rule.merchantId.value)
+        require(merchant?.isActive == true) { "Canonical merchant is unavailable" }
+        require(currentUserId() == userId) { "Owner changed while validating alias" }
+
+        val operationId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val payloadHash = sha256("$operationId:${rule.id.value}:${rule.normalizedPattern}:${rule.merchantId.value}:${expectedRevision ?: "new"}")
+        val dto = UpsertMerchantAliasRuleRequestDto(
+            operationId = operationId,
+            ruleId = rule.id.value,
+            normalizedPattern = rule.normalizedPattern,
+            merchantId = rule.merchantId.value,
+            expectedRevision = expectedRevision,
+            payloadHash = payloadHash,
+        )
+        transactionRunner {
+            require(currentUserId() == userId) { "Owner changed before saving alias" }
+            val existing = merchantRulesDao.getAliasRule(userId, rule.id.value)
+            if (expectedRevision == null) {
+                require(existing == null) { "Alias already exists; refresh before editing" }
+            } else {
+                require(existing?.remoteRevision == expectedRevision) { "Alias revision changed; refresh before editing" }
+            }
+            merchantRulesDao.upsertAliasRule(
+                MerchantAliasRuleEntity(
+                    id = rule.id.value,
+                    userId = userId,
+                    normalizedPattern = rule.normalizedPattern,
+                    merchantId = rule.merchantId.value,
+                    remoteRevision = rule.revision,
+                    deletedAt = null,
+                    updatedAt = now,
+                    syncState = MerchantRuleSyncState.PENDING.name,
+                ),
+            )
+            categoryDao.insertOutboxCommand(
+                CategorySyncOutboxEntity(
+                    operationId = operationId,
+                    userId = userId,
+                    commandType = "UPSERT_MERCHANT_ALIAS_RULE",
+                    aggregateType = "MERCHANT_ALIAS_RULE",
+                    aggregateId = rule.id.value,
+                    expectedRevision = expectedRevision,
+                    payloadJson = json.encodeToString(dto),
+                    payloadHash = payloadHash,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+            require(currentUserId() == userId) { "Owner changed while saving alias command" }
+        }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
+    }
+
+    override suspend fun deleteMerchantAliasRule(
+        ruleId: MerchantAliasRuleId,
+        expectedRevision: Long,
+    ): Result<Unit> = runCatching {
+        val userId = currentUserId() ?: error("No active owner session")
+        val existing = merchantRulesDao.getAliasRule(userId, ruleId.value)
+            ?: error("Alias rule is unavailable")
+        require(existing.remoteRevision == expectedRevision && existing.deletedAt == null) {
+            "Alias revision changed; refresh before removing"
+        }
+        val operationId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val payloadHash = sha256("$operationId:${ruleId.value}:$expectedRevision:delete")
+        val dto = DeleteMerchantAliasRuleRequestDto(operationId, ruleId.value, expectedRevision, payloadHash)
+        transactionRunner {
+            require(currentUserId() == userId) { "Owner changed before removing alias" }
+            merchantRulesDao.upsertAliasRule(
+                existing.copy(
+                    remoteRevision = expectedRevision + 1L,
+                    deletedAt = now,
+                    updatedAt = now,
+                    syncState = MerchantRuleSyncState.PENDING.name,
+                    syncError = null,
+                ),
+            )
+            categoryDao.insertOutboxCommand(
+                CategorySyncOutboxEntity(
+                    operationId = operationId,
+                    userId = userId,
+                    commandType = "DELETE_MERCHANT_ALIAS_RULE",
+                    aggregateType = "MERCHANT_ALIAS_RULE",
+                    aggregateId = ruleId.value,
+                    expectedRevision = expectedRevision,
+                    payloadJson = json.encodeToString(dto),
+                    payloadHash = payloadHash,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+            require(currentUserId() == userId) { "Owner changed while removing alias" }
+        }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
+    }
+
+    override fun observeMerchantCategoryPreferences(userId: UserId): Flow<List<MerchantCategoryPreference>> {
+        if (currentUserId() != userId.value) return flowOf(emptyList())
+        return merchantRulesDao.observePreferences(userId.value).map { rows -> rows.map { it.toDomain() } }
+    }
+
+    override suspend fun saveMerchantCategoryPreference(
+        preference: MerchantCategoryPreference,
+        expectedRevision: Long?,
+    ): Result<Unit> = runCatching {
+        val userId = preference.ownerId.value
+        require(currentUserId() == userId) { "No active owner session" }
+        val merchant = merchantDao.getMerchantById(preference.merchantId.value)
+        require(merchant?.isActive == true) { "Canonical merchant is unavailable" }
+        val category = categoryDao.getCategoryById(preference.categoryId.value)
+            ?: error("Preference category is unavailable")
+        require(category.userId == null || category.userId == userId) { "Preference category belongs to another owner" }
+        val root = category.parentId?.let { parentId -> categoryDao.getCategoryById(parentId) }
+        require(CategoryRules.isEligibleForAssignment(category.toDomainCategory(), root?.toDomainCategory())) {
+            "Preference category or root is inactive"
+        }
+        val rootId = category.parentId ?: category.id
+        require(rootId !in planLockedCategoryRootIds(userId)) { "Preference category is blocked by the Free plan selection" }
+
+        val operationId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val payloadHash = sha256("$operationId:${preference.id}:${preference.merchantId.value}:${preference.categoryId.value}:${expectedRevision ?: "new"}")
+        val dto = UpsertMerchantCategoryPreferenceRequestDto(
+            operationId = operationId,
+            preferenceId = preference.id,
+            merchantId = preference.merchantId.value,
+            categoryId = preference.categoryId.value,
+            expectedRevision = expectedRevision,
+            payloadHash = payloadHash,
+        )
+        transactionRunner {
+            require(currentUserId() == userId) { "Owner changed before saving preference" }
+            val existing = merchantRulesDao.getPreference(userId, preference.merchantId.value)
+            if (expectedRevision == null) {
+                require(existing == null) { "Preference already exists; refresh before editing" }
+            } else {
+                require(existing?.remoteRevision == expectedRevision && existing.id == preference.id) {
+                    "Preference revision changed; refresh before editing"
+                }
+            }
+            merchantRulesDao.upsertPreference(
+                MerchantCategoryPreferenceEntity(
+                    userId = userId,
+                    merchantId = preference.merchantId.value,
+                    id = preference.id,
+                    categoryId = preference.categoryId.value,
+                    remoteRevision = preference.revision,
+                    deletedAt = null,
+                    updatedAt = now,
+                    syncState = MerchantRuleSyncState.PENDING.name,
+                ),
+            )
+            categoryDao.insertOutboxCommand(
+                CategorySyncOutboxEntity(
+                    operationId = operationId,
+                    userId = userId,
+                    commandType = "UPSERT_MERCHANT_CATEGORY_PREFERENCE",
+                    aggregateType = "MERCHANT_CATEGORY_PREFERENCE",
+                    aggregateId = preference.merchantId.value,
+                    expectedRevision = expectedRevision,
+                    payloadJson = json.encodeToString(dto),
+                    payloadHash = payloadHash,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+            require(currentUserId() == userId) { "Owner changed while saving preference" }
+        }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
+    }
+
+    override suspend fun deleteMerchantCategoryPreference(
+        merchantId: MerchantId,
+        expectedRevision: Long,
+    ): Result<Unit> = runCatching {
+        val userId = currentUserId() ?: error("No active owner session")
+        val existing = merchantRulesDao.getPreference(userId, merchantId.value)
+            ?: error("Merchant category preference is unavailable")
+        require(existing.remoteRevision == expectedRevision && existing.deletedAt == null) {
+            "Preference revision changed; refresh before removing"
+        }
+        val operationId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val payloadHash = sha256("$operationId:${existing.id}:$expectedRevision:delete")
+        val dto = DeleteMerchantCategoryPreferenceRequestDto(operationId, existing.id, expectedRevision, payloadHash)
+        transactionRunner {
+            require(currentUserId() == userId) { "Owner changed before removing preference" }
+            merchantRulesDao.upsertPreference(
+                existing.copy(
+                    remoteRevision = expectedRevision + 1L,
+                    deletedAt = now,
+                    updatedAt = now,
+                    syncState = MerchantRuleSyncState.PENDING.name,
+                    syncError = null,
+                ),
+            )
+            categoryDao.insertOutboxCommand(
+                CategorySyncOutboxEntity(
+                    operationId = operationId,
+                    userId = userId,
+                    commandType = "DELETE_MERCHANT_CATEGORY_PREFERENCE",
+                    aggregateType = "MERCHANT_CATEGORY_PREFERENCE",
+                    aggregateId = merchantId.value,
+                    expectedRevision = expectedRevision,
+                    payloadJson = json.encodeToString(dto),
+                    payloadHash = payloadHash,
+                    createdAt = now,
+                    updatedAt = now,
+                ),
+            )
+            require(currentUserId() == userId) { "Owner changed while removing preference" }
+        }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
+    }
+
     override fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?> {
         val userId = currentUserId() ?: return kotlinx.coroutines.flow.flowOf(null)
         return categoryDao.observeMovementClassification(movementId.value, userId).map { tuple ->
@@ -541,10 +788,56 @@ class OfflineFirstCategoriesRepository @Inject constructor(
                     movementId = MovementId(it.id),
                     categoryId = it.category_id?.let { cid -> CategoryId(cid) },
                     merchantId = it.merchant_id?.let { mid -> MerchantId(mid) },
-                    merchantProvisionalText = it.merchant_provisional_text
+                    merchantProvisionalText = it.merchant_provisional_text,
+                    merchantRawText = it.merchant_raw_text,
                 )
             }
         }
+    }
+
+    override suspend fun preserveMerchantSourceText(
+        movementId: MovementId,
+        sourceText: SourceMerchantText,
+    ): Result<Unit> = runCatching {
+        val userId = currentUserId() ?: error("No active owner session")
+        require(sourceText.value.isNotEmpty()) { "Merchant source text cannot be empty" }
+        require(currentUserId() == userId) { "Owner changed before preserving merchant source text" }
+        transactionRunner {
+            val existing = categoryDao.getMerchantRawText(movementId.value, userId)
+                ?: run {
+                    val written = categoryDao.setMerchantRawTextIfAbsent(movementId.value, userId, sourceText.value)
+                    require(written == 1) { "Movement does not belong to the active owner" }
+                    null
+                }
+            if (existing != null) {
+                require(existing == sourceText.value) { "Merchant source text is immutable once captured" }
+                return@transactionRunner
+            }
+            require(currentUserId() == userId) { "Owner changed while preserving merchant source text" }
+            val operationId = UUID.randomUUID().toString()
+            val hash = sha256("$operationId:${movementId.value}:${sourceText.value}")
+            val dto = PreserveMerchantSourceTextRequestDto(
+                operationId = operationId,
+                movementId = movementId.value,
+                merchantRawText = sourceText.value,
+                payloadHash = hash,
+            )
+            categoryDao.insertOutboxCommand(
+                CategorySyncOutboxEntity(
+                    operationId = operationId,
+                    userId = userId,
+                    commandType = "PRESERVE_MERCHANT_SOURCE_TEXT",
+                    aggregateType = "MOVEMENT_SOURCE_TEXT",
+                    aggregateId = movementId.value,
+                    payloadJson = json.encodeToString(dto),
+                    payloadHash = hash,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
+            require(currentUserId() == userId) { "Owner changed while saving merchant source command" }
+        }
+        if (currentUserId() == userId) syncScheduler.scheduleSync(userId)
     }
 
     override suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit> {
@@ -715,6 +1008,26 @@ class OfflineFirstCategoriesRepository @Inject constructor(
         isActive = isActive,
         revision = remoteRevision,
         categoryType = CategoryType.fromStorage(categoryType),
+    )
+
+    private fun MerchantAliasRuleEntity.toDomain() = MerchantAliasRule(
+        id = MerchantAliasRuleId(id),
+        ownerId = UserId(userId),
+        normalizedPattern = normalizedPattern,
+        merchantId = MerchantId(merchantId),
+        revision = remoteRevision,
+        deletedAt = deletedAt?.let(java.time.Instant::ofEpochMilli),
+        syncState = MerchantRuleSyncState.entries.firstOrNull { it.name == syncState } ?: MerchantRuleSyncState.FAILED,
+    )
+
+    private fun MerchantCategoryPreferenceEntity.toDomain() = MerchantCategoryPreference(
+        ownerId = UserId(userId),
+        merchantId = MerchantId(merchantId),
+        categoryId = CategoryId(categoryId),
+        revision = remoteRevision,
+        deletedAt = deletedAt?.let(java.time.Instant::ofEpochMilli),
+        id = id,
+        syncState = MerchantRuleSyncState.entries.firstOrNull { it.name == syncState } ?: MerchantRuleSyncState.FAILED,
     )
 
     private suspend fun effectiveEntitlement(userId: String): EffectiveEntitlement? {

@@ -14,6 +14,9 @@ import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
+import com.kipu.app.feature.categories.data.local.MerchantAliasRuleEntity
+import com.kipu.app.feature.categories.data.local.MerchantCategoryPreferenceEntity
+import com.kipu.app.feature.categories.data.local.MerchantRulesDao
 import com.kipu.app.feature.categories.data.local.MerchantCategoryFilterRow
 import com.kipu.app.feature.categories.data.local.MovementClassificationTuple
 import com.kipu.app.feature.categories.data.sync.CategorySyncScheduler
@@ -22,6 +25,10 @@ import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryOrigin
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.MerchantId
+import com.kipu.app.feature.categories.domain.model.MerchantAliasRule
+import com.kipu.app.feature.categories.domain.model.MerchantAliasRuleId
+import com.kipu.app.feature.categories.domain.model.MerchantCategoryPreference
+import com.kipu.app.feature.categories.domain.model.SourceMerchantText
 import com.kipu.app.feature.categories.domain.model.MovementClassification
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +48,7 @@ class FakeCategoryDao : CategoryDao {
     val conflicts = mutableMapOf<String, CategoryConflictEntity>()
     val outbox = mutableListOf<CategorySyncOutboxEntity>()
     val movements = mutableMapOf<String, MovementClassificationTuple>()
+    val merchantSourceTexts = mutableMapOf<Pair<String, String>, String>()
 
     override suspend fun insertCategory(category: CategoryEntity) {
         categories[category.id] = category
@@ -103,6 +111,18 @@ class FakeCategoryDao : CategoryDao {
     override fun observeMovementClassification(movementId: String, userId: String): Flow<MovementClassificationTuple?> =
         flowOf(movements[movementId])
 
+    override suspend fun getMerchantRawText(movementId: String, userId: String): String? =
+        merchantSourceTexts[userId to movementId]
+
+    override suspend fun setMerchantRawTextIfAbsent(movementId: String, userId: String, rawText: String): Int {
+        if (movements[movementId] == null) return 0
+        if (merchantSourceTexts[userId to movementId] != null) return 0
+        merchantSourceTexts[userId to movementId] = rawText
+        val existing = movements[movementId]!!
+        movements[movementId] = existing.copy(merchant_raw_text = rawText)
+        return 1
+    }
+
     override suspend fun updateMovementClassification(
         movementId: String,
         userId: String,
@@ -110,7 +130,9 @@ class FakeCategoryDao : CategoryDao {
         merchantId: String?,
         provisionalText: String?,
     ): Int {
-        movements[movementId] = MovementClassificationTuple(movementId, categoryId, merchantId, provisionalText)
+        movements[movementId] = MovementClassificationTuple(
+            movementId, categoryId, merchantId, provisionalText, movements[movementId]?.merchant_raw_text,
+        )
         return 1
     }
 
@@ -176,6 +198,36 @@ class FakeMerchantCatalogDao : MerchantCatalogDao {
     override suspend fun getLatestVersion(): Long? = merchants.values.maxOfOrNull { it.version }
 }
 
+class FakeMerchantRulesDao : MerchantRulesDao {
+    val aliases = mutableMapOf<Pair<String, String>, MerchantAliasRuleEntity>()
+    val preferences = mutableMapOf<Pair<String, String>, MerchantCategoryPreferenceEntity>()
+
+    override suspend fun upsertAliasRule(rule: MerchantAliasRuleEntity) { aliases[rule.userId to rule.id] = rule }
+    override suspend fun updateAliasRule(rule: MerchantAliasRuleEntity) { aliases[rule.userId to rule.id] = rule }
+    override suspend fun getAliasRule(userId: String, ruleId: String): MerchantAliasRuleEntity? = aliases[userId to ruleId]
+    override fun observeAliasRules(userId: String): Flow<List<MerchantAliasRuleEntity>> =
+        flowOf(aliases.values.filter { it.userId == userId })
+    override suspend fun setAliasSyncState(userId: String, ruleId: String, state: String, revision: Long?, error: String?): Int {
+        val key = userId to ruleId
+        val row = aliases[key] ?: return 0
+        aliases[key] = row.copy(syncState = state, syncError = error, remoteRevision = revision ?: row.remoteRevision)
+        return 1
+    }
+    override suspend fun upsertPreference(preference: MerchantCategoryPreferenceEntity) {
+        preferences[preference.userId to preference.merchantId] = preference
+    }
+    override suspend fun getPreference(userId: String, merchantId: String): MerchantCategoryPreferenceEntity? =
+        preferences[userId to merchantId]
+    override fun observePreferences(userId: String): Flow<List<MerchantCategoryPreferenceEntity>> =
+        flowOf(preferences.values.filter { it.userId == userId })
+    override suspend fun setPreferenceSyncState(userId: String, merchantId: String, state: String, revision: Long?, error: String?): Int {
+        val key = userId to merchantId
+        val row = preferences[key] ?: return 0
+        preferences[key] = row.copy(syncState = state, syncError = error, remoteRevision = revision ?: row.remoteRevision)
+        return 1
+    }
+}
+
 class FakeSessionCoordinator(
     initialAccess: LocalAccess = LocalAccess.NoOwner,
 ) : SessionCoordinator {
@@ -222,6 +274,7 @@ class OfflineFirstCategoriesRepositoryTest {
     private lateinit var sessionCoordinator: FakeSessionCoordinator
     private lateinit var syncScheduler: FakeCategorySyncScheduler
     private lateinit var quotaSelectionDao: FakeQuotaSelectionDao
+    private lateinit var merchantRulesDao: FakeMerchantRulesDao
     private lateinit var repository: OfflineFirstCategoriesRepository
 
     private val testUserId = UserId.generate()
@@ -233,6 +286,7 @@ class OfflineFirstCategoriesRepositoryTest {
         sessionCoordinator = FakeSessionCoordinator(LocalAccess.NoOwner)
         syncScheduler = FakeCategorySyncScheduler()
         quotaSelectionDao = FakeQuotaSelectionDao()
+        merchantRulesDao = FakeMerchantRulesDao()
 
         val transactionRunner = object : DatabaseTransactionRunner {
             override suspend operator fun <R> invoke(block: suspend () -> R): R = block()
@@ -242,6 +296,7 @@ class OfflineFirstCategoriesRepositoryTest {
             transactionRunner = transactionRunner,
             categoryDao = categoryDao,
             merchantDao = merchantDao,
+            merchantRulesDao = merchantRulesDao,
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
             quotaSelectionDao = quotaSelectionDao,
@@ -467,6 +522,64 @@ class OfflineFirstCategoriesRepositoryTest {
             categoryDao.movements[classification.movementId.value]?.merchant_id
         )
         assertTrue(syncScheduler.scheduledUsers.contains(testUserId.value))
+    }
+
+    @Test
+    fun `merchant source alias and preference persist offline with owner scoped tombstones`() = runTest {
+        sessionCoordinator.localAccess.value = LocalAccess.Available(testUserId.value, RemoteSession.Absent)
+        val otherOwner = UserId.generate()
+        val merchantId = MerchantId("merchant-1")
+        merchantDao.insertMerchants(listOf(MerchantCatalogEntity("merchant-1", "Tambo", "tambo", true, 1L, 1000L)))
+        val movementId = MovementId.generate()
+        val originalClassification = MovementClassificationTuple(movementId.value, "category-old", "merchant-1", null, null)
+        categoryDao.movements[movementId.value] = originalClassification
+        val rawText = "  IZIPAY*TÁMBO\tLIMA  "
+
+        repository.preserveMerchantSourceText(movementId, SourceMerchantText(rawText)).getOrThrow()
+        repository.preserveMerchantSourceText(movementId, SourceMerchantText(rawText)).getOrThrow()
+        assertEquals(rawText, categoryDao.movements[movementId.value]?.merchant_raw_text)
+        assertEquals(1, categoryDao.outbox.count { it.commandType == "PRESERVE_MERCHANT_SOURCE_TEXT" })
+        assertTrue(repository.preserveMerchantSourceText(movementId, SourceMerchantText("changed source")).isFailure)
+
+        val aliasId = MerchantAliasRuleId("rule-1")
+        val alias = MerchantAliasRule(aliasId, testUserId, "izipay*tambo", merchantId)
+        repository.saveMerchantAliasRule(alias, expectedRevision = null).getOrThrow()
+        val editedAlias = alias.copy(normalizedPattern = "izipay*tambo lima", revision = 2)
+        repository.saveMerchantAliasRule(editedAlias, expectedRevision = 1).getOrThrow()
+        repository.deleteMerchantAliasRule(aliasId, expectedRevision = 2).getOrThrow()
+        val storedAlias = merchantRulesDao.getAliasRule(testUserId.value, aliasId.value)
+        assertEquals(3L, storedAlias?.remoteRevision)
+        assertTrue(storedAlias?.deletedAt != null)
+
+        val categoryA = CategoryEntity("category-a", null, null, "SYSTEM", true, 1L, 1000L, 1000L, "GENERAL")
+        val categoryB = CategoryEntity("category-b", null, null, "SYSTEM", true, 1L, 1000L, 1000L, "GENERAL")
+        categoryDao.insertCategories(listOf(categoryA, categoryB))
+        val preference = MerchantCategoryPreference(
+            ownerId = testUserId,
+            merchantId = merchantId,
+            categoryId = CategoryId("category-a"),
+            id = "preference-1",
+        )
+        repository.saveMerchantCategoryPreference(preference, expectedRevision = null).getOrThrow()
+        val updatedPreference = preference.copy(categoryId = CategoryId("category-b"), revision = 2)
+        repository.saveMerchantCategoryPreference(updatedPreference, expectedRevision = 1).getOrThrow()
+        repository.deleteMerchantCategoryPreference(merchantId, expectedRevision = 2).getOrThrow()
+        val storedPreference = merchantRulesDao.getPreference(testUserId.value, merchantId.value)
+        assertEquals("category-b", storedPreference?.categoryId)
+        assertEquals(3L, storedPreference?.remoteRevision)
+        assertTrue(storedPreference?.deletedAt != null)
+
+        assertEquals(originalClassification.copy(merchant_raw_text = rawText), categoryDao.movements[movementId.value])
+        assertEquals(2, categoryDao.outbox.count { it.commandType == "UPSERT_MERCHANT_ALIAS_RULE" })
+        assertEquals(1, categoryDao.outbox.count { it.commandType == "DELETE_MERCHANT_ALIAS_RULE" })
+        assertEquals(2, categoryDao.outbox.count { it.commandType == "UPSERT_MERCHANT_CATEGORY_PREFERENCE" })
+        assertEquals(1, categoryDao.outbox.count { it.commandType == "DELETE_MERCHANT_CATEGORY_PREFERENCE" })
+
+        sessionCoordinator.localAccess.value = LocalAccess.Available(otherOwner.value, RemoteSession.Absent)
+        assertTrue(repository.observeMerchantAliasRules(testUserId).first().isEmpty())
+        assertTrue(repository.observeMerchantCategoryPreferences(testUserId).first().isEmpty())
+        assertTrue(repository.observeMerchantAliasRules(otherOwner).first().isEmpty())
+        assertTrue(repository.observeMerchantCategoryPreferences(otherOwner).first().isEmpty())
     }
 
     @Test

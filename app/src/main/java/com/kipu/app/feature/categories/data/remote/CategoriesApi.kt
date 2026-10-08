@@ -45,6 +45,22 @@ class CategoriesApi @Inject constructor(
         return callRpc("update_movement_classification_v1", request)
     }
 
+    suspend fun preserveMerchantSourceText(request: PreserveMerchantSourceTextRequestDto): CategoryApiResponse<CategoryCommandResponseDto> {
+        return callRpc("preserve_merchant_source_text_v1", request)
+    }
+
+    suspend fun upsertMerchantAliasRule(request: UpsertMerchantAliasRuleRequestDto): CategoryApiResponse<CategoryCommandResponseDto> =
+        callRpc("upsert_merchant_alias_rule_v1", request)
+
+    suspend fun deleteMerchantAliasRule(request: DeleteMerchantAliasRuleRequestDto): CategoryApiResponse<CategoryCommandResponseDto> =
+        callRpc("delete_merchant_alias_rule_v1", request)
+
+    suspend fun upsertMerchantCategoryPreference(request: UpsertMerchantCategoryPreferenceRequestDto): CategoryApiResponse<CategoryCommandResponseDto> =
+        callRpc("upsert_merchant_category_preference_v1", request)
+
+    suspend fun deleteMerchantCategoryPreference(request: DeleteMerchantCategoryPreferenceRequestDto): CategoryApiResponse<CategoryCommandResponseDto> =
+        callRpc("delete_merchant_category_preference_v1", request)
+
     suspend fun resolveConflict(request: ResolveCategoryConflictRequestDto): CategoryApiResponse<CategoryCommandResponseDto> {
         return callRpc("resolve_category_conflict_v1", request)
     }

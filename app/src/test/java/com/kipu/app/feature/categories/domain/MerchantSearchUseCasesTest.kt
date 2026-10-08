@@ -10,6 +10,7 @@ import com.kipu.app.feature.categories.data.FakeQuotaSelectionDao
 import com.kipu.app.feature.categories.data.FakeFeatureAccessCacheDao
 import com.kipu.app.feature.categories.data.FakeCategorySyncScheduler
 import com.kipu.app.feature.categories.data.FakeMerchantCatalogDao
+import com.kipu.app.feature.categories.data.FakeMerchantRulesDao
 import com.kipu.app.feature.categories.data.FakeSessionCoordinator
 import com.kipu.app.feature.categories.data.OfflineFirstCategoriesRepository
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
@@ -61,6 +62,7 @@ class MerchantSearchUseCasesTest {
             transactionRunner = transactionRunner,
             categoryDao = categoryDao,
             merchantDao = merchantDao,
+            merchantRulesDao = FakeMerchantRulesDao(),
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
             quotaSelectionDao = FakeQuotaSelectionDao(),
@@ -114,6 +116,12 @@ class MerchantSearchUseCasesTest {
     @Test
     fun `search with blank query returns empty results`() = runTest {
         val results = searchMerchantCatalog("   ").first()
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun `search with punctuation only has no normalized match`() = runTest {
+        val results = searchMerchantCatalog("!!!").first()
         assertTrue(results.isEmpty())
     }
 

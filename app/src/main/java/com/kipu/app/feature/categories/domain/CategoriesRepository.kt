@@ -8,8 +8,13 @@ import com.kipu.app.feature.categories.domain.model.CategoryId
 import com.kipu.app.feature.categories.domain.model.CategoryPresentation
 import com.kipu.app.feature.categories.domain.model.ConflictId
 import com.kipu.app.feature.categories.domain.model.MerchantCatalogEntry
+import com.kipu.app.feature.categories.domain.model.MerchantAliasRule
+import com.kipu.app.feature.categories.domain.model.MerchantAliasRuleId
 import com.kipu.app.feature.categories.domain.model.MerchantCategoryFilter
+import com.kipu.app.feature.categories.domain.model.MerchantCategoryPreference
+import com.kipu.app.feature.categories.domain.model.MerchantId
 import com.kipu.app.feature.categories.domain.model.MovementClassification
+import com.kipu.app.feature.categories.domain.model.SourceMerchantText
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.Flow
 
@@ -32,6 +37,20 @@ interface CategoriesRepository {
     fun observeMerchantCategoryFilters(): Flow<List<MerchantCategoryFilter>> = flowOf(emptyList())
     fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?>
     suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit>
+    suspend fun preserveMerchantSourceText(movementId: MovementId, sourceText: SourceMerchantText): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Merchant source text persistence is unavailable"))
+    fun observeMerchantAliasRules(userId: UserId): Flow<List<MerchantAliasRule>> = flowOf(emptyList())
+    suspend fun saveMerchantAliasRule(rule: MerchantAliasRule, expectedRevision: Long?): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Merchant alias rules are unavailable"))
+    suspend fun deleteMerchantAliasRule(ruleId: MerchantAliasRuleId, expectedRevision: Long): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Merchant alias rules are unavailable"))
+    fun observeMerchantCategoryPreferences(userId: UserId): Flow<List<MerchantCategoryPreference>> = flowOf(emptyList())
+    suspend fun saveMerchantCategoryPreference(
+        preference: MerchantCategoryPreference,
+        expectedRevision: Long?,
+    ): Result<Unit> = Result.failure(UnsupportedOperationException("Merchant category preferences are unavailable"))
+    suspend fun deleteMerchantCategoryPreference(merchantId: MerchantId, expectedRevision: Long): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Merchant category preferences are unavailable"))
     suspend fun clearCategoryClassification(movementId: MovementId): Result<Unit>
     suspend fun clearMerchantClassification(movementId: MovementId): Result<Unit>
 

@@ -21,6 +21,9 @@ import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
+import com.kipu.app.feature.categories.data.local.MerchantAliasRuleEntity
+import com.kipu.app.feature.categories.data.local.MerchantCategoryPreferenceEntity
+import com.kipu.app.feature.categories.data.local.MerchantRulesDao
 import com.kipu.app.feature.movements.data.local.BalanceProjectionEntity
 import com.kipu.app.feature.movements.data.local.LedgerEntryEntity
 import com.kipu.app.feature.movements.data.local.LocalCommandReceiptEntity
@@ -72,6 +75,8 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         CategoryEntity::class,
         CategoryPresentationEntity::class,
         MerchantCatalogEntity::class,
+        MerchantAliasRuleEntity::class,
+        MerchantCategoryPreferenceEntity::class,
         CategoryConflictEntity::class,
         CategorySyncOutboxEntity::class,
         TransactionEntity::class,
@@ -91,7 +96,7 @@ import com.kipu.app.feature.settings.data.local.UserProfileCacheEntity
         AppNotificationEntity::class,
         NotificationSyncOutboxEntity::class,
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -108,6 +113,7 @@ abstract class KipuDatabase : RoomDatabase() {
     abstract fun instrumentSyncDao(): InstrumentSyncDao
     abstract fun categoryDao(): CategoryDao
     abstract fun merchantCatalogDao(): MerchantCatalogDao
+    abstract fun merchantRulesDao(): MerchantRulesDao
     abstract fun movementDao(): MovementDao
     abstract fun creditDao(): CreditDao
     abstract fun appNotificationDao(): AppNotificationDao

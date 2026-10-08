@@ -12,7 +12,8 @@ data class MovementClassificationTuple(
     val id: String,
     val category_id: String?,
     val merchant_id: String?,
-    val merchant_provisional_text: String?
+    val merchant_provisional_text: String?,
+    val merchant_raw_text: String? = null,
 )
 
 @Dao
@@ -72,8 +73,14 @@ interface CategoryDao {
     suspend fun getConflict(id: String): CategoryConflictEntity?
 
     // Movement Classification
-    @Query("SELECT id, category_id, merchant_id, merchant_provisional_text FROM financial_movements WHERE id = :movementId AND user_id = :userId")
+    @Query("SELECT id, category_id, merchant_id, merchant_provisional_text, merchant_raw_text FROM financial_movements WHERE id = :movementId AND user_id = :userId")
     fun observeMovementClassification(movementId: String, userId: String): Flow<MovementClassificationTuple?>
+
+    @Query("SELECT merchant_raw_text FROM financial_movements WHERE id = :movementId AND user_id = :userId")
+    suspend fun getMerchantRawText(movementId: String, userId: String): String?
+
+    @Query("UPDATE financial_movements SET merchant_raw_text = :rawText WHERE id = :movementId AND user_id = :userId AND merchant_raw_text IS NULL")
+    suspend fun setMerchantRawTextIfAbsent(movementId: String, userId: String, rawText: String): Int
 
     @Query("""
         UPDATE financial_movements 

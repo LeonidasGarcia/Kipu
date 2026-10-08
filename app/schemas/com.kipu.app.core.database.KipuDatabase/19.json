@@ -1,0 +1,3510 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 19,
+    "identityHash": "3d4cc90dc138d557045e46db0f291cab",
+    "entities": [
+      {
+        "tableName": "plan_preferences",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `selection` TEXT NOT NULL, `selected_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selection",
+            "columnName": "selection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedAt",
+            "columnName": "selected_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
+      },
+      {
+        "tableName": "plan_selection_sync_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `last_issued_revision` INTEGER NOT NULL, `accepted_revision` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastIssuedRevision",
+            "columnName": "last_issued_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedRevision",
+            "columnName": "accepted_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
+      },
+      {
+        "tableName": "plan_selections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `feature_key` TEXT NOT NULL, `revision` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `feature_key`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "featureKey",
+            "columnName": "feature_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "feature_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_plan_selections_user_id_updated_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "updated_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_plan_selections_user_id_updated_at` ON `${TABLE_NAME}` (`user_id`, `updated_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "plan_selection_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `feature_key` TEXT NOT NULL, `resource_id` TEXT NOT NULL, `resource_type` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `feature_key`, `resource_id`), FOREIGN KEY(`user_id`, `feature_key`) REFERENCES `plan_selections`(`user_id`, `feature_key`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "featureKey",
+            "columnName": "feature_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resourceId",
+            "columnName": "resource_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resourceType",
+            "columnName": "resource_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "feature_key",
+            "resource_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_plan_selection_items_user_id_feature_key_resource_type",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "feature_key",
+              "resource_type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_plan_selection_items_user_id_feature_key_resource_type` ON `${TABLE_NAME}` (`user_id`, `feature_key`, `resource_type`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "plan_selections",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "feature_key"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "feature_key"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "sync_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`operation_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `aggregate_type` TEXT NOT NULL, `contract_version` INTEGER NOT NULL, `selection_revision` INTEGER NOT NULL, `selection` TEXT NOT NULL, `selected_at` INTEGER NOT NULL, `status` TEXT NOT NULL, `attempt_count` INTEGER NOT NULL, `next_attempt_at` INTEGER, `lease_until` INTEGER, `last_error_code` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`operation_id`))",
+        "fields": [
+          {
+            "fieldPath": "operationId",
+            "columnName": "operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggregateType",
+            "columnName": "aggregate_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contractVersion",
+            "columnName": "contract_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectionRevision",
+            "columnName": "selection_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selection",
+            "columnName": "selection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedAt",
+            "columnName": "selected_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leaseUntil",
+            "columnName": "lease_until",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastErrorCode",
+            "columnName": "last_error_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "operation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sync_outbox_user_id",
+            "unique": false,
+            "columnNames": [
+              "user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_outbox_user_id` ON `${TABLE_NAME}` (`user_id`)"
+          },
+          {
+            "name": "index_sync_outbox_user_id_selection_revision",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "selection_revision"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sync_outbox_user_id_selection_revision` ON `${TABLE_NAME}` (`user_id`, `selection_revision`)"
+          }
+        ]
+      },
+      {
+        "tableName": "feature_access_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `policy_version` INTEGER NOT NULL, `effective_tier` TEXT NOT NULL, `entitlement_expires_at` INTEGER, `verified_at` INTEGER, `source` TEXT NOT NULL, `offline_grant_payload` TEXT, `offline_grant_signature` TEXT, `offline_grant_key_id` TEXT, `offline_anchor_elapsed_ms` INTEGER, `offline_anchor_boot_count` INTEGER, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "policyVersion",
+            "columnName": "policy_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "effectiveTier",
+            "columnName": "effective_tier",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entitlementExpiresAt",
+            "columnName": "entitlement_expires_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "verifiedAt",
+            "columnName": "verified_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "offlineGrantPayload",
+            "columnName": "offline_grant_payload",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "offlineGrantSignature",
+            "columnName": "offline_grant_signature",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "offlineGrantKeyId",
+            "columnName": "offline_grant_key_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "offlineAnchorElapsedRealtimeMillis",
+            "columnName": "offline_anchor_elapsed_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "offlineAnchorBootCount",
+            "columnName": "offline_anchor_boot_count",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
+      },
+      {
+        "tableName": "user_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `display_name` TEXT NOT NULL, `currency_code` TEXT NOT NULL, `time_zone` TEXT, `month_start` INTEGER NOT NULL, `hide_balances` INTEGER NOT NULL, `theme_mode` TEXT NOT NULL, `remote_revision` INTEGER NOT NULL, `remote_updated_at` INTEGER, `sync_state` TEXT NOT NULL, `updated_locally_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currencyCode",
+            "columnName": "currency_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timeZone",
+            "columnName": "time_zone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "monthStart",
+            "columnName": "month_start",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hideBalances",
+            "columnName": "hide_balances",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "themeMode",
+            "columnName": "theme_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteUpdatedAt",
+            "columnName": "remote_updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "sync_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedLocallyAt",
+            "columnName": "updated_locally_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
+      },
+      {
+        "tableName": "profile_preference_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`operation_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `expected_revision` INTEGER NOT NULL, `payload` TEXT NOT NULL, `status` TEXT NOT NULL, `attempt_count` INTEGER NOT NULL, `next_attempt_at` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`operation_id`))",
+        "fields": [
+          {
+            "fieldPath": "operationId",
+            "columnName": "operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedRevision",
+            "columnName": "expected_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "operation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_profile_preference_outbox_user_id",
+            "unique": false,
+            "columnNames": [
+              "user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_profile_preference_outbox_user_id` ON `${TABLE_NAME}` (`user_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "device_account_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `local_unlock_enabled` INTEGER NOT NULL, `unlock_authenticators` INTEGER NOT NULL, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localUnlockEnabled",
+            "columnName": "local_unlock_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unlockAuthenticators",
+            "columnName": "unlock_authenticators",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
+      },
+      {
+        "tableName": "installation_permission_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source` TEXT NOT NULL, `device_authorization` TEXT NOT NULL, `last_checked_at` INTEGER NOT NULL, PRIMARY KEY(`source`))",
+        "fields": [
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceAuthorization",
+            "columnName": "device_authorization",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastCheckedAt",
+            "columnName": "last_checked_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "source"
+          ]
+        }
+      },
+      {
+        "tableName": "account_source_consent",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `source` TEXT NOT NULL, `consent_state` TEXT NOT NULL, `capability_state` TEXT NOT NULL, `explanation_version` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `source`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consentState",
+            "columnName": "consent_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "capabilityState",
+            "columnName": "capability_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "explanationVersion",
+            "columnName": "explanation_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "source"
+          ]
+        }
+      },
+      {
+        "tableName": "accounts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `creation_operation_id` TEXT NOT NULL, `alias` TEXT NOT NULL, `type` TEXT NOT NULL, `currency` TEXT NOT NULL, `preset_id` TEXT, `color` TEXT, `icon` TEXT, `initial_balance_minor_units` INTEGER NOT NULL, `opened_at` INTEGER NOT NULL, `is_archived` INTEGER NOT NULL, `remote_revision` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creationOperationId",
+            "columnName": "creation_operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alias",
+            "columnName": "alias",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "presetId",
+            "columnName": "preset_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "color",
+            "columnName": "color",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "icon",
+            "columnName": "icon",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "initialBalanceMinorUnits",
+            "columnName": "initial_balance_minor_units",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "openedAt",
+            "columnName": "opened_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "is_archived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_accounts_user_id_creation_operation_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "creation_operation_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_accounts_user_id_creation_operation_id` ON `${TABLE_NAME}` (`user_id`, `creation_operation_id`)"
+          },
+          {
+            "name": "index_accounts_user_id_is_archived",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "is_archived"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_accounts_user_id_is_archived` ON `${TABLE_NAME}` (`user_id`, `is_archived`)"
+          },
+          {
+            "name": "index_accounts_user_id_type",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_accounts_user_id_type` ON `${TABLE_NAME}` (`user_id`, `type`)"
+          }
+        ]
+      },
+      {
+        "tableName": "cards",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `creation_operation_id` TEXT NOT NULL, `account_id` TEXT, `alias` TEXT, `type` TEXT NOT NULL, `currency` TEXT NOT NULL, `network` TEXT NOT NULL, `issuer` TEXT NOT NULL, `last_four_digits` TEXT NOT NULL, `credit_limit_minor_units` INTEGER, `billing_day` INTEGER, `due_day` INTEGER, `preset_id` TEXT, `style_preset_id` TEXT, `color` TEXT, `icon` TEXT, `is_archived` INTEGER NOT NULL, `remote_revision` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `personal_tea_bps` INTEGER, PRIMARY KEY(`user_id`, `id`), FOREIGN KEY(`user_id`, `account_id`) REFERENCES `accounts`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creationOperationId",
+            "columnName": "creation_operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "alias",
+            "columnName": "alias",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "network",
+            "columnName": "network",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "issuer",
+            "columnName": "issuer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastFourDigits",
+            "columnName": "last_four_digits",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditLimitMinorUnits",
+            "columnName": "credit_limit_minor_units",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "billingDay",
+            "columnName": "billing_day",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dueDay",
+            "columnName": "due_day",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "presetId",
+            "columnName": "preset_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stylePresetId",
+            "columnName": "style_preset_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "color",
+            "columnName": "color",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "icon",
+            "columnName": "icon",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isArchived",
+            "columnName": "is_archived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "personalTeaBps",
+            "columnName": "personal_tea_bps",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_cards_user_id_creation_operation_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "creation_operation_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_cards_user_id_creation_operation_id` ON `${TABLE_NAME}` (`user_id`, `creation_operation_id`)"
+          },
+          {
+            "name": "index_cards_user_id_is_archived_type",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "is_archived",
+              "type"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cards_user_id_is_archived_type` ON `${TABLE_NAME}` (`user_id`, `is_archived`, `type`)"
+          },
+          {
+            "name": "index_cards_user_id_issuer_network_last_four_digits",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "issuer",
+              "network",
+              "last_four_digits"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cards_user_id_issuer_network_last_four_digits` ON `${TABLE_NAME}` (`user_id`, `issuer`, `network`, `last_four_digits`)"
+          },
+          {
+            "name": "index_cards_user_id_account_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "account_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_cards_user_id_account_id` ON `${TABLE_NAME}` (`user_id`, `account_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "accounts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "account_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "financial_movements",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `operation_id` TEXT NOT NULL, `operation_sequence` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `amount_minor_units` INTEGER NOT NULL, `currency` TEXT NOT NULL, `account_id` TEXT, `card_id` TEXT, `opening_account_id` TEXT, `effective_at` INTEGER NOT NULL, `status` TEXT NOT NULL, `reverses_movement_id` TEXT, `adjusts_movement_id` TEXT, `category_id` TEXT, `merchant_id` TEXT, `merchant_provisional_text` TEXT, `merchant_raw_text` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `id`), FOREIGN KEY(`user_id`, `account_id`) REFERENCES `accounts`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationId",
+            "columnName": "operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "operationSequence",
+            "columnName": "operation_sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountMinorUnits",
+            "columnName": "amount_minor_units",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "cardId",
+            "columnName": "card_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "openingAccountId",
+            "columnName": "opening_account_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "effectiveAt",
+            "columnName": "effective_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reversesMovementId",
+            "columnName": "reverses_movement_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "adjustsMovementId",
+            "columnName": "adjusts_movement_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "merchantId",
+            "columnName": "merchant_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "merchantProvisionalText",
+            "columnName": "merchant_provisional_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "merchantRawText",
+            "columnName": "merchant_raw_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_financial_movements_user_id_operation_id_operation_sequence",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "operation_id",
+              "operation_sequence"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_financial_movements_user_id_operation_id_operation_sequence` ON `${TABLE_NAME}` (`user_id`, `operation_id`, `operation_sequence`)"
+          },
+          {
+            "name": "index_financial_movements_user_id_opening_account_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "opening_account_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_financial_movements_user_id_opening_account_id` ON `${TABLE_NAME}` (`user_id`, `opening_account_id`)"
+          },
+          {
+            "name": "index_financial_movements_user_id_account_id_status_effective_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "account_id",
+              "status",
+              "effective_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_financial_movements_user_id_account_id_status_effective_at` ON `${TABLE_NAME}` (`user_id`, `account_id`, `status`, `effective_at`)"
+          },
+          {
+            "name": "index_financial_movements_user_id_card_id_status_effective_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "card_id",
+              "status",
+              "effective_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_financial_movements_user_id_card_id_status_effective_at` ON `${TABLE_NAME}` (`user_id`, `card_id`, `status`, `effective_at`)"
+          },
+          {
+            "name": "index_financial_movements_user_id_category_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "category_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_financial_movements_user_id_category_id` ON `${TABLE_NAME}` (`user_id`, `category_id`)"
+          },
+          {
+            "name": "index_financial_movements_merchant_id",
+            "unique": false,
+            "columnNames": [
+              "merchant_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_financial_movements_merchant_id` ON `${TABLE_NAME}` (`merchant_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "accounts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "account_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "instrument_sync_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`operation_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `command_type` TEXT NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `predecessor_operation_id` TEXT, `expected_revision` INTEGER, `contract_version` INTEGER NOT NULL, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `state` TEXT NOT NULL, `attempt_count` INTEGER NOT NULL, `next_attempt_at` INTEGER, `lease_expires_at` INTEGER, `error_code` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `operation_id`))",
+        "fields": [
+          {
+            "fieldPath": "operationId",
+            "columnName": "operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandType",
+            "columnName": "command_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggregateType",
+            "columnName": "aggregate_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggregateId",
+            "columnName": "aggregate_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "predecessorOperationId",
+            "columnName": "predecessor_operation_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "expectedRevision",
+            "columnName": "expected_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "contractVersion",
+            "columnName": "contract_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payload_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadHash",
+            "columnName": "payload_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leaseExpiresAt",
+            "columnName": "lease_expires_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "errorCode",
+            "columnName": "error_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "operation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_instrument_sync_outbox_user_id_state_next_attempt_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "state",
+              "next_attempt_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_state_next_attempt_at` ON `${TABLE_NAME}` (`user_id`, `state`, `next_attempt_at`)"
+          },
+          {
+            "name": "index_instrument_sync_outbox_user_id_state_lease_expires_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "state",
+              "lease_expires_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_state_lease_expires_at` ON `${TABLE_NAME}` (`user_id`, `state`, `lease_expires_at`)"
+          },
+          {
+            "name": "index_instrument_sync_outbox_user_id_aggregate_type_aggregate_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "aggregate_type",
+              "aggregate_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_instrument_sync_outbox_user_id_aggregate_type_aggregate_id` ON `${TABLE_NAME}` (`user_id`, `aggregate_type`, `aggregate_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "categories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT, `parent_id` TEXT, `origin` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `remote_revision` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `category_type` TEXT NOT NULL DEFAULT 'GENERAL', PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "parentId",
+            "columnName": "parent_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "origin",
+            "columnName": "origin",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "is_active",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoryType",
+            "columnName": "category_type",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'GENERAL'"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_categories_user_id",
+            "unique": false,
+            "columnNames": [
+              "user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_categories_user_id` ON `${TABLE_NAME}` (`user_id`)"
+          },
+          {
+            "name": "index_categories_parent_id",
+            "unique": false,
+            "columnNames": [
+              "parent_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_categories_parent_id` ON `${TABLE_NAME}` (`parent_id`)"
+          },
+          {
+            "name": "index_categories_user_id_is_active",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "is_active"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_categories_user_id_is_active` ON `${TABLE_NAME}` (`user_id`, `is_active`)"
+          },
+          {
+            "name": "index_categories_origin",
+            "unique": false,
+            "columnNames": [
+              "origin"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_categories_origin` ON `${TABLE_NAME}` (`origin`)"
+          }
+        ]
+      },
+      {
+        "tableName": "category_presentations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`category_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `name` TEXT NOT NULL, `icon` TEXT NOT NULL, `color` TEXT NOT NULL, `remote_revision` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `category_id`))",
+        "fields": [
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "icon",
+            "columnName": "icon",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "color",
+            "columnName": "color",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "category_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_category_presentations_category_id",
+            "unique": false,
+            "columnNames": [
+              "category_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_category_presentations_category_id` ON `${TABLE_NAME}` (`category_id`)"
+          },
+          {
+            "name": "index_category_presentations_user_id",
+            "unique": false,
+            "columnNames": [
+              "user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_category_presentations_user_id` ON `${TABLE_NAME}` (`user_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "merchant_catalog_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `normalized_name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `version` INTEGER NOT NULL, `last_synced_at` INTEGER NOT NULL, `default_category_id` TEXT, `priority` TEXT NOT NULL DEFAULT 'B', `logo_key` TEXT, `brand_color` TEXT, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedName",
+            "columnName": "normalized_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isActive",
+            "columnName": "is_active",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultCategoryId",
+            "columnName": "default_category_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "priority",
+            "columnName": "priority",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'B'"
+          },
+          {
+            "fieldPath": "logoKey",
+            "columnName": "logo_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "brandColor",
+            "columnName": "brand_color",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_merchant_catalog_cache_normalized_name",
+            "unique": false,
+            "columnNames": [
+              "normalized_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_catalog_cache_normalized_name` ON `${TABLE_NAME}` (`normalized_name`)"
+          },
+          {
+            "name": "index_merchant_catalog_cache_is_active",
+            "unique": false,
+            "columnNames": [
+              "is_active"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_catalog_cache_is_active` ON `${TABLE_NAME}` (`is_active`)"
+          },
+          {
+            "name": "index_merchant_catalog_cache_default_category_id",
+            "unique": false,
+            "columnNames": [
+              "default_category_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_catalog_cache_default_category_id` ON `${TABLE_NAME}` (`default_category_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "merchant_alias_rules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `normalized_pattern` TEXT NOT NULL, `merchant_id` TEXT NOT NULL, `remote_revision` INTEGER NOT NULL, `deleted_at` INTEGER, `updated_at` INTEGER NOT NULL, `sync_state` TEXT NOT NULL, `sync_error` TEXT, PRIMARY KEY(`user_id`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedPattern",
+            "columnName": "normalized_pattern",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "merchantId",
+            "columnName": "merchant_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "sync_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncError",
+            "columnName": "sync_error",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_merchant_alias_rules_user_id_normalized_pattern_deleted_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "normalized_pattern",
+              "deleted_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_alias_rules_user_id_normalized_pattern_deleted_at` ON `${TABLE_NAME}` (`user_id`, `normalized_pattern`, `deleted_at`)"
+          },
+          {
+            "name": "index_merchant_alias_rules_user_id_merchant_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "merchant_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_alias_rules_user_id_merchant_id` ON `${TABLE_NAME}` (`user_id`, `merchant_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "merchant_category_preferences",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `merchant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `category_id` TEXT NOT NULL, `remote_revision` INTEGER NOT NULL, `deleted_at` INTEGER, `updated_at` INTEGER NOT NULL, `sync_state` TEXT NOT NULL, `sync_error` TEXT, PRIMARY KEY(`user_id`, `merchant_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "merchantId",
+            "columnName": "merchant_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevision",
+            "columnName": "remote_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncState",
+            "columnName": "sync_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncError",
+            "columnName": "sync_error",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "merchant_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_merchant_category_preferences_user_id_category_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "category_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_category_preferences_user_id_category_id` ON `${TABLE_NAME}` (`user_id`, `category_id`)"
+          },
+          {
+            "name": "index_merchant_category_preferences_user_id_deleted_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "deleted_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_merchant_category_preferences_user_id_deleted_at` ON `${TABLE_NAME}` (`user_id`, `deleted_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "category_conflicts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `category_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `conflict_type` TEXT NOT NULL, `local_version` TEXT NOT NULL, `remote_version` TEXT NOT NULL, `status` TEXT NOT NULL, `resolution_operation_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conflictType",
+            "columnName": "conflict_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localVersion",
+            "columnName": "local_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteVersion",
+            "columnName": "remote_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "resolutionOperationId",
+            "columnName": "resolution_operation_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_category_conflicts_user_id_status",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_category_conflicts_user_id_status` ON `${TABLE_NAME}` (`user_id`, `status`)"
+          },
+          {
+            "name": "index_category_conflicts_category_id",
+            "unique": false,
+            "columnNames": [
+              "category_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_category_conflicts_category_id` ON `${TABLE_NAME}` (`category_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "category_sync_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`operation_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `command_type` TEXT NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `expected_revision` INTEGER, `payload_json` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `state` TEXT NOT NULL, `attempt_count` INTEGER NOT NULL, `next_attempt_at` INTEGER, `error_code` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `operation_id`))",
+        "fields": [
+          {
+            "fieldPath": "operationId",
+            "columnName": "operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandType",
+            "columnName": "command_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggregateType",
+            "columnName": "aggregate_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggregateId",
+            "columnName": "aggregate_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedRevision",
+            "columnName": "expected_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "payloadJson",
+            "columnName": "payload_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payloadHash",
+            "columnName": "payload_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "errorCode",
+            "columnName": "error_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "operation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_category_sync_outbox_user_id_state_next_attempt_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "state",
+              "next_attempt_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_category_sync_outbox_user_id_state_next_attempt_at` ON `${TABLE_NAME}` (`user_id`, `state`, `next_attempt_at`)"
+          },
+          {
+            "name": "index_category_sync_outbox_user_id_aggregate_type_aggregate_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "aggregate_type",
+              "aggregate_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_category_sync_outbox_user_id_aggregate_type_aggregate_id` ON `${TABLE_NAME}` (`user_id`, `aggregate_type`, `aggregate_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "transactions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `type` TEXT NOT NULL, `amount_minor` INTEGER NOT NULL, `currency_code` TEXT NOT NULL, `source_account_id` TEXT, `destination_account_id` TEXT, `category_id` TEXT, `merchant_id` TEXT, `merchant_provisional_text` TEXT, `legacy_kind` TEXT, `occurred_at` INTEGER NOT NULL, `note` TEXT, `status` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `card_id` TEXT, `operation_kind` TEXT, `installment_count` INTEGER, `revision` INTEGER NOT NULL DEFAULT 1, `acknowledged_revision` INTEGER, `current_revision_id` TEXT, `source` TEXT, PRIMARY KEY(`user_id`, `id`), FOREIGN KEY(`user_id`, `source_account_id`) REFERENCES `accounts`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountMinor",
+            "columnName": "amount_minor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currencyCode",
+            "columnName": "currency_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceAccountId",
+            "columnName": "source_account_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "destinationAccountId",
+            "columnName": "destination_account_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "categoryId",
+            "columnName": "category_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "merchantId",
+            "columnName": "merchant_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "merchantProvisionalText",
+            "columnName": "merchant_provisional_text",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "legacyKind",
+            "columnName": "legacy_kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "occurredAt",
+            "columnName": "occurred_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "note",
+            "columnName": "note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "sync_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cardId",
+            "columnName": "card_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "operationKind",
+            "columnName": "operation_kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "installmentCount",
+            "columnName": "installment_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "acknowledgedRevision",
+            "columnName": "acknowledged_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "currentRevisionId",
+            "columnName": "current_revision_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_transactions_user_id_occurred_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "occurred_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_user_id_occurred_at` ON `${TABLE_NAME}` (`user_id`, `occurred_at`)"
+          },
+          {
+            "name": "index_transactions_user_id_card_id_occurred_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "card_id",
+              "occurred_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_user_id_card_id_occurred_at` ON `${TABLE_NAME}` (`user_id`, `card_id`, `occurred_at`)"
+          },
+          {
+            "name": "index_transactions_user_id_source_account_id_occurred_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "source_account_id",
+              "occurred_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_user_id_source_account_id_occurred_at` ON `${TABLE_NAME}` (`user_id`, `source_account_id`, `occurred_at`)"
+          },
+          {
+            "name": "index_transactions_user_id_sync_status",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "sync_status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transactions_user_id_sync_status` ON `${TABLE_NAME}` (`user_id`, `sync_status`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "accounts",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "source_account_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "transaction_revisions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `revision_id` TEXT NOT NULL, `transaction_id` TEXT NOT NULL, `command_id` TEXT, `command_type` TEXT NOT NULL, `base_revision` INTEGER NOT NULL, `local_revision` INTEGER NOT NULL, `previous_payload` TEXT, `new_payload` TEXT NOT NULL, `change_reason` TEXT, `provenance` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `revision_id`), FOREIGN KEY(`user_id`, `transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionId",
+            "columnName": "revision_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandId",
+            "columnName": "command_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "commandType",
+            "columnName": "command_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseRevision",
+            "columnName": "base_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localRevision",
+            "columnName": "local_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "previousPayload",
+            "columnName": "previous_payload",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "newPayload",
+            "columnName": "new_payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "changeReason",
+            "columnName": "change_reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "provenance",
+            "columnName": "provenance",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "revision_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_transaction_revisions_user_id_transaction_id_local_revision",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "transaction_id",
+              "local_revision"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_transaction_revisions_user_id_transaction_id_local_revision` ON `${TABLE_NAME}` (`user_id`, `transaction_id`, `local_revision`)"
+          },
+          {
+            "name": "index_transaction_revisions_user_id_transaction_id_revision_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_transaction_revisions_user_id_transaction_id_revision_id` ON `${TABLE_NAME}` (`user_id`, `transaction_id`, `revision_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "transactions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "transaction_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "movement_official_revisions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `transaction_id` TEXT NOT NULL, `official_revision` INTEGER NOT NULL, `revision_id` TEXT NOT NULL, `official_revision_id` TEXT NOT NULL, `assigned_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `transaction_id`, `official_revision`), FOREIGN KEY(`user_id`, `transaction_id`, `revision_id`) REFERENCES `transaction_revisions`(`user_id`, `transaction_id`, `revision_id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "officialRevision",
+            "columnName": "official_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionId",
+            "columnName": "revision_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "officialRevisionId",
+            "columnName": "official_revision_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assignedAt",
+            "columnName": "assigned_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "transaction_id",
+            "official_revision"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_movement_official_revisions_user_id_official_revision_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "official_revision_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_movement_official_revisions_user_id_official_revision_id` ON `${TABLE_NAME}` (`user_id`, `official_revision_id`)"
+          },
+          {
+            "name": "index_movement_official_revisions_user_id_transaction_id_revision_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_movement_official_revisions_user_id_transaction_id_revision_id` ON `${TABLE_NAME}` (`user_id`, `transaction_id`, `revision_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "transaction_revisions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "movement_ledger_effects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `command_id` TEXT NOT NULL, `effect_ordinal` INTEGER NOT NULL, `transaction_id` TEXT NOT NULL, `revision_id` TEXT NOT NULL, `ledger_entry_id` TEXT NOT NULL, `reverses_command_id` TEXT, `reverses_effect_ordinal` INTEGER, PRIMARY KEY(`user_id`, `command_id`, `effect_ordinal`), FOREIGN KEY(`user_id`, `transaction_id`, `revision_id`) REFERENCES `transaction_revisions`(`user_id`, `transaction_id`, `revision_id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`user_id`, `ledger_entry_id`) REFERENCES `ledger_entries`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT , FOREIGN KEY(`user_id`, `reverses_command_id`, `reverses_effect_ordinal`) REFERENCES `movement_ledger_effects`(`user_id`, `command_id`, `effect_ordinal`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandId",
+            "columnName": "command_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "effectOrdinal",
+            "columnName": "effect_ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revisionId",
+            "columnName": "revision_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ledgerEntryId",
+            "columnName": "ledger_entry_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reversesCommandId",
+            "columnName": "reverses_command_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "reversesEffectOrdinal",
+            "columnName": "reverses_effect_ordinal",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "command_id",
+            "effect_ordinal"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_movement_ledger_effects_user_id_transaction_id_revision_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_movement_ledger_effects_user_id_transaction_id_revision_id` ON `${TABLE_NAME}` (`user_id`, `transaction_id`, `revision_id`)"
+          },
+          {
+            "name": "index_movement_ledger_effects_user_id_ledger_entry_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "ledger_entry_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_movement_ledger_effects_user_id_ledger_entry_id` ON `${TABLE_NAME}` (`user_id`, `ledger_entry_id`)"
+          },
+          {
+            "name": "index_movement_ledger_effects_user_id_reverses_command_id_reverses_effect_ordinal",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "reverses_command_id",
+              "reverses_effect_ordinal"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_movement_ledger_effects_user_id_reverses_command_id_reverses_effect_ordinal` ON `${TABLE_NAME}` (`user_id`, `reverses_command_id`, `reverses_effect_ordinal`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "transaction_revisions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ]
+          },
+          {
+            "table": "ledger_entries",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "ledger_entry_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          },
+          {
+            "table": "movement_ledger_effects",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "reverses_command_id",
+              "reverses_effect_ordinal"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "command_id",
+              "effect_ordinal"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "movement_ledger_aliases",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `physical_entry_id` TEXT NOT NULL, `command_id` TEXT NOT NULL, `effect_ordinal` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `physical_entry_id`), FOREIGN KEY(`user_id`, `command_id`, `effect_ordinal`) REFERENCES `movement_ledger_effects`(`user_id`, `command_id`, `effect_ordinal`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "physicalEntryId",
+            "columnName": "physical_entry_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandId",
+            "columnName": "command_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "effectOrdinal",
+            "columnName": "effect_ordinal",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "physical_entry_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_movement_ledger_aliases_user_id_command_id_effect_ordinal",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "command_id",
+              "effect_ordinal"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_movement_ledger_aliases_user_id_command_id_effect_ordinal` ON `${TABLE_NAME}` (`user_id`, `command_id`, `effect_ordinal`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "movement_ledger_effects",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "command_id",
+              "effect_ordinal"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "command_id",
+              "effect_ordinal"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "movement_conflict_proposals",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `proposal_id` TEXT NOT NULL, `transaction_id` TEXT NOT NULL, `command_id` TEXT NOT NULL, `base_revision` INTEGER NOT NULL, `proposed_revision_id` TEXT NOT NULL, `proposed_snapshot` TEXT NOT NULL, `local_revision_ids` TEXT NOT NULL, `remote_revision_id` TEXT, `resolution` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `proposal_id`), FOREIGN KEY(`user_id`, `transaction_id`, `proposed_revision_id`) REFERENCES `transaction_revisions`(`user_id`, `transaction_id`, `revision_id`) ON UPDATE NO ACTION ON DELETE RESTRICT )",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proposalId",
+            "columnName": "proposal_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "commandId",
+            "columnName": "command_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseRevision",
+            "columnName": "base_revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proposedRevisionId",
+            "columnName": "proposed_revision_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "proposedSnapshot",
+            "columnName": "proposed_snapshot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localRevisionIds",
+            "columnName": "local_revision_ids",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remoteRevisionId",
+            "columnName": "remote_revision_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resolution",
+            "columnName": "resolution",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "proposal_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_movement_conflict_proposals_user_id_command_id",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "command_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_movement_conflict_proposals_user_id_command_id` ON `${TABLE_NAME}` (`user_id`, `command_id`)"
+          },
+          {
+            "name": "index_movement_conflict_proposals_user_id_transaction_id_proposed_revision_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "transaction_id",
+              "proposed_revision_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_movement_conflict_proposals_user_id_transaction_id_proposed_revision_id` ON `${TABLE_NAME}` (`user_id`, `transaction_id`, `proposed_revision_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "transaction_revisions",
+            "onDelete": "RESTRICT",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "transaction_id",
+              "proposed_revision_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "transaction_id",
+              "revision_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "ledger_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `transaction_id` TEXT NOT NULL, `account_id` TEXT NOT NULL, `role` TEXT NOT NULL, `signed_amount_minor` INTEGER NOT NULL, `currency_code` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "signedAmountMinor",
+            "columnName": "signed_amount_minor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currencyCode",
+            "columnName": "currency_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_ledger_entries_user_id_transaction_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "transaction_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ledger_entries_user_id_transaction_id` ON `${TABLE_NAME}` (`user_id`, `transaction_id`)"
+          },
+          {
+            "name": "index_ledger_entries_user_id_account_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "account_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_ledger_entries_user_id_account_id` ON `${TABLE_NAME}` (`user_id`, `account_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "local_command_receipts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `request_hash` TEXT NOT NULL, `transaction_id` TEXT, `status` TEXT NOT NULL, `response_payload` TEXT, `contract_version` INTEGER NOT NULL DEFAULT 1, `command_type` TEXT NOT NULL DEFAULT 'REGISTER', `expected_revision` INTEGER, `resulting_revision` INTEGER, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `idempotency_key`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "idempotencyKey",
+            "columnName": "idempotency_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestHash",
+            "columnName": "request_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "responsePayload",
+            "columnName": "response_payload",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contractVersion",
+            "columnName": "contract_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "commandType",
+            "columnName": "command_type",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'REGISTER'"
+          },
+          {
+            "fieldPath": "expectedRevision",
+            "columnName": "expected_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resultingRevision",
+            "columnName": "resulting_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "idempotency_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_local_command_receipts_user_id_transaction_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "transaction_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_local_command_receipts_user_id_transaction_id` ON `${TABLE_NAME}` (`user_id`, `transaction_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "movement_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `payload` TEXT NOT NULL, `contract_version` INTEGER NOT NULL DEFAULT 1, `command_type` TEXT NOT NULL DEFAULT 'REGISTER', `expected_revision` INTEGER, `depends_on_command_id` TEXT, `revision_id` TEXT, `state` TEXT NOT NULL, `attempt_count` INTEGER NOT NULL, `next_attempt_at` INTEGER, `lease_until` INTEGER, `last_error_code` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "idempotencyKey",
+            "columnName": "idempotency_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aggregateId",
+            "columnName": "aggregate_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contractVersion",
+            "columnName": "contract_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "commandType",
+            "columnName": "command_type",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'REGISTER'"
+          },
+          {
+            "fieldPath": "expectedRevision",
+            "columnName": "expected_revision",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dependsOnCommandId",
+            "columnName": "depends_on_command_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "revisionId",
+            "columnName": "revision_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leaseUntil",
+            "columnName": "lease_until",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastErrorCode",
+            "columnName": "last_error_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_movement_outbox_user_id_state_next_attempt_at",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "state",
+              "next_attempt_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_movement_outbox_user_id_state_next_attempt_at` ON `${TABLE_NAME}` (`user_id`, `state`, `next_attempt_at`)"
+          },
+          {
+            "name": "index_movement_outbox_user_id_aggregate_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "aggregate_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_movement_outbox_user_id_aggregate_id` ON `${TABLE_NAME}` (`user_id`, `aggregate_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "balance_projections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `account_id` TEXT NOT NULL, `balance_minor` INTEGER NOT NULL, `currency_code` TEXT NOT NULL, `last_transaction_at` INTEGER, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `account_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "balanceMinor",
+            "columnName": "balance_minor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currencyCode",
+            "columnName": "currency_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastTransactionAt",
+            "columnName": "last_transaction_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "account_id"
+          ]
+        }
+      },
+      {
+        "tableName": "movement_sync_checkpoints",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `sequence` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
+      },
+      {
+        "tableName": "credit_installments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `transaction_id` TEXT NOT NULL, `installment_number` INTEGER NOT NULL, `due_date` INTEGER NOT NULL, `principal_minor` INTEGER NOT NULL, `interest_minor` INTEGER NOT NULL, `status` TEXT NOT NULL, `revision` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `deleted_at` INTEGER, PRIMARY KEY(`user_id`, `id`), FOREIGN KEY(`user_id`, `transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionId",
+            "columnName": "transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "installmentNumber",
+            "columnName": "installment_number",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueDate",
+            "columnName": "due_date",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "principalMinor",
+            "columnName": "principal_minor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "interestMinor",
+            "columnName": "interest_minor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "revision",
+            "columnName": "revision",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_credit_installments_user_id_transaction_id_installment_number",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "transaction_id",
+              "installment_number"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_credit_installments_user_id_transaction_id_installment_number` ON `${TABLE_NAME}` (`user_id`, `transaction_id`, `installment_number`)"
+          },
+          {
+            "name": "index_credit_installments_user_id_due_date_status",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "due_date",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_credit_installments_user_id_due_date_status` ON `${TABLE_NAME}` (`user_id`, `due_date`, `status`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "transactions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "transaction_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "credit_payment_allocations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `payment_transaction_id` TEXT NOT NULL, `installment_id` TEXT NOT NULL, `allocated_minor` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`user_id`, `id`), FOREIGN KEY(`user_id`, `payment_transaction_id`) REFERENCES `transactions`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`user_id`, `installment_id`) REFERENCES `credit_installments`(`user_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentTransactionId",
+            "columnName": "payment_transaction_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "installmentId",
+            "columnName": "installment_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "allocatedMinor",
+            "columnName": "allocated_minor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_credit_payment_allocations_user_id_payment_transaction_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "payment_transaction_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_credit_payment_allocations_user_id_payment_transaction_id` ON `${TABLE_NAME}` (`user_id`, `payment_transaction_id`)"
+          },
+          {
+            "name": "index_credit_payment_allocations_user_id_installment_id",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "installment_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_credit_payment_allocations_user_id_installment_id` ON `${TABLE_NAME}` (`user_id`, `installment_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "transactions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "payment_transaction_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          },
+          {
+            "table": "credit_installments",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "user_id",
+              "installment_id"
+            ],
+            "referencedColumns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "app_notifications",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `title` TEXT NOT NULL, `body` TEXT NOT NULL, `notification_type` TEXT NOT NULL, `reference_entity_type` TEXT, `reference_entity_id` TEXT, `is_read` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `deleted_at` INTEGER, `event_payload` TEXT NOT NULL, PRIMARY KEY(`user_id`, `id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationType",
+            "columnName": "notification_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceEntityType",
+            "columnName": "reference_entity_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "referenceEntityId",
+            "columnName": "reference_entity_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isRead",
+            "columnName": "is_read",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "eventPayloadJson",
+            "columnName": "event_payload",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id",
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "app_notifications_user_created_idx",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `app_notifications_user_created_idx` ON `${TABLE_NAME}` (`user_id`, `created_at`)"
+          },
+          {
+            "name": "app_notifications_user_read_created_idx",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "is_read",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `app_notifications_user_read_created_idx` ON `${TABLE_NAME}` (`user_id`, `is_read`, `created_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "notification_sync_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`operation_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `notification_id` TEXT NOT NULL, `is_read` INTEGER, `deleted_at` INTEGER, `attempt_count` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`operation_id`))",
+        "fields": [
+          {
+            "fieldPath": "operationId",
+            "columnName": "operation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationId",
+            "columnName": "notification_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRead",
+            "columnName": "is_read",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deletedAt",
+            "columnName": "deleted_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "operation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "notification_outbox_owner_notice_uq",
+            "unique": true,
+            "columnNames": [
+              "user_id",
+              "notification_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `notification_outbox_owner_notice_uq` ON `${TABLE_NAME}` (`user_id`, `notification_id`)"
+          },
+          {
+            "name": "notification_outbox_owner_created_idx",
+            "unique": false,
+            "columnNames": [
+              "user_id",
+              "created_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `notification_outbox_owner_created_idx` ON `${TABLE_NAME}` (`user_id`, `created_at`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3d4cc90dc138d557045e46db0f291cab')"
+    ]
+  }
+}

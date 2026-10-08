@@ -14,11 +14,15 @@ import com.kipu.app.feature.settings.presentation.PermissionsScreen
 import com.kipu.app.feature.settings.presentation.PermissionsViewModel
 import com.kipu.app.feature.settings.presentation.ProfileSettingsScreen
 import com.kipu.app.feature.settings.presentation.SettingsViewModel
+import com.kipu.app.feature.categories.presentation.merchantrules.MerchantAliasRulesScreen
+import com.kipu.app.feature.categories.presentation.merchantrules.MerchantCategoryPreferenceScreen
 
 const val BIOMETRIC_ROUTE = "onboarding/biometrics"
 const val PROFILE_SETTINGS_ROUTE = "settings/profile"
 const val PERMISSIONS_ROUTE = "settings/permissions"
 const val CATEGORIES_ROUTE = "settings/categories"
+const val MERCHANT_ALIAS_RULES_ROUTE = "settings/merchant-alias-rules"
+const val MERCHANT_CATEGORY_PREFERENCES_ROUTE = "settings/merchant-category-preferences"
 
 fun NavGraphBuilder.settingsDestinations(
     navController: NavController,
@@ -50,6 +54,8 @@ fun NavGraphBuilder.settingsDestinations(
             onNavigateToPermissions = { navController.navigate(PERMISSIONS_ROUTE) },
             onNavigateToBiometrics = { navController.navigate(BIOMETRIC_ROUTE) },
             onNavigateToCategories = { navController.navigate(CATEGORIES_ROUTE) },
+            onNavigateToMerchantAliases = { navController.navigate(MERCHANT_ALIAS_RULES_ROUTE) },
+            onNavigateToMerchantCategoryPreferences = { navController.navigate(MERCHANT_CATEGORY_PREFERENCES_ROUTE) },
             onNavigateToMovements = { navController.navigate(MOVEMENTS_HISTORY_ROUTE) },
             onNavigateToAccounts = { navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) },
             onNavigateToPurchase = { navController.navigate(PLAN_PURCHASE_ROUTE) },
@@ -63,6 +69,14 @@ fun NavGraphBuilder.settingsDestinations(
             viewModel = viewModel,
             onNavigateBack = { navController.popBackStack() },
         )
+    }
+
+    composable(MERCHANT_ALIAS_RULES_ROUTE) {
+        MerchantAliasRulesScreen(onNavigateBack = { navController.popBackStack() })
+    }
+
+    composable(MERCHANT_CATEGORY_PREFERENCES_ROUTE) {
+        MerchantCategoryPreferenceScreen(onNavigateBack = { navController.popBackStack() })
     }
 
     composable(PERMISSIONS_ROUTE) {

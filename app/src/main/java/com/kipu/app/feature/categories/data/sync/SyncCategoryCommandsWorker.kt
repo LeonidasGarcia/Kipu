@@ -19,13 +19,20 @@ import com.kipu.app.feature.categories.data.local.CategoryEntity
 import com.kipu.app.feature.categories.data.local.CategoryPresentationEntity
 import com.kipu.app.feature.categories.data.local.MerchantCatalogDao
 import com.kipu.app.feature.categories.data.local.MerchantCatalogEntity
+import com.kipu.app.feature.categories.data.local.MerchantRulesDao
 import com.kipu.app.feature.categories.data.remote.CategoriesApi
 import com.kipu.app.feature.categories.data.remote.CategoryApiResponse
+import com.kipu.app.feature.categories.data.remote.CategoryCommandResponseDto
 import com.kipu.app.feature.categories.data.remote.CreateCategoryRequestDto
+import com.kipu.app.feature.categories.data.remote.DeleteMerchantAliasRuleRequestDto
+import com.kipu.app.feature.categories.data.remote.DeleteMerchantCategoryPreferenceRequestDto
 import com.kipu.app.feature.categories.data.remote.ResolveCategoryConflictRequestDto
 import com.kipu.app.feature.categories.data.remote.SetCategoryActiveRequestDto
 import com.kipu.app.feature.categories.data.remote.UpdateCategoryPresentationRequestDto
 import com.kipu.app.feature.categories.data.remote.UpdateMovementClassificationRequestDto
+import com.kipu.app.feature.categories.data.remote.PreserveMerchantSourceTextRequestDto
+import com.kipu.app.feature.categories.data.remote.UpsertMerchantAliasRuleRequestDto
+import com.kipu.app.feature.categories.data.remote.UpsertMerchantCategoryPreferenceRequestDto
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.time.Instant
@@ -40,9 +47,16 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val categoryDao: CategoryDao,
     private val merchantDao: MerchantCatalogDao,
+    private val merchantRulesDao: MerchantRulesDao,
     private val api: CategoriesApi,
     private val sessionCoordinator: SessionCoordinator,
 ) : CoroutineWorker(appContext, workerParams) {
+
+    private sealed interface CommandOutcome {
+        data object Applied : CommandOutcome
+        data object Retry : CommandOutcome
+        data class Conflict(val code: String) : CommandOutcome
+    }
 
     companion object {
         const val KEY_USER_ID = "key_user_id"
@@ -68,20 +82,21 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
         // 2. Process pending outbox commands
         val pendingCommands = categoryDao.getPendingOutboxCommands(userId)
         for (cmd in pendingCommands) {
-            val success = processCommand(cmd)
-            if (!success) {
-                if (cmd.attemptCount >= MAX_RETRIES) {
-                    categoryDao.updateOutboxCommand(cmd.copy(state = "FAILED"))
-                } else {
-                    categoryDao.updateOutboxCommand(
-                        cmd.copy(
-                            attemptCount = cmd.attemptCount + 1,
-                            state = "PENDING"
+            when (val outcome = processCommand(cmd)) {
+                CommandOutcome.Applied -> categoryDao.updateOutboxCommand(cmd.copy(state = "COMPLETED", errorCode = null))
+                is CommandOutcome.Conflict -> categoryDao.updateOutboxCommand(
+                    cmd.copy(state = "FAILED", errorCode = outcome.code),
+                )
+                CommandOutcome.Retry -> {
+                    if (cmd.attemptCount >= MAX_RETRIES) {
+                        markMerchantCommandFailed(cmd)
+                        categoryDao.updateOutboxCommand(cmd.copy(state = "FAILED", errorCode = "RETRY_LIMIT"))
+                    } else {
+                        categoryDao.updateOutboxCommand(
+                            cmd.copy(attemptCount = cmd.attemptCount + 1, state = "PENDING"),
                         )
-                    )
+                    }
                 }
-            } else {
-                categoryDao.updateOutboxCommand(cmd.copy(state = "COMPLETED"))
             }
         }
 
@@ -194,15 +209,12 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun processCommand(cmd: com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity): Boolean {
+    private suspend fun processCommand(cmd: com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity): CommandOutcome {
         return try {
             when (cmd.commandType) {
                 "CREATE_CATEGORY" -> {
                     val dto = json.decodeFromString<CreateCategoryRequestDto>(cmd.payloadJson)
-                    when (val res = api.createCategory(dto)) {
-                        is CategoryApiResponse.Success -> res.data.success
-                        else -> false
-                    }
+                    api.createCategory(dto).asCommandOutcome()
                 }
                 "UPDATE_PRESENTATION" -> {
                     val dto = json.decodeFromString<UpdateCategoryPresentationRequestDto>(cmd.payloadJson)
@@ -222,38 +234,130 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                                         createdAt = System.currentTimeMillis()
                                     )
                                 )
+                                CommandOutcome.Conflict("REVISION_CONFLICT")
+                            } else if (!res.data.success) {
+                                CommandOutcome.Retry
+                            } else {
+                                CommandOutcome.Applied
                             }
-                            res.data.success
                         }
-                        else -> false
+                        is CategoryApiResponse.Error -> if (res.statusCode == 409) CommandOutcome.Conflict("REVISION_CONFLICT") else CommandOutcome.Retry
+                        is CategoryApiResponse.NetworkFailure -> CommandOutcome.Retry
                     }
                 }
                 "SET_CATEGORY_ACTIVE" -> {
                     val dto = json.decodeFromString<SetCategoryActiveRequestDto>(cmd.payloadJson)
-                    when (val res = api.setCategoryActive(dto)) {
-                        is CategoryApiResponse.Success -> res.data.success
-                        else -> false
-                    }
+                    api.setCategoryActive(dto).asCommandOutcome()
                 }
                 "UPDATE_MOVEMENT_CLASSIFICATION" -> {
                     val dto = json.decodeFromString<UpdateMovementClassificationRequestDto>(cmd.payloadJson)
-                    when (val res = api.updateMovementClassification(dto)) {
-                        is CategoryApiResponse.Success -> res.data.success
-                        else -> false
-                    }
+                    api.updateMovementClassification(dto).asCommandOutcome()
+                }
+                "PRESERVE_MERCHANT_SOURCE_TEXT" -> {
+                    val dto = json.decodeFromString<PreserveMerchantSourceTextRequestDto>(cmd.payloadJson)
+                    api.preserveMerchantSourceText(dto).asCommandOutcome()
+                }
+                "UPSERT_MERCHANT_ALIAS_RULE" -> {
+                    val dto = json.decodeFromString<UpsertMerchantAliasRuleRequestDto>(cmd.payloadJson)
+                    val outcome = api.upsertMerchantAliasRule(dto).asCommandOutcome()
+                    updateAliasSyncState(cmd.userId, dto.ruleId, dto.expectedRevision, outcome)
+                    outcome
+                }
+                "DELETE_MERCHANT_ALIAS_RULE" -> {
+                    val dto = json.decodeFromString<DeleteMerchantAliasRuleRequestDto>(cmd.payloadJson)
+                    val outcome = api.deleteMerchantAliasRule(dto).asCommandOutcome()
+                    updateAliasSyncState(cmd.userId, dto.ruleId, dto.expectedRevision, outcome)
+                    outcome
+                }
+                "UPSERT_MERCHANT_CATEGORY_PREFERENCE" -> {
+                    val dto = json.decodeFromString<UpsertMerchantCategoryPreferenceRequestDto>(cmd.payloadJson)
+                    val outcome = api.upsertMerchantCategoryPreference(dto).asCommandOutcome()
+                    updatePreferenceSyncState(cmd.userId, dto.merchantId, dto.expectedRevision, outcome)
+                    outcome
+                }
+                "DELETE_MERCHANT_CATEGORY_PREFERENCE" -> {
+                    val dto = json.decodeFromString<DeleteMerchantCategoryPreferenceRequestDto>(cmd.payloadJson)
+                    val merchantId = merchantRulesDao.getPreference(cmd.userId, cmd.aggregateId)?.merchantId ?: cmd.aggregateId
+                    val outcome = api.deleteMerchantCategoryPreference(dto).asCommandOutcome()
+                    updatePreferenceSyncState(cmd.userId, merchantId, dto.expectedRevision, outcome)
+                    outcome
                 }
                 "RESOLVE_CONFLICT" -> {
                     val dto = json.decodeFromString<ResolveCategoryConflictRequestDto>(cmd.payloadJson)
-                    when (val res = api.resolveConflict(dto)) {
-                        is CategoryApiResponse.Success -> res.data.success
-                        else -> false
-                    }
+                    api.resolveConflict(dto).asCommandOutcome()
                 }
-                else -> true
+                else -> CommandOutcome.Applied
             }
         } catch (e: Exception) {
-            SecureLog.e("SyncCategoryCommandsWorker", "Error processing command ${cmd.commandType}", e)
-            false
+            if (cmd.commandType in setOf("PRESERVE_MERCHANT_SOURCE_TEXT", "UPSERT_MERCHANT_ALIAS_RULE", "DELETE_MERCHANT_ALIAS_RULE", "UPSERT_MERCHANT_CATEGORY_PREFERENCE", "DELETE_MERCHANT_CATEGORY_PREFERENCE")) {
+                SecureLog.e("SyncCategoryCommandsWorker", "Failed to sync a private merchant command")
+            } else {
+                SecureLog.e("SyncCategoryCommandsWorker", "Error processing command ${cmd.commandType}", e)
+            }
+            CommandOutcome.Retry
+        }
+    }
+
+    private fun CategoryApiResponse<CategoryCommandResponseDto>.asCommandOutcome(): CommandOutcome = when (this) {
+        is CategoryApiResponse.Success -> when {
+            data.status == "CONFLICT" || data.status == "REJECTED" -> CommandOutcome.Conflict(data.code ?: "REVISION_CONFLICT")
+            data.success -> CommandOutcome.Applied
+            else -> CommandOutcome.Retry
+        }
+        is CategoryApiResponse.Error -> when {
+            statusCode == 409 -> CommandOutcome.Conflict("REVISION_CONFLICT")
+            statusCode in 400..499 && statusCode !in setOf(401, 408, 429) -> CommandOutcome.Conflict("COMMAND_REJECTED")
+            else -> CommandOutcome.Retry
+        }
+        is CategoryApiResponse.NetworkFailure -> CommandOutcome.Retry
+    }
+
+    private suspend fun updateAliasSyncState(
+        userId: String,
+        ruleId: String,
+        expectedRevision: Long?,
+        outcome: CommandOutcome,
+    ) {
+        val state = when (outcome) {
+            CommandOutcome.Applied -> "SYNCED"
+            is CommandOutcome.Conflict -> "CONFLICT"
+            CommandOutcome.Retry -> "PENDING"
+        }
+        merchantRulesDao.setAliasSyncState(
+            userId = userId,
+            ruleId = ruleId,
+            state = state,
+            revision = if (outcome == CommandOutcome.Applied) expectedRevision?.plus(1L) ?: 1L else null,
+            error = (outcome as? CommandOutcome.Conflict)?.code,
+        )
+    }
+
+    private suspend fun updatePreferenceSyncState(
+        userId: String,
+        merchantId: String,
+        expectedRevision: Long?,
+        outcome: CommandOutcome,
+    ) {
+        val state = when (outcome) {
+            CommandOutcome.Applied -> "SYNCED"
+            is CommandOutcome.Conflict -> "CONFLICT"
+            CommandOutcome.Retry -> "PENDING"
+        }
+        merchantRulesDao.setPreferenceSyncState(
+            userId = userId,
+            merchantId = merchantId,
+            state = state,
+            revision = if (outcome == CommandOutcome.Applied) expectedRevision?.plus(1L) ?: 1L else null,
+            error = (outcome as? CommandOutcome.Conflict)?.code,
+        )
+    }
+
+    private suspend fun markMerchantCommandFailed(cmd: com.kipu.app.feature.categories.data.local.CategorySyncOutboxEntity) {
+        when (cmd.commandType) {
+            "UPSERT_MERCHANT_ALIAS_RULE", "DELETE_MERCHANT_ALIAS_RULE" ->
+                merchantRulesDao.setAliasSyncState(cmd.userId, cmd.aggregateId, "FAILED", null, "RETRY_LIMIT")
+            "UPSERT_MERCHANT_CATEGORY_PREFERENCE", "DELETE_MERCHANT_CATEGORY_PREFERENCE" ->
+                merchantRulesDao.setPreferenceSyncState(cmd.userId, cmd.aggregateId, "FAILED", null, "RETRY_LIMIT")
         }
     }
 }

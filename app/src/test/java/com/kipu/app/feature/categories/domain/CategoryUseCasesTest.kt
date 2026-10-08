@@ -9,6 +9,7 @@ import com.kipu.app.feature.categories.data.FakeQuotaSelectionDao
 import com.kipu.app.feature.categories.data.FakeFeatureAccessCacheDao
 import com.kipu.app.feature.categories.data.FakeCategorySyncScheduler
 import com.kipu.app.feature.categories.data.FakeMerchantCatalogDao
+import com.kipu.app.feature.categories.data.FakeMerchantRulesDao
 import com.kipu.app.feature.categories.data.FakeSessionCoordinator
 import com.kipu.app.feature.categories.data.OfflineFirstCategoriesRepository
 import com.kipu.app.feature.categories.data.local.CategoryEntity
@@ -58,6 +59,7 @@ class CategoryUseCasesTest {
             transactionRunner = transactionRunner,
             categoryDao = categoryDao,
             merchantDao = merchantDao,
+            merchantRulesDao = FakeMerchantRulesDao(),
             sessionCoordinator = sessionCoordinator,
             syncScheduler = syncScheduler,
             featureAccessPolicy = FeatureAccessPolicy(),

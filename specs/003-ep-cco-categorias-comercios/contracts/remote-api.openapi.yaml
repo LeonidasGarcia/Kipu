@@ -42,7 +42,7 @@ paths:
         '409': { description: Free limit, invalid parent lifecycle, or conflict carrying the remote lifecycle version }
   /rpc/update_movement_classification_v1:
     post:
-      summary: Independently sets category, catalog merchant, and provisional merchant text on one movement.
+      summary: Independently sets category, catalog merchant, and provisional text while preserving exact source merchant text when present.
       responses:
         '200': { description: Applied or duplicate command receipt }
         '400': { description: Invalid classification combination }
@@ -53,6 +53,132 @@ paths:
       responses:
         '200': { description: Conflict resolved }
         '409': { description: Conflict already resolved or stale choice }
+  /rpc/preserve_merchant_source_text_v1:
+    post:
+      summary: Stores immutable source merchant text for an owned movement.
+      description: Stores the exact, non-empty source string only when the field is empty. A different existing value is rejected. The command is idempotent and never stores normalized alias text in this field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [operation_id, payload_hash, movement_id, merchant_raw_text]
+                  properties:
+                    operation_id: { type: string, format: uuid }
+                    payload_hash: { type: string, minLength: 1 }
+                    movement_id: { type: string, format: uuid }
+                    merchant_raw_text: { type: string, minLength: 1 }
+      responses:
+        '200': { description: Applied or duplicate command receipt }
+        '400': { description: Empty source text or invalid command }
+        '403': { description: Movement owner mismatch }
+        '409': { description: Source text is already set to a different value }
+  /rpc/upsert_merchant_alias_rule_v1:
+    post:
+      summary: Creates or revises an owner-scoped exact-match alias rule.
+      description: The client requires current verified Premium entitlement or a bounded signed offline lease before accepting a new rule locally. On sync, the server independently requires an active verified Premium billing projection for new-rule creation. Evaluation is local only after signal entitlement and consent are verified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [operation_id, payload_hash, rule_id, normalized_pattern, merchant_id]
+                  properties:
+                    operation_id: { type: string, format: uuid }
+                    payload_hash: { type: string, minLength: 1 }
+                    rule_id: { type: string, format: uuid }
+                    expected_revision: { type: [integer, 'null'], minimum: 0 }
+                    normalized_pattern: { type: string, minLength: 1, maxLength: 160 }
+                    merchant_id: { type: string, format: uuid }
+      responses:
+        '200': { description: Applied or duplicate command receipt }
+        '400': { description: Empty pattern or missing/inactive canonical merchant }
+        '403': { description: New rule requires Premium entitlement }
+        '409': { description: Stale revision or incompatible rule conflict }
+  /rpc/delete_merchant_alias_rule_v1:
+    post:
+      summary: Soft deletes an owner-scoped alias rule.
+      description: Writes a tombstone through an authorized command; does not require direct table DELETE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [operation_id, payload_hash, rule_id, expected_revision]
+                  properties:
+                    operation_id: { type: string, format: uuid }
+                    payload_hash: { type: string, minLength: 1 }
+                    rule_id: { type: string, format: uuid }
+                    expected_revision: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Applied or duplicate tombstone receipt }
+        '403': { description: Owner mismatch }
+        '409': { description: Stale revision }
+  /rpc/upsert_merchant_category_preference_v1:
+    post:
+      summary: Creates or revises one personal category preference for an identified merchant.
+      description: No independent Premium gate. The server validates owner, category and merchant references, active-root and plan eligibility. Movement-type compatibility is checked when resolving a preference for a future operation. Preference never changes confirmed history.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [operation_id, payload_hash, preference_id, merchant_id, category_id]
+                  properties:
+                    operation_id: { type: string, format: uuid }
+                    payload_hash: { type: string, minLength: 1 }
+                    preference_id: { type: string, format: uuid }
+                    merchant_id: { type: string, format: uuid }
+                    category_id: { type: string, format: uuid }
+                    expected_revision: { type: [integer, 'null'], minimum: 0 }
+      responses:
+        '200': { description: Applied or duplicate command receipt }
+        '400': { description: Missing merchant or ineligible/incompatible category }
+        '403': { description: Owner mismatch }
+        '409': { description: Stale revision }
+  /rpc/delete_merchant_category_preference_v1:
+    post:
+      summary: Soft deletes an owner-scoped personal category preference.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [operation_id, payload_hash, preference_id, expected_revision]
+                  properties:
+                    operation_id: { type: string, format: uuid }
+                    payload_hash: { type: string, minLength: 1 }
+                    preference_id: { type: string, format: uuid }
+                    expected_revision: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Applied or duplicate tombstone receipt }
+        '403': { description: Owner mismatch }
+        '409': { description: Stale revision }
   /merchant_services:
     get:
       summary: Reads active Kipu catalog entries by normalized substring with catalog version metadata.
