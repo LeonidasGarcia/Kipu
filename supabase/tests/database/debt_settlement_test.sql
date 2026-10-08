@@ -82,7 +82,7 @@ SET void_payload = (
         'contract_version', 1,
         'command_type', 'VOID_TRANSACTION',
         'idempotency_key', '67000000-0000-4000-8000-000000000012',
-        'transaction_id', d.payable_operation_id,
+        'transaction_id', md5('kipu:debt-interest:' || d.payable_operation_id::text)::uuid,
         'expected_revision', 1,
         'depends_on_command_id', NULL,
         'reason', 'Correct debt settlement',
@@ -102,9 +102,10 @@ SELECT set_config('request.jwt.claim.sub', (SELECT owner_id::text FROM debt_sett
 SELECT is((SELECT public.settle_debt_v1(request_payload)->>'status' FROM debt_settlement_ids),
     'APPLIED', 'payable principal and interest settle atomically');
 SELECT is((
-    SELECT jsonb_build_array(e.amount_minor, e.principal_delta_minor)
+    SELECT jsonb_build_array(e.amount_minor, e.principal_delta_minor, e.interest_transaction_id)
     FROM public.debt_events e WHERE e.debt_id = (SELECT payable_debt_id FROM debt_settlement_ids)
-), '[2000, -2000]'::jsonb, 'the debt event records principal only');
+), jsonb_build_array(2000, -2000, md5('kipu:debt-interest:' || (SELECT payable_operation_id::text FROM debt_settlement_ids))::uuid),
+    'the debt event records principal and its linked interest transaction');
 SELECT is((
     SELECT count(*)::integer FROM public.transactions t
     WHERE t.id IN (
@@ -113,6 +114,7 @@ SELECT is((
     ) AND t.user_id = (SELECT owner_id FROM debt_settlement_ids)
       AND t.operation_kind::text IN ('DEBT_PAYMENT', 'DEBT_AMORTIZATION')
 ), 2, 'principal and categorized interest have distinct movement kinds');
+RESET ROLE;
 SELECT is((
     SELECT sum(le.signed_amount_minor)::bigint FROM internal.ledger_entries le
     WHERE le.transaction_id IN (
@@ -120,6 +122,7 @@ SELECT is((
         md5('kipu:debt-interest:' || (SELECT payable_operation_id::text FROM debt_settlement_ids))::uuid
     )
 ), -2100::bigint, 'payable cash decreases by principal plus interest');
+SET LOCAL ROLE authenticated;
 SELECT is((SELECT status FROM public.debt_installments WHERE id = (SELECT installment_id FROM debt_settlement_ids)),
     'PARTIAL', 'installment allocation is recalculated from principal paid');
 SELECT is((SELECT public.settle_debt_v1(request_payload)->>'status' FROM debt_settlement_ids),
@@ -139,10 +142,12 @@ SELECT is((
         'notes', 'Collection', 'request_hash', repeat('a', 64)
     ))->>'status' FROM debt_settlement_ids
 ), 'APPLIED', 'receivable principal can be settled without operating expense category');
+RESET ROLE;
 SELECT is((
     SELECT sum(le.signed_amount_minor)::bigint FROM internal.ledger_entries le
     WHERE le.transaction_id = (SELECT receivable_operation_id FROM debt_settlement_ids)
 ), 3000::bigint, 'receivable principal increases cash');
+SET LOCAL ROLE authenticated;
 SELECT throws_ok($$
     SELECT public.settle_debt_v1(
         request_payload || jsonb_build_object('operation_id', '67000000-0000-4000-8000-000000000013',
@@ -181,6 +186,7 @@ SELECT is((SELECT remaining_minor FROM public.v_debt_summary WHERE debt_id = (SE
     10000::numeric, 'void restores the derived principal balance');
 SELECT is((SELECT status FROM public.debt_installments WHERE id = (SELECT installment_id FROM debt_settlement_ids)),
     'PENDING', 'void restores installment state');
+RESET ROLE;
 SELECT is((
     SELECT sum(le.signed_amount_minor)::bigint FROM internal.ledger_entries le
     WHERE le.transaction_id IN (
@@ -189,7 +195,6 @@ SELECT is((
     )
 ), 0::bigint, 'grouped void reverses both cash effects');
 
-RESET ROLE;
 SELECT is((SELECT count(*)::integer FROM internal.command_receipts
     WHERE user_id = (SELECT owner_id FROM debt_settlement_ids) AND command_type = 'SETTLE_DEBT'),
     2, 'one settlement receipt exists for each applied obligation command');

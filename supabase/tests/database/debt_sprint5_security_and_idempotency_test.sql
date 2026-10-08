@@ -7,7 +7,9 @@ CREATE TEMP TABLE debt_security_ids (
     owner_account uuid,
     other_account uuid,
     debt_id uuid,
-    operation_id uuid
+    operation_id uuid,
+    operation_payload jsonb,
+    request_hash text
 );
 INSERT INTO debt_security_ids VALUES (
     '66000000-0000-4000-8000-000000000001',
@@ -15,26 +17,46 @@ INSERT INTO debt_security_ids VALUES (
     '66000000-0000-4000-8000-000000000003',
     '66000000-0000-4000-8000-000000000004',
     '66000000-0000-4000-8000-000000000005',
-    '66000000-0000-4000-8000-000000000006'
+    '66000000-0000-4000-8000-000000000006',
+    NULL,
+    NULL
 );
+UPDATE debt_security_ids
+SET operation_payload = body.payload,
+    request_hash = encode(extensions.digest(body.payload::text, 'sha256'), 'hex')
+FROM (
+    SELECT jsonb_build_object(
+    'contract_version', 1,
+    'operation_id', operation_id,
+    'debt_id', debt_id,
+    'obligation_type', 'PAYABLE',
+    'counterparty_name', 'Proveedor',
+    'total_minor', 5000,
+    'currency_code', 'PEN',
+    'opened_on', '2026-10-08',
+    'opening_mode', 'HISTORICAL'
+    ) AS payload
+    FROM debt_security_ids
+) body;
 INSERT INTO auth.users (id, email)
 SELECT owner_id, owner_id::text || '@debt-security.kipu.test' FROM debt_security_ids
 UNION ALL
 SELECT other_id, other_id::text || '@debt-security.kipu.test' FROM debt_security_ids;
 INSERT INTO public.accounts (id, user_id, name, account_type, currency_code)
-SELECT owner_account, owner_id, 'Owner cash', 'SAVINGS', 'PEN' FROM debt_security_ids
+SELECT owner_account, owner_id, 'Owner cash', 'SAVINGS'::public.account_type, 'PEN' FROM debt_security_ids
 UNION ALL
-SELECT other_account, other_id, 'Other cash', 'SAVINGS', 'PEN' FROM debt_security_ids;
+SELECT other_account, other_id, 'Other cash', 'SAVINGS'::public.account_type, 'PEN' FROM debt_security_ids;
 INSERT INTO public.debts (id, user_id, obligation_type, counterparty_name, total_minor, currency_code)
-SELECT '66000000-0000-4000-8000-000000000007', owner_id, 'PAYABLE', 'Existing obligation', 10000, 'PEN' FROM debt_security_ids
+SELECT '66000000-0000-4000-8000-000000000007'::uuid, owner_id, 'PAYABLE'::public.obligation_type, 'Existing obligation', 10000, 'PEN' FROM debt_security_ids
 UNION ALL
-SELECT '66000000-0000-4000-8000-000000000008', other_id, 'PAYABLE', 'Other obligation', 10000, 'PEN' FROM debt_security_ids;
+SELECT '66000000-0000-4000-8000-000000000008'::uuid, other_id, 'PAYABLE'::public.obligation_type, 'Other obligation', 10000, 'PEN' FROM debt_security_ids;
 INSERT INTO public.debt_installments (id, user_id, debt_id, installment_number, due_date, amount_minor)
 VALUES ('66000000-0000-4000-8000-000000000009', '66000000-0000-4000-8000-000000000002',
     '66000000-0000-4000-8000-000000000008', 1, DATE '2026-11-01', 1000);
 INSERT INTO public.transactions (id, user_id, account_id, transaction_type, amount_minor, currency_code)
 VALUES ('66000000-0000-4000-8000-000000000010', '66000000-0000-4000-8000-000000000002',
-    '66000000-0000-4000-8000-000000000004', 'EXPENSE', 1000, 'PEN');
+    '66000000-0000-4000-8000-000000000004', 'INCOME', 1000, 'PEN');
+GRANT SELECT ON debt_security_ids TO authenticated;
 
 SELECT has_function('public', 'open_debt_v1', ARRAY['jsonb'], 'opening RPC is present');
 SELECT ok((SELECT prosecdef FROM pg_proc WHERE oid = 'public.open_debt_v1(jsonb)'::regprocedure),
@@ -53,37 +75,34 @@ SELECT ok(
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub', (SELECT owner_id::text FROM debt_security_ids), true);
 
-SELECT lives_ok($$
-    SELECT public.open_debt_v1(jsonb_build_object(
-        'contract_version', 1,
-        'operation_id', (SELECT operation_id FROM debt_security_ids),
-        'request_hash', 'debt-open-owner-v1',
-        'user_id', (SELECT other_id FROM debt_security_ids),
-        'debt_id', (SELECT debt_id FROM debt_security_ids),
-        'obligation_type', 'PAYABLE',
-        'counterparty_name', 'Proveedor',
-        'total_minor', 5000,
-        'currency_code', 'PEN',
-        'opened_on', '2026-10-08',
-        'opening_mode', 'HISTORICAL'
-    ));
-$$, 'owner can open a historical debt without an account reference');
-
 SELECT throws_ok($$
-    SELECT public.open_debt_v1(jsonb_build_object(
-        'contract_version', 1,
-        'operation_id', extensions.gen_random_uuid(),
-        'request_hash', 'debt-open-foreign-account',
-        'debt_id', extensions.gen_random_uuid(),
-        'obligation_type', 'RECEIVABLE',
-        'counterparty_name', 'Otra persona',
-        'total_minor', 1000,
-        'currency_code', 'PEN',
-        'opened_on', '2026-10-08',
-        'opening_mode', 'NEW_CASH_FLOW',
-        'account_id', (SELECT other_account FROM debt_security_ids)
-    ));
+    WITH body AS (
+        SELECT jsonb_build_object(
+            'contract_version', 1,
+            'operation_id', extensions.gen_random_uuid(),
+            'debt_id', extensions.gen_random_uuid(),
+            'obligation_type', 'RECEIVABLE',
+            'counterparty_name', 'Otra persona',
+            'total_minor', 1000,
+            'currency_code', 'PEN',
+            'opened_on', '2026-10-08',
+            'opening_mode', 'NEW_CASH_FLOW',
+            'account_id', (SELECT other_account FROM debt_security_ids)
+        ) AS payload
+    )
+    SELECT public.open_debt_v1(payload || jsonb_build_object(
+        'request_hash', encode(extensions.digest(payload::text, 'sha256'), 'hex')
+    )) FROM body;
 $$, '42501', NULL, 'foreign account reference is rejected');
+
+SELECT lives_ok($$
+    SELECT public.open_debt_v1(
+        operation_payload || jsonb_build_object(
+            'request_hash', request_hash,
+            'user_id', other_id
+        )
+    ) FROM debt_security_ids;
+$$, 'owner can open a historical debt without an account reference');
 
 SELECT throws_ok($$
     INSERT INTO public.debt_events (user_id, debt_id, transaction_id, event_type, amount_minor, principal_delta_minor)
@@ -103,49 +122,41 @@ SELECT throws_ok($$
 $$, '42501', NULL, 'authenticated owner cannot insert a debt for another user');
 
 SELECT throws_ok($$
-    SELECT public.open_debt_v1(jsonb_build_object(
-        'contract_version', 1,
-        'operation_id', extensions.gen_random_uuid(),
-        'request_hash', 'debt-open-quota-3',
-        'debt_id', extensions.gen_random_uuid(),
-        'obligation_type', 'RECEIVABLE',
-        'counterparty_name', 'Tercera obligación',
-        'total_minor', 1000,
-        'currency_code', 'PEN',
-        'opened_on', '2026-10-08',
-        'opening_mode', 'HISTORICAL'
-    ));
+    WITH body AS (
+        SELECT jsonb_build_object(
+            'contract_version', 1,
+            'operation_id', extensions.gen_random_uuid(),
+            'debt_id', extensions.gen_random_uuid(),
+            'obligation_type', 'RECEIVABLE',
+            'counterparty_name', 'Tercera obligación',
+            'total_minor', 1000,
+            'currency_code', 'PEN',
+            'opened_on', '2026-10-08',
+            'opening_mode', 'HISTORICAL'
+        ) AS payload
+    )
+    SELECT public.open_debt_v1(payload || jsonb_build_object(
+        'request_hash', encode(extensions.digest(payload::text, 'sha256'), 'hex')
+    )) FROM body;
 $$, 'P0001', 'FREE_DEBT_QUOTA_EXCEEDED', 'combined Free quota rejects the third active debt');
 
 SELECT is(
-    public.open_debt_v1(jsonb_build_object(
-        'contract_version', 1,
-        'operation_id', (SELECT operation_id FROM debt_security_ids),
-        'request_hash', 'debt-open-owner-v1',
-        'user_id', (SELECT other_id FROM debt_security_ids),
-        'debt_id', (SELECT debt_id FROM debt_security_ids),
-        'obligation_type', 'PAYABLE',
-        'counterparty_name', 'Proveedor',
-        'total_minor', 5000,
-        'currency_code', 'PEN',
-        'opened_on', '2026-10-08',
-        'opening_mode', 'HISTORICAL'
-    ))->>'status', 'DUPLICATE', 'same operation and hash is idempotent');
+    (SELECT public.open_debt_v1(operation_payload || jsonb_build_object(
+        'request_hash', request_hash,
+        'user_id', other_id
+    ))->>'status' FROM debt_security_ids),
+    'DUPLICATE', 'same operation and hash is idempotent');
 
 SELECT throws_ok($$
-    SELECT public.open_debt_v1(jsonb_build_object(
-        'contract_version', 1,
-        'operation_id', (SELECT operation_id FROM debt_security_ids),
-        'request_hash', 'different-hash',
-        'user_id', (SELECT other_id FROM debt_security_ids),
-        'debt_id', (SELECT debt_id FROM debt_security_ids),
-        'obligation_type', 'PAYABLE',
-        'counterparty_name', 'Proveedor',
-        'total_minor', 5000,
-        'currency_code', 'PEN',
-        'opened_on', '2026-10-08',
-        'opening_mode', 'HISTORICAL'
-    ));
+    WITH body AS (
+        SELECT operation_payload || jsonb_build_object('counterparty_name', 'Nombre distinto') AS payload,
+            operation_id, other_id
+        FROM debt_security_ids
+    )
+    SELECT public.open_debt_v1(payload || jsonb_build_object(
+        'request_hash', encode(extensions.digest(payload::text, 'sha256'), 'hex'),
+        'user_id', other_id
+    )) FROM body;
 $$, 'P0001', 'IDEMPOTENCY_KEY_REUSED', 'same operation with different request hash is rejected');
 
 SELECT is((SELECT count(*)::integer FROM public.debts WHERE user_id = (SELECT owner_id FROM debt_security_ids)), 2,

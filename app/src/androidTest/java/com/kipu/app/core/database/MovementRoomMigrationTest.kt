@@ -25,6 +25,23 @@ class MovementRoomMigrationTest {
     )
 
     @Test
+    fun debtEventInterestLinkMigrationPreservesHistoryAndAddsOwnerScopedForeignKey() {
+        val name = "debt-interest-link-v19"
+        helper.createDatabase(name, 19).use { db ->
+            db.execSQL("""INSERT INTO debts (id,user_id,obligation_type,counterparty_name,total_minor,currency_code,
+                opened_on,opening_mode,created_at,updated_at) VALUES ('debt','owner','PAYABLE','Proveedor',5000,'PEN','2026-10-08','HISTORICAL',1,1)""")
+            db.execSQL("""INSERT INTO debt_events (id,user_id,debt_id,event_type,amount_minor,occurred_at,created_at)
+                VALUES ('event','owner','debt','ADJUSTMENT',0,1,1)""")
+        }
+
+        helper.runMigrationsAndValidate(name, 20, true, MIGRATION_19_20).use { db ->
+            assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM debt_events WHERE id='event' AND interest_transaction_id IS NULL"))
+            assertEquals(4L, db.scalarLong("SELECT COUNT(DISTINCT id) FROM pragma_foreign_key_list('debt_events')"))
+            assertEquals(1L, db.scalarLong("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='index_debt_events_user_id_interest_transaction_id'"))
+        }
+    }
+
+    @Test
     fun freshRoomDatabaseInstallsMovementEvidenceGuards() {
         val database = Room.inMemoryDatabaseBuilder(
             InstrumentationRegistry.getInstrumentation().targetContext,

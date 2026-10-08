@@ -15,6 +15,10 @@ import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
 import com.kipu.app.feature.debts.domain.model.OpenDebtCommand
 import com.kipu.app.feature.debts.domain.model.SettleDebtCommand
+import com.kipu.app.feature.movements.data.local.BalanceProjectionStore
+import com.kipu.app.feature.movements.data.local.MovementLocalDataSource
+import com.kipu.app.feature.movements.domain.model.MovementMutationResult
+import com.kipu.app.feature.movements.domain.model.MovementRevisionCommand
 import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -94,8 +98,68 @@ class DebtSettlementSyncTest {
         assertEquals(1L, databaseSql.scalarLong("SELECT COUNT(*) FROM debt_command_outbox WHERE command_type='SETTLE_DEBT'"))
         assertEquals(1L, databaseSql.scalarLong("SELECT COUNT(*) FROM local_command_receipts WHERE command_type='SETTLE_DEBT'"))
         assertEquals(-2_100L, databaseSql.scalarLong("SELECT SUM(signed_amount_minor) FROM ledger_entries WHERE user_id='$OWNER_ID' AND account_id='$ACCOUNT_ID'"))
-        assertEquals(listOf(OWNER_ID), scheduler.requestedOwners)
+        // A duplicate receipt still wakes the unique per-user sync worker so a
+        // retry can recover if the original enqueue was interrupted.
+        assertEquals(listOf(OWNER_ID, OWNER_ID), scheduler.requestedOwners)
         assertEquals(8_000L, repository.observeDebt(OWNER_ID, DEBT_ID).first()?.remainingPrincipalMinor)
+        val activity = database.debtDao().observeSettlementActivities(OWNER_ID, DEBT_ID).first().single()
+        assertEquals(2_000L, activity.principalMinor)
+        assertEquals(100L, activity.interestMinor)
+        assertEquals(false, activity.isVoided)
+    }
+
+    @Test
+    fun voidingEitherSettlementTransactionReversesPrincipalAndInterestTogether() = runBlocking {
+        database.accountDao().insert(account())
+        database.categoryDao().insertCategory(
+            CategoryEntity(
+                id = CATEGORY_ID,
+                userId = OWNER_ID,
+                parentId = null,
+                origin = "CUSTOM",
+                isActive = true,
+                createdAt = 1L,
+                updatedAt = 1L,
+                categoryType = "EXPENSE",
+            ),
+        )
+        assertTrue(repository.openDebt(OWNER_ID, openCommand(), hasPremiumAccess = true) is DebtCommandResult.Applied)
+        val settlement = SettleDebtCommand(
+            identity = DebtCommandIdentity(OPERATION_ID, DebtCommandHasher.sha256("settle-group:$OPERATION_ID")),
+            debtId = DEBT_ID,
+            expectedRevision = 1L,
+            accountId = ACCOUNT_ID,
+            principalMinor = 2_000L,
+            interestMinor = 100L,
+            interestCategoryId = CATEGORY_ID,
+            occurredAt = 1_791_000_000_000L,
+        )
+        assertTrue(repository.settleDebt(OWNER_ID, settlement) is DebtCommandResult.Applied)
+        val movementDataSource = MovementLocalDataSource(
+            database,
+            database.movementDao(),
+            BalanceProjectionStore(database.movementDao()),
+        )
+        val interestTransactionId = database.openHelper.writableDatabase.scalarString(
+            "SELECT id FROM transactions WHERE operation_kind='DEBT_AMORTIZATION' LIMIT 1",
+        )
+        val voidCommand = MovementRevisionCommand.Void(
+            idempotencyKey = "87000000-0000-4000-8000-000000000099",
+            transactionId = interestTransactionId,
+            expectedRevision = 1L,
+            reason = "correction",
+        )
+
+        assertTrue(
+            movementDataSource.commitVoidAtomic(OWNER_ID, voidCommand, "void-group-hash") is MovementMutationResult.Success,
+        )
+
+        assertEquals("VOIDED", database.movementDao().getTransactionById(OWNER_ID, OPERATION_ID)?.status)
+        assertEquals("VOIDED", database.movementDao().getTransactionById(OWNER_ID, interestTransactionId)?.status)
+        val activity = database.debtDao().observeSettlementActivities(OWNER_ID, DEBT_ID).first().single()
+        assertEquals(true, activity.isVoided)
+        assertEquals(0L, database.financialMovementDao().getAccountBalance(OWNER_ID, ACCOUNT_ID))
+        assertEquals(10_000L, repository.observeDebt(OWNER_ID, DEBT_ID).first()?.remainingPrincipalMinor)
     }
 
     private fun openCommand() = OpenDebtCommand(
@@ -137,6 +201,12 @@ class DebtSettlementSyncTest {
         query(sql).use { cursor ->
             check(cursor.moveToFirst())
             cursor.getLong(0)
+        }
+
+    private fun androidx.sqlite.db.SupportSQLiteDatabase.scalarString(sql: String): String =
+        query(sql).use { cursor ->
+            check(cursor.moveToFirst())
+            cursor.getString(0)
         }
 
     private companion object {

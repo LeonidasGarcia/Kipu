@@ -48,6 +48,7 @@ class PayableDebtRepositoryTest {
                 database.movementDao(),
                 database.accountDao(),
                 database.financialMovementDao(),
+                database.categoryDao(),
             ),
             syncScheduler = scheduler,
         )

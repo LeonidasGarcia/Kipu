@@ -2,12 +2,16 @@ package com.kipu.app.feature.debts.presentation
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.semantics.SemanticsActions
 import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
@@ -50,7 +54,8 @@ class DebtSettlementFlowTest {
         compose.onNodeWithText("El principal reduce el saldo; el interés se registra por separado.").assertIsDisplayed()
         compose.onNodeWithTag("settlement-principal").performTextReplacement("35.00")
         compose.onNodeWithTag("settlement-interest").performTextReplacement("2.50")
-        compose.onNodeWithTag("settlement-save").performClick()
+        compose.onNodeWithTag("settlement-save").assertIsEnabled()
+        compose.onNodeWithTag("settlement-save").performSemanticsAction(SemanticsActions.OnClick) { it() }
 
         assertEquals("35.00", state.value.principalAmount)
         assertEquals("2.50", state.value.interestAmount)
@@ -104,6 +109,34 @@ class DebtSettlementFlowTest {
 
         compose.onNodeWithText("La deuda cambió en otro dispositivo. Actualizamos el saldo pendiente.").assertIsDisplayed()
         compose.onNodeWithTag("settlement-save").assertIsNotEnabled()
+    }
+
+    @Test
+    fun debtDetailShowsPrincipalAndInterestWithDifferentFinancialEffects() {
+        compose.setContent {
+            DebtDetailScreen(
+                debt = debt(DebtObligationType.PAYABLE),
+                hasFinancialHistory = true,
+                onNavigateBack = {},
+                onEdit = {},
+                onDelete = {},
+                activities = listOf(
+                    DebtSettlementActivity(
+                        eventId = "event-1",
+                        principalMinor = 2_000L,
+                        interestMinor = 100L,
+                        occurredAt = 1_791_000_000_000L,
+                        isVoided = false,
+                    ),
+                ),
+            )
+        }
+
+        compose.onNodeWithTag("debt-settlement-activities").performScrollTo()
+        compose.onNodeWithText("Principal · reduce el saldo").assertIsDisplayed()
+        compose.onNodeWithText("Interés · gasto operativo").assertIsDisplayed()
+        compose.onNodeWithText("20.00", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("1.00", substring = true).assertIsDisplayed()
     }
 
     private fun debt(type: DebtObligationType) = DebtSummary(

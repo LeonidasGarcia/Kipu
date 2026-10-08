@@ -41,10 +41,14 @@ $operations = @(
 $jobs = foreach ($operation in $operations) {
     Start-Job -ArgumentList $ContainerName, $owner, $operation.Operation, $operation.Debt -ScriptBlock {
         param($container, $user, $operationId, $debtId)
+        $hashInput = "$operationId|$debtId|500|PEN|HISTORICAL"
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($hashInput))
+        $requestHash = [System.BitConverter]::ToString($hashBytes).Replace("-", "").ToLowerInvariant()
         $request = @{
             contract_version = 1
             operation_id = $operationId
-            request_hash = "quota-race-$operationId"
+            request_hash = $requestHash
             debt_id = $debtId
             obligation_type = "PAYABLE"
             counterparty_name = "Concurrent debt"
@@ -53,9 +57,9 @@ $jobs = foreach ($operation in $operations) {
             opened_on = "2026-10-08"
             opening_mode = "HISTORICAL"
         } | ConvertTo-Json -Compress
-        $dollar = '$'
-        $sql = "SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', '$user', false); SELECT public.open_debt_v1(${dollar}${dollar}${request}${dollar}${dollar}::jsonb);"
-        $output = docker exec $container psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c $sql 2>&1
+        $requestSql = $request.Replace("'", "''")
+        $sql = "SET ROLE authenticated; SELECT set_config('request.jwt.claim.sub', '$user', false); SELECT public.open_debt_v1('$requestSql'::jsonb);"
+        $output = $sql | docker exec -i $container psql -U postgres -d postgres -v ON_ERROR_STOP=1 2>&1
         [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
     }
 }
@@ -69,6 +73,10 @@ $applied = @($results | Where-Object { $_.ExitCode -eq 0 -and $_.Output -match '
 $quotaRejected = @($results | Where-Object { $_.ExitCode -ne 0 -and $_.Output -match 'FREE_DEBT_QUOTA_EXCEEDED' }).Count
 $active = docker exec $ContainerName psql -U postgres -d postgres -At -c "SELECT count(*) FROM public.debts WHERE user_id='$owner' AND status='ACTIVE' AND deleted_at IS NULL;"
 if ($LASTEXITCODE -ne 0) { throw "Unable to read the local quota concurrency result." }
+
+$cleanup = "DROP TRIGGER IF EXISTS debt_quota_race_pause ON public.debts; DROP FUNCTION IF EXISTS public.debt_quota_race_pause(); DELETE FROM auth.users WHERE id='$owner';"
+docker exec $ContainerName psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c $cleanup | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Unable to remove the synthetic local quota fixture." }
 
 if ($applied -ne 1 -or $quotaRejected -ne 1 -or [int]$active -ne 2) {
     $results | ForEach-Object { Write-Error $_.Output }
