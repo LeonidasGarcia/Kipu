@@ -394,6 +394,12 @@ class QuickMovementViewModelTest {
 
         assertNull(viewModel.uiState.value.selectedCategoryId)
         assertEquals("No se pudo validar la preferencia del comercio.", viewModel.uiState.value.categoryError)
+
+        viewModel.onAmountChanged("25.50")
+        viewModel.onSave()
+        advanceUntilIdle()
+
+        assertTrue(fakeMovementRepo.registeredCommands.isEmpty())
     }
 
     @Test
