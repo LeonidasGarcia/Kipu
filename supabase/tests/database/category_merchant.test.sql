@@ -43,20 +43,21 @@ SET LOCAL "request.jwt.claim.sub" = '11111111-1111-1111-1111-111111111111';
 
 SELECT lives_ok(
     $$
-    PERFORM public.create_category_v1(jsonb_build_object(
-        'category_id', 'aaaaaaaa-1111-1111-1111-000000000001',
-        'name', 'Raíz',
-        'icon', 'folder',
-        'color', '#112233'
-    ));
-    
-    PERFORM public.create_category_v1(jsonb_build_object(
+    WITH root AS (
+        SELECT public.create_category_v1(jsonb_build_object(
+            'category_id', 'aaaaaaaa-1111-1111-1111-000000000001',
+            'name', 'Raíz',
+            'icon', 'folder',
+            'color', '#112233'
+        ))
+    )
+    SELECT public.create_category_v1(jsonb_build_object(
         'category_id', 'bbbbbbbb-1111-1111-1111-000000000001',
         'parent_id', 'aaaaaaaa-1111-1111-1111-000000000001',
         'name', 'Hija',
         'icon', 'folder',
         'color', '#112233'
-    ));
+    )) FROM root;
     $$,
     'Creating root and subcategory succeeds'
 );
@@ -64,7 +65,7 @@ SELECT lives_ok(
 -- Test 11: Third level hierarchy is rejected by trigger
 SELECT throws_ok(
     $$
-    PERFORM public.create_category_v1(jsonb_build_object(
+    SELECT public.create_category_v1(jsonb_build_object(
         'category_id', 'cccccccc-1111-1111-1111-000000000001',
         'parent_id', 'bbbbbbbb-1111-1111-1111-000000000001',
         'name', 'Nieta',
@@ -123,6 +124,7 @@ SELECT is(
 );
 
 -- Setup test movement for classification tests
+RESET ROLE;
 INSERT INTO public.accounts (id, user_id, name, account_type, currency_code)
 VALUES ('99999999-9999-9999-9999-000000000002', '11111111-1111-1111-1111-111111111111', 'Cuenta de prueba', 'CASH', 'PEN');
 
@@ -139,6 +141,9 @@ VALUES (
     now(),
     now()
 ) ON CONFLICT (id) DO NOTHING;
+
+SET LOCAL ROLE authenticated;
+SET LOCAL "request.jwt.claim.sub" = '11111111-1111-1111-1111-111111111111';
 
 -- Test 16: update_movement_classification_v1 succeeds with category and catalog merchant
 SELECT is(
