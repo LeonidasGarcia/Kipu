@@ -64,13 +64,27 @@ class BillingRepository @Inject constructor(
             if (restored.isEmpty()) {
                 BillingVerificationResult.Retryable("NO_RECOVERABLE_PURCHASE")
             } else {
+                var ownerSession: AuthenticatedSession? = null
                 val results = mutableListOf<BillingVerificationResult>()
                 for (update in restored) {
-                    val result = processPurchaseUpdate(update)
-                    if (result is BillingVerificationResult.Verified && result.effectivePremium) return@withTimeout result
+                    val expectedSession = if (update.requiresBackendVerification) {
+                        ownerSession ?: sessions.currentSession()?.also { ownerSession = it }
+                            ?: return@withTimeout BillingVerificationResult.Retryable("UNAUTHENTICATED")
+                    } else {
+                        null
+                    }
+                    val result = processPurchaseUpdate(
+                        update,
+                        expectedSession = expectedSession,
+                        restoreCandidate = update.requiresBackendVerification,
+                    )
                     results += result
+                    if (result == BillingVerificationResult.Rejected("AUTH_SESSION_CHANGED")) {
+                        return@withTimeout result
+                    }
                 }
-                results.firstOrNull { it is BillingVerificationResult.Retryable || it is BillingVerificationResult.Rejected }
+                results.firstOrNull { it is BillingVerificationResult.Verified && it.effectivePremium }
+                    ?: results.firstOrNull { it is BillingVerificationResult.Retryable || it is BillingVerificationResult.Rejected }
                     ?: results.first()
             }
         }
@@ -82,19 +96,27 @@ class BillingRepository @Inject constructor(
         BillingVerificationResult.Retryable("VERIFICATION_UNAVAILABLE")
     }
 
-    private suspend fun processPurchaseUpdate(update: com.kipu.app.feature.plans.domain.model.StorePurchaseUpdate): BillingVerificationResult {
+    private suspend fun processPurchaseUpdate(
+        update: com.kipu.app.feature.plans.domain.model.StorePurchaseUpdate,
+        expectedSession: AuthenticatedSession? = null,
+        restoreCandidate: Boolean = false,
+    ): BillingVerificationResult {
+        if (expectedSession != null && sessions.currentSession()?.userId != expectedSession.userId) {
+            return BillingVerificationResult.Rejected("AUTH_SESSION_CHANGED")
+        }
         return when (update.state) {
             StorePurchaseState.PENDING -> BillingVerificationResult.PaymentPending(update.productId)
             StorePurchaseState.CANCELLED -> BillingVerificationResult.UserCancelled
             StorePurchaseState.FAILED -> BillingVerificationResult.Unavailable
             StorePurchaseState.PURCHASED -> {
                 val token = update.purchaseToken ?: return BillingVerificationResult.Retryable("MISSING_PURCHASE_TOKEN")
-                val session = sessions.currentSession() ?: return BillingVerificationResult.Retryable("UNAUTHENTICATED")
+                val session = expectedSession ?: sessions.currentSession()
+                    ?: return BillingVerificationResult.Retryable("UNAUTHENTICATED")
                 val installation = runCatching { installationKeys.getOrCreatePublicIdentity() }.getOrNull()
                 val anchor = runCatching { offlineClock.read() }.getOrNull()
                 val result = api.verify(
                     session,
-                    BillingPurchaseRequest(update.productId, token),
+                    BillingPurchaseRequest(update.productId, token, restoreCandidate),
                     installationPublicKey = installation?.publicKeyBase64,
                 )
                 if (result !is BillingVerificationResult.Verified) return result

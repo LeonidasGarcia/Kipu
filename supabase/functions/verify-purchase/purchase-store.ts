@@ -10,6 +10,18 @@ type Env = { get(name: string): string | undefined };
 
 export class PersistenceUnavailableError extends Error {}
 
+type PurchaseStore = Pick<
+  Dependencies,
+  | "authenticate"
+  | "lookupProduct"
+  | "persistPurchase"
+  | "claimAcknowledgement"
+  | "completeAcknowledgement"
+  | "releaseAcknowledgement"
+> & {
+  lookupProductById: (productId: string) => Promise<ProductRecord | null>;
+};
+
 function required(env: Env, name: string): string {
   const value = env.get(name);
   if (!value) {
@@ -31,15 +43,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createPurchaseStore(
   env: Env,
   fetchImpl: typeof fetch = fetch,
-): Pick<
-  Dependencies,
-  | "authenticate"
-  | "lookupProduct"
-  | "persistPurchase"
-  | "claimAcknowledgement"
-  | "completeAcknowledgement"
-  | "releaseAcknowledgement"
-> {
+): PurchaseStore {
   const supabaseUrl = required(env, "SUPABASE_URL");
   const apiKey = env.get("SUPABASE_ANON_KEY") ??
     env.get("SUPABASE_PUBLISHABLE_KEY");
@@ -81,7 +85,7 @@ export function createPurchaseStore(
   }
 
   async function persistPurchase(input: PersistInput): Promise<PersistResult> {
-    const result = await rpc<unknown>("persist_verified_billing_purchase", {
+    const body: Record<string, unknown> = {
       p_user_id: input.userId,
       p_store_product_id: input.storeProductId,
       p_purchase_token_hash: input.purchaseTokenHash,
@@ -92,7 +96,18 @@ export function createPurchaseStore(
       p_starts_at: input.startsAt,
       p_expires_at: input.expiresAt,
       p_event_payload: input.sanitizedPayload,
-    });
+    };
+    const rpcName = input.rtdnContext
+      ? "persist_verified_rtdn_billing_purchase"
+      : input.restoreCandidate
+      ? "persist_verified_restored_billing_purchase"
+      : "persist_verified_billing_purchase";
+    if (input.rtdnContext) {
+      body.p_receipt_id = input.rtdnContext.receiptId;
+      body.p_job_id = input.rtdnContext.jobId;
+      body.p_lease_owner = input.rtdnContext.leaseOwner;
+    }
+    const result = await rpc<unknown>(rpcName, body);
     const row = Array.isArray(result) ? result[0] : result;
     if (!isRecord(row)) {
       throw new PersistenceUnavailableError(
@@ -191,6 +206,38 @@ export function createPurchaseStore(
         basePlanId: typeof row.base_plan_id === "string"
           ? row.base_plan_id
           : null,
+        planType: row.plan_type,
+      } satisfies ProductRecord;
+    },
+    lookupProductById: async (productId) => {
+      const url = new URL(`${supabaseUrl}/rest/v1/billing_products`);
+      url.searchParams.set("select", "id,store_product_id,base_plan_id,plan_type");
+      url.searchParams.set("id", `eq.${productId}`);
+      url.searchParams.set("limit", "1");
+      let response: Response;
+      try {
+        response = await fetchImpl(url, {
+          signal: AbortSignal.timeout(8_000),
+          headers: {
+            apikey: serviceRoleKey,
+            authorization: `Bearer ${serviceRoleKey}`,
+            accept: "application/json",
+          },
+        });
+      } catch {
+        throw new PersistenceUnavailableError("Supabase product lookup is unavailable");
+      }
+      if (!response.ok) throw new PersistenceUnavailableError("Supabase product lookup failed");
+      const rows = await readJson(response);
+      if (!Array.isArray(rows) || !isRecord(rows[0])) return null;
+      const row = rows[0];
+      if (typeof row.id !== "string" || typeof row.store_product_id !== "string" || typeof row.plan_type !== "string") {
+        return null;
+      }
+      return {
+        id: row.id,
+        storeProductId: row.store_product_id,
+        basePlanId: typeof row.base_plan_id === "string" ? row.base_plan_id : null,
         planType: row.plan_type,
       } satisfies ProductRecord;
     },

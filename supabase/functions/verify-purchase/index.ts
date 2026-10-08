@@ -41,6 +41,12 @@ export type PersistInput = {
   startsAt: string | null;
   expiresAt: string | null;
   sanitizedPayload: Record<string, unknown>;
+  restoreCandidate?: boolean;
+  rtdnContext?: {
+    receiptId: string;
+    jobId: string;
+    leaseOwner: string;
+  };
 };
 
 export type PersistResult = {
@@ -172,6 +178,146 @@ function effectiveResponse(
   };
 }
 
+type CurrentPurchaseDependencies = Pick<
+  Dependencies,
+  | "verifyPurchase"
+  | "persistPurchase"
+  | "claimAcknowledgement"
+  | "acknowledgePurchase"
+  | "completeAcknowledgement"
+  | "releaseAcknowledgement"
+  | "issueOfflineGrant"
+>;
+
+export type CurrentPurchaseVerification = {
+  outcome: "VERIFIED" | "PENDING" | "TOKEN_ACCOUNT_CONFLICT";
+  product: ProductRecord;
+  provider: ProviderPurchase;
+  persisted: PersistResult;
+  offlineEntitlementGrant: OfflineEntitlementGrant | null;
+  rtdnFinalized: boolean;
+};
+
+/** Shared provider, ownership, acknowledgement, projection and grant boundary. */
+export async function verifyCurrentPurchaseForOwner(
+  dependencies: CurrentPurchaseDependencies,
+  input: {
+    userId: string;
+    product: ProductRecord;
+    purchaseToken: string;
+    installationPublicKey?: string;
+    rtdnContext?: PersistInput["rtdnContext"];
+    restoreCandidate?: boolean;
+  },
+): Promise<CurrentPurchaseVerification> {
+  const { product, purchaseToken, userId, installationPublicKey, rtdnContext, restoreCandidate } = input;
+  if (!["PRO_MONTHLY", "PRO_ANNUAL", "PRO_LIFETIME"].includes(product.planType)) {
+    throw new ProviderRejectedError("UNKNOWN_PRODUCT");
+  }
+  const provider = await dependencies.verifyPurchase(product, purchaseToken);
+  if (provider.entitlementState !== null && !SAFE_LIFECYCLE_STATES.has(provider.entitlementState)) {
+    throw new ProviderRejectedError("PURCHASE_REJECTED");
+  }
+  if (provider.purchaseState === "PENDING") {
+    provider.entitlementState = null;
+    provider.acknowledgementState = "PENDING";
+    provider.expiresAt = null;
+  }
+  if (product.planType === "PRO_LIFETIME" && provider.expiresAt !== null) {
+    throw new ProviderRejectedError("PURCHASE_REJECTED");
+  }
+
+  const purchaseTokenHash = await sha256Hex(purchaseToken);
+  const persistInput: PersistInput = {
+    userId,
+    storeProductId: product.storeProductId,
+    purchaseTokenHash,
+    orderId: provider.orderId,
+    purchaseState: provider.purchaseState,
+    entitlementState: provider.entitlementState,
+    acknowledgementState: provider.acknowledgementState,
+    startsAt: provider.startsAt,
+    expiresAt: provider.expiresAt,
+    sanitizedPayload: sanitizedEventPayload(provider.sanitizedPayload),
+    ...(rtdnContext ? { rtdnContext } : {}),
+    ...(restoreCandidate ? { restoreCandidate: true } : {}),
+  };
+
+  if (provider.purchaseState === "PENDING") {
+    const persisted = await dependencies.persistPurchase(persistInput);
+    return {
+      outcome: persisted.result === "TOKEN_ACCOUNT_CONFLICT" ? "TOKEN_ACCOUNT_CONFLICT" : "PENDING",
+      product,
+      provider,
+      persisted,
+      offlineEntitlementGrant: null,
+      rtdnFinalized: Boolean(rtdnContext),
+    };
+  }
+
+  let persisted: PersistResult;
+  if (rtdnContext) {
+    // RTDN already resolved this token hash to an existing owner. Claim/acknowledge
+    // before the single atomic projection + receipt commit.
+    if (provider.purchaseState === "PURCHASED" && provider.acknowledgementState === "PENDING") {
+      const claimed = await dependencies.claimAcknowledgement(purchaseTokenHash);
+      if (claimed) {
+        try {
+          await dependencies.acknowledgePurchase(product, purchaseToken);
+          await dependencies.completeAcknowledgement(purchaseTokenHash);
+          provider.acknowledgementState = "ACKNOWLEDGED";
+        } catch {
+          await dependencies.releaseAcknowledgement(purchaseTokenHash).catch(() => undefined);
+        }
+      }
+    }
+    persisted = await dependencies.persistPurchase({
+      ...persistInput,
+      acknowledgementState: provider.acknowledgementState,
+    });
+    if (persisted.result === "TOKEN_ACCOUNT_CONFLICT") {
+      return { outcome: "TOKEN_ACCOUNT_CONFLICT", product, provider, persisted, offlineEntitlementGrant: null, rtdnFinalized: true };
+    }
+  } else {
+    persisted = await dependencies.persistPurchase(persistInput);
+    if (persisted.result === "TOKEN_ACCOUNT_CONFLICT") {
+      return { outcome: "TOKEN_ACCOUNT_CONFLICT", product, provider, persisted, offlineEntitlementGrant: null, rtdnFinalized: false };
+    }
+
+    if (provider.purchaseState === "PURCHASED" && provider.acknowledgementState === "PENDING") {
+      const claimed = await dependencies.claimAcknowledgement(purchaseTokenHash);
+      if (claimed) {
+        try {
+          await dependencies.acknowledgePurchase(product, purchaseToken);
+          await dependencies.completeAcknowledgement(purchaseTokenHash);
+          provider.acknowledgementState = "ACKNOWLEDGED";
+          persisted = await dependencies.persistPurchase({
+            ...persistInput,
+            acknowledgementState: "ACKNOWLEDGED",
+          });
+          if (persisted.result === "TOKEN_ACCOUNT_CONFLICT") {
+            return { outcome: "TOKEN_ACCOUNT_CONFLICT", product, provider, persisted, offlineEntitlementGrant: null, rtdnFinalized: false };
+          }
+        } catch {
+          await dependencies.releaseAcknowledgement(purchaseTokenHash).catch(() => undefined);
+        }
+      }
+    }
+  }
+
+  const offlineEntitlementGrant = !rtdnContext &&
+      provider.purchaseState === "PURCHASED" && persisted.effectivePremium &&
+      typeof installationPublicKey === "string" && dependencies.issueOfflineGrant
+    ? await dependencies.issueOfflineGrant({
+      userId,
+      installationPublicKey,
+      effectivePremium: true,
+      entitlementEndsAt: persisted.effectiveExpiresAt,
+    }).catch(() => null)
+    : null;
+  return { outcome: "VERIFIED", product, provider, persisted, offlineEntitlementGrant, rtdnFinalized: Boolean(rtdnContext) };
+}
+
 export function createVerifyPurchaseHandler(dependencies: Dependencies) {
   return async (request: Request): Promise<Response> => {
     const path = new URL(request.url).pathname;
@@ -218,7 +364,7 @@ export function createVerifyPurchaseHandler(dependencies: Dependencies) {
     if (
       !isRecord(payload) ||
       Object.keys(payload).some((key) =>
-        !["productId", "purchaseToken", "installationPublicKey"].includes(key)
+        !["productId", "purchaseToken", "installationPublicKey", "restoreCandidate"].includes(key)
       )
     ) {
       return json({ code: "INVALID_REQUEST", retryable: false }, 400);
@@ -226,13 +372,15 @@ export function createVerifyPurchaseHandler(dependencies: Dependencies) {
     const productId = payload.productId;
     const purchaseToken = payload.purchaseToken;
     const installationPublicKey = payload.installationPublicKey;
+    const restoreCandidate = payload.restoreCandidate;
     if (
       typeof productId !== "string" || productId.length < 1 ||
       productId.length > 200 ||
       typeof purchaseToken !== "string" || purchaseToken.length < 1 ||
       purchaseToken.length > 4096 ||
       (installationPublicKey !== undefined &&
-        (typeof installationPublicKey !== "string" || installationPublicKey.length > 512))
+        (typeof installationPublicKey !== "string" || installationPublicKey.length > 512)) ||
+      (restoreCandidate !== undefined && typeof restoreCandidate !== "boolean")
     ) {
       return json({ code: "INVALID_REQUEST", retryable: false }, 400);
     }
@@ -245,105 +393,22 @@ export function createVerifyPurchaseHandler(dependencies: Dependencies) {
       if (!product) {
         return errorResponse("UNKNOWN_PRODUCT", false, 400);
       }
-      if (
-        !["PRO_MONTHLY", "PRO_ANNUAL", "PRO_LIFETIME"].includes(
-          product.planType,
-        )
-      ) {
-        return errorResponse("UNKNOWN_PRODUCT", false, 400);
-      }
-
-      const provider = await dependencies.verifyPurchase(
+      const verification = await verifyCurrentPurchaseForOwner(dependencies, {
+        userId,
         product,
         purchaseToken,
-      );
-      if (
-        provider.entitlementState !== null &&
-        !SAFE_LIFECYCLE_STATES.has(provider.entitlementState)
-      ) {
-        return errorResponse("PURCHASE_REJECTED", false, 400);
-      }
-      if (provider.purchaseState === "PENDING") {
-        provider.entitlementState = null;
-        provider.acknowledgementState = "PENDING";
-        provider.expiresAt = null;
-      }
-      if (product.planType === "PRO_LIFETIME" && provider.expiresAt !== null) {
-        return json({ code: "PURCHASE_REJECTED", retryable: false }, 400);
-      }
-
-      const purchaseTokenHash = await sha256Hex(purchaseToken);
-      const persistInput: PersistInput = {
-        userId,
-        storeProductId: product.storeProductId,
-        purchaseTokenHash,
-        orderId: provider.orderId,
-        purchaseState: provider.purchaseState,
-        entitlementState: provider.entitlementState,
-        acknowledgementState: provider.acknowledgementState,
-        startsAt: provider.startsAt,
-        expiresAt: provider.expiresAt,
-        sanitizedPayload: sanitizedEventPayload(provider.sanitizedPayload),
-      };
-      let persisted = await dependencies.persistPurchase(persistInput);
-      if (persisted.result === "TOKEN_ACCOUNT_CONFLICT") {
+        ...(typeof installationPublicKey === "string" ? { installationPublicKey } : {}),
+        ...(restoreCandidate === true ? { restoreCandidate: true } : {}),
+      });
+      if (verification.outcome === "TOKEN_ACCOUNT_CONFLICT") {
         return errorResponse("TOKEN_ACCOUNT_CONFLICT", false, 409);
       }
-      if (provider.purchaseState === "PENDING") {
-        return json(effectiveResponse(product, provider, persisted, "PENDING"));
-      }
-
-      if (
-        provider.purchaseState === "PURCHASED" &&
-        provider.acknowledgementState === "PENDING"
-      ) {
-        const claimed = await dependencies.claimAcknowledgement(
-          purchaseTokenHash,
-        );
-        if (claimed) {
-          try {
-            await dependencies.acknowledgePurchase(product, purchaseToken);
-            await dependencies.completeAcknowledgement(purchaseTokenHash);
-            provider.acknowledgementState = "ACKNOWLEDGED";
-            persisted = await dependencies.persistPurchase({
-              ...persistInput,
-              acknowledgementState: "ACKNOWLEDGED",
-            });
-            if (persisted.result === "TOKEN_ACCOUNT_CONFLICT") {
-              return json(
-                {
-                  outcome: "REJECTED",
-                  code: "TOKEN_ACCOUNT_CONFLICT",
-                  retryable: false,
-                },
-                409,
-              );
-            }
-          } catch {
-            await dependencies.releaseAcknowledgement(purchaseTokenHash).catch(
-              () => undefined,
-            );
-          }
-        }
-      }
-
-      const offlineEntitlementGrant = provider.purchaseState === "PURCHASED" &&
-          persisted.effectivePremium && typeof installationPublicKey === "string" &&
-          dependencies.issueOfflineGrant
-        ? await dependencies.issueOfflineGrant({
-          userId,
-          installationPublicKey,
-          effectivePremium: true,
-          entitlementEndsAt: persisted.effectiveExpiresAt,
-        }).catch(() => null)
-        : null;
-
       return json(effectiveResponse(
-        product,
-        provider,
-        persisted,
-        "VERIFIED",
-        offlineEntitlementGrant,
+        verification.product,
+        verification.provider,
+        verification.persisted,
+        verification.outcome,
+        verification.offlineEntitlementGrant,
       ));
     } catch (error) {
       if (error instanceof ProviderRejectedError) {
