@@ -103,3 +103,25 @@ The feature must not be declared Sprint Review ready until these scenarios are e
 ### Refine status and semantic cross-check
 
 Both feature directories contain spec, plan, tasks, research, data-model and contracts. Refinement/propagation entries are current and no artifact-warning **STALE** marker remains. Requirement IDs and existing financial contracts are preserved. Source provenance is explicitly mapped to open T110; all new visual requirements have implementation tasks and evidence. Marker synchronization does not mean whole-sprint functional acceptance. The remaining high-priority finding is the pre-existing FR-017 source contract gap, with explicit task coverage and no inferred replacement.
+
+
+## Sprint 5 HU-55 RTDN, restore, and reconciliation — 2026-10-08
+
+**Readiness**: The isolated implementation and local automated checks are ready for review. Release acceptance remains **BLOCKED** on T118/T128 external baseline and documentation gates. No remote migration, Edge deployment, or Cron schedule was applied.
+
+### Completed locally
+
+- The authenticated `play-rtdn` Edge Function validates Google OIDC signature and claims before parsing Pub/Sub data, normalizes supported event types, hashes delivery identity and token, and routes known current-token events through the shared purchase verifier. Unknown owner or missing-token events remain `WAITING_FOR_TOKEN`; transient failures request Pub/Sub retry.
+- The additive S5 migration adds internal forced-RLS event receipts and reconciliation jobs, per-token leases, server-only RPCs, atomic RTDN and restore persistence, and a bounded no-token sweep. Restore candidates use the same authenticated `verify-purchase` flow; the Kipu owner still comes from Supabase Auth. An owner conflict leaves the purchase and waiting work item attached to the existing owner.
+- Purchase tokens remain request-scoped in memory. The database receives only SHA-256 token hashes and allowlisted billing-event fields. The restore marker is a client flow hint and cannot set or transfer the owner.
+- `./gradlew testDebugUnitTest` passed: **452 tests, 0 failures**.
+- `deno test --allow-env supabase/functions/verify-purchase supabase/functions/play-rtdn supabase/functions/reconcile-billing` passed: **35 tests, 0 failures**.
+- The HU-55 pgTAP files passed: **61 assertions** across `billing_rtdn_reconciliation_test.sql` and `billing_reconciliation_sweep_test.sql`, including OIDC/receipt contract checks, atomic restore resume, no-token waiting, owner conflict, RLS/grants, privacy, lease recovery, and no entitlement mutation from the scheduler.
+- The S5 migration was manually applied to the local Docker database for these pgTAP runs. `git diff --check` passed.
+
+### Remaining gates
+
+- **T118 / P30**: the approved token-retention clarification is captured in the feature artifacts, but P30 §4.3–4.4 is owned outside this workspace and was not available to update or cross-review. The read-only live baseline observed on 2026-10-08 has no S5 functions/migration and no `pg_cron`, `pg_net`, or Vault scheduling setup.
+- A full local migration replay is still blocked before S5 by the pre-existing `20260928110000_credit_card_pull_projection.sql` dependency on missing `public.recurrence_occurrences`. The S5 migration was not recorded in local migration history through `db reset`; the targeted database tests ran against the manually applied S5 schema.
+- No non-production Google Play/Pub/Sub delivery, remote migration, function deployment, Vault secret, or Cron execution was performed. The 15-minute Cron recipe is versioned in `supabase/operations/billing-reconciliation-cron.sql` but remains unapplied until the baseline and P30 gates are reviewed.
+- **T128 remains open** until the external integration, migration-history reconciliation, deployed scheduler evidence, and P30 alignment are complete. Historical T112/T113 release gates remain open as documented above.

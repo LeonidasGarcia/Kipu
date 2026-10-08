@@ -71,3 +71,24 @@ T094 source, local database, Edge boundary, and unsigned release APK review is c
 - No emulator, AVD, or attached Android device is available, so the new Room migration and movement access instrumented tests were compiled but not executed.
 - The production ES256 private key and matching Android public verification configuration have not been provisioned. Until the approved environment supplies both sides, new offline Premium grants are unavailable and the safe behavior is Kipu Free after any already-valid lease expires.
 - No remote Supabase migration, Edge deployment, release signing, or publication was performed.
+
+
+## Sprint 5 RTDN and reconciliation security review — 2026-10-08
+
+**Status**: Isolated source and local automated checks passed. Remote configuration and non-production Play/Pub/Sub acceptance remain open release gates.
+
+### Verified in source and local checks
+
+- `play-rtdn` validates the Google OIDC JWT signature using Google JWKS and checks issuer, audience, service-account email, email verification, and time claims before decoding the Pub/Sub envelope. Package identity and supported notification types are validated before persistence.
+- RTDN delivery identity and purchase tokens are hashed. The Edge function passes a current token only in memory to the shared Google Play verifier. Receipts, jobs, sanitized billing events, logs, and RPC bodies do not contain the raw purchase token or raw notification payload.
+- The authenticated restore path supplies current device tokens to the same verifier. Supabase Auth remains the owner source; the client restore marker only selects an atomic server persistence path. A token bound to another account returns a conflict without reassigning its purchase or binding a waiting receipt/job to the caller.
+- Internal receipt/job tables enable and force RLS, deny client table access, use server-executor policies, and expose only narrowly granted service-role functions. The migration validates existing S3 schema and global token-hash uniqueness, and fails visibly on duplicate hashes or conflicting index definitions.
+- `reconcile-billing` requires a dedicated scheduler secret with a minimum length, limits the batch size, returns generic failures, and only reclaims leases/classifies hash-only jobs. It imports no Google Play provider and makes no provider call or entitlement change.
+- Local checks passed: **35 Deno tests**, **61 pgTAP assertions**, and **452 Android JVM tests**. The database assertions include restore resume and owner-conflict behavior.
+
+### Not verified against external systems
+
+- P30 §4.3–4.4 remains unaligned in its owning documentation repository; the approved no-token behavior is recorded here and in the feature contract pending that review.
+- The remote Supabase baseline observed on 2026-10-08 has not received the S5 migration or Edge functions, and scheduling extensions/secrets are not configured. No remote write or deployment was made.
+- The local full migration reset fails at the pre-existing missing `public.recurrence_occurrences` dependency. The S5 migration was manually applied only to the local Docker database for targeted pgTAP runs; its migration-history replay is not certified.
+- No real Google Play verification, Pub/Sub push, Vault read, Cron invocation, or deployed-function acceptance was performed. `T118` and `T128` therefore remain unchecked.

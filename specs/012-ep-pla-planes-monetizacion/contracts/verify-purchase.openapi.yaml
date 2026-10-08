@@ -40,6 +40,10 @@ paths:
                   type: string
                   maxLength: 512
                   description: Optional standard Base64 DER SubjectPublicKeyInfo for an Android Keystore P-256 key. Required to receive an offline grant; older clients may omit it and receive no grant.
+                restoreCandidate:
+                  type: boolean
+                  default: false
+                  description: Client flow hint only. When true, the same authenticated verifier may atomically complete a matching hash-only RTDN job after current provider verification; caller identity remains Supabase Auth-derived.
       responses:
         '200':
           description: Normalized verification result; PENDING never grants entitlement.
