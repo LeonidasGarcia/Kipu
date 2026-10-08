@@ -3,6 +3,7 @@ package com.kipu.app.feature.categories.presentation
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -72,6 +73,46 @@ class MerchantPickerTest {
 
         composeTestRule.onNodeWithTag("use_provisional_button").performClick()
         assertEquals("Bodeguita Linda", provisionalAssigned)
+    }
+
+    @Test
+    fun whitespaceOnlyQueryShowsCachedCatalogWithoutProvisionalAction() {
+        val entry = MerchantCatalogEntry(MerchantId("m1"), "Plaza Vea", "plaza vea")
+
+        composeTestRule.setContent {
+            MerchantPicker(
+                state = MerchantPickerState(query = " \t ", catalogEntries = listOf(entry)),
+                onQueryChange = {},
+                onSelectMerchant = {},
+                onSetProvisionalText = {},
+                onClearSelection = {},
+            )
+        }
+
+        composeTestRule.onNodeWithTag("merchant_results_list").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Plaza Vea").assertIsDisplayed()
+        assertTrue(composeTestRule.onAllNodesWithTag("use_provisional_button").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun punctuationOnlyQueryHasNoCatalogMatchAndCanBeKeptAsProvisional() {
+        val entry = MerchantCatalogEntry(MerchantId("m1"), "Plaza Vea", "plaza vea")
+        var provisional: String? = null
+
+        composeTestRule.setContent {
+            MerchantPicker(
+                state = MerchantPickerState(query = "!!!", catalogEntries = listOf(entry)),
+                onQueryChange = {},
+                onSelectMerchant = {},
+                onSetProvisionalText = { provisional = it },
+                onClearSelection = {},
+            )
+        }
+
+        assertTrue(composeTestRule.onAllNodesWithTag("merchant_results_list").fetchSemanticsNodes().isEmpty())
+        composeTestRule.onNodeWithTag("use_provisional_button").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("use_provisional_button").performClick()
+        assertEquals("!!!", provisional)
     }
 
     @Test

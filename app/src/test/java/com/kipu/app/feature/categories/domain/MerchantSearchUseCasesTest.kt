@@ -120,6 +120,12 @@ class MerchantSearchUseCasesTest {
     }
 
     @Test
+    fun `search with punctuation only has no normalized match`() = runTest {
+        val results = searchMerchantCatalog("!!!").first()
+        assertTrue(results.isEmpty())
+    }
+
+    @Test
     fun `search with no match returns empty results`() = runTest {
         val results = searchMerchantCatalog("comercio_desconocido").first()
         assertTrue(results.isEmpty())
