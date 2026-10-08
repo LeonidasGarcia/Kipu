@@ -92,6 +92,35 @@ class DebtChangeFeedTest {
         assertNull(database.debtDao().getSyncCheckpoint("owner"))
     }
 
+    @Test
+    fun ownerScopedDeleteChangeRemovesUnreferencedHistoricalDebtAndAdvancesCheckpoint() = runBlocking {
+        database.debtDao().insertDebt(
+            DebtEntity(
+                id = DEBT_ID,
+                userId = "owner",
+                obligationType = "PAYABLE",
+                counterpartyName = "Historica",
+                totalMinor = 5_000L,
+                currencyCode = "PEN",
+                openedOn = "2026-10-01",
+                openingMode = "HISTORICAL",
+            ),
+        )
+
+        val result = applier.applyPage(
+            "owner",
+            page(
+                change(1, "DEBT", DEBT_ID, """{"id":"$DEBT_ID","user_id":"owner","revision":2}""", revision = 2L)
+                    .copy(operation = "DELETE"),
+                nextSequence = 1L,
+            ),
+        )
+
+        assertTrue(result is DebtChangeApplyResult.Applied)
+        assertNull(database.debtDao().getDebtIncludingDeleted("owner", DEBT_ID))
+        assertEquals(1L, database.debtDao().getSyncCheckpoint("owner")?.sequence)
+    }
+
     private fun page(vararg changes: SyncChangeItemDto, nextSequence: Long) = PullChangesResponseDto(
         changes = changes.toList(),
         nextSequence = nextSequence,
