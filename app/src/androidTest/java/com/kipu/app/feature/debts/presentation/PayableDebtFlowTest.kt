@@ -67,7 +67,7 @@ class PayableDebtFlowTest {
         compose.onNodeWithText("Editar datos").performClick()
         compose.onNodeWithText("Apertura histórica").assertIsDisplayed()
         compose.onNodeWithText("Eliminar deuda").assertIsNotEnabled()
-        compose.onNodeWithText("Con historial financiero no se puede borrar.").assertIsDisplayed()
+        compose.onNodeWithText("El saldo pendiente, la apertura y cualquier movimiento se conservan como historial.").assertIsDisplayed()
 
         assertEquals(1, edits)
         assertEquals(0, deletes)

@@ -11,6 +11,7 @@ import com.kipu.app.feature.debts.domain.DebtRepository
 import com.kipu.app.feature.debts.domain.model.DebtCommandIdentity
 import com.kipu.app.feature.debts.domain.model.DebtDeleteResult
 import com.kipu.app.feature.debts.domain.model.DebtSummary
+import com.kipu.app.feature.debts.domain.model.DebtScheduleItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,7 @@ data class DebtDetailUiState(
     val debt: DebtSummary? = null,
     val hasFinancialHistory: Boolean = false,
     val activities: List<DebtSettlementActivity> = emptyList(),
+    val installments: List<DebtScheduleItem> = emptyList(),
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
 )
@@ -57,20 +59,28 @@ class DebtDetailViewModel @Inject constructor(
                     repository.observeDebt(userId, debtId),
                     debtDao.observeHasFinancialHistory(userId, debtId),
                     debtDao.observeSettlementActivities(userId, debtId),
-                ) { debt, hasHistory, activities ->
-                    Triple(debt, hasHistory, activities.map { row ->
-                        DebtSettlementActivity(row.eventId, row.principalMinor, row.interestMinor, row.occurredAt, row.isVoided)
-                    })
+                    repository.observeInstallments(userId, debtId),
+                ) { debt, hasHistory, activities, installments ->
+                    DebtDetailUiState(
+                        debt = debt,
+                        hasFinancialHistory = hasHistory,
+                        activities = activities.map { row ->
+                            DebtSettlementActivity(
+                                eventId = row.eventId,
+                                principalMinor = row.principalMinor,
+                                interestMinor = row.interestMinor,
+                                occurredAt = row.occurredAt,
+                                isVoided = row.isVoided,
+                                eventType = row.eventType,
+                                principalDeltaMinor = row.principalDeltaMinor,
+                            )
+                        },
+                        installments = installments,
+                        isLoading = false,
+                    )
                 }
                     .catch { _state.value = DebtDetailUiState(isLoading = false, errorMessage = "No se pudo cargar el detalle.") }
-                    .collect { (debt, hasHistory, activities) ->
-                        _state.value = DebtDetailUiState(
-                            debt = debt,
-                            hasFinancialHistory = hasHistory,
-                            activities = activities,
-                            isLoading = false,
-                        )
-                    }
+                    .collect { _state.value = it }
             }
         }
     }
@@ -84,7 +94,7 @@ class DebtDetailViewModel @Inject constructor(
                 is DebtDeleteResult.Deleted -> _events.send(DebtDetailUiEvent.Deleted)
                 is DebtDeleteResult.Rejected -> _state.value = _state.value.copy(
                     errorMessage = if (result.code == "HISTORY_PRESERVED") {
-                        "La deuda tiene movimientos vinculados y se conserva el historial."
+                        "El saldo pendiente y los movimientos se conservan como parte del historial."
                     } else "No se pudo eliminar la deuda (${result.code}).",
                 )
                 is DebtDeleteResult.Conflict -> _state.value = _state.value.copy(

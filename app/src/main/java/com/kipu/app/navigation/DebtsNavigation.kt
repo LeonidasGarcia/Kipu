@@ -76,6 +76,7 @@ fun NavGraphBuilder.debtDestinations(navController: NavController) {
             onDebtSelected = navController::navigateToDebtDetail,
             onAddPayable = { navController.navigateToDebtOpening(DebtObligationType.PAYABLE) },
             onAddReceivable = { navController.navigateToDebtOpening(DebtObligationType.RECEIVABLE) },
+            scheduledInstallments = state.scheduledInstallments,
             errorMessage = state.errorMessage,
         )
     }
@@ -151,6 +152,7 @@ fun NavGraphBuilder.debtDestinations(navController: NavController) {
                 onSchedule = { navController.navigateToDebtSchedule(viewModel.debtId) },
                 errorMessage = state.errorMessage,
                 activities = state.activities,
+                installments = state.installments,
             )
         }
     }

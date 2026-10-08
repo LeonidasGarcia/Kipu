@@ -16,6 +16,7 @@ import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
 import com.kipu.app.feature.debts.domain.model.DebtSummary
+import com.kipu.app.feature.debts.domain.model.DebtScheduleItem
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -137,6 +138,117 @@ class DebtSettlementFlowTest {
         compose.onNodeWithText("Interés · gasto operativo").assertIsDisplayed()
         compose.onNodeWithText("20.00", substring = true).assertIsDisplayed()
         compose.onNodeWithText("1.00", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun debtDetailShowsInstallmentPlanSeparateFromPayments() {
+        compose.setContent {
+            DebtDetailScreen(
+                debt = debt(DebtObligationType.PAYABLE),
+                hasFinancialHistory = true,
+                onNavigateBack = {},
+                onEdit = {},
+                onDelete = {},
+                installments = listOf(
+                    DebtScheduleItem(
+                        id = "installment-1",
+                        installmentNumber = 1,
+                        dueDate = LocalDate.parse("2026-11-10"),
+                        principalMinor = 2_000L,
+                        status = "PARTIAL",
+                    ),
+                ),
+            )
+        }
+
+        compose.onNodeWithTag("debt-installment-plan").performScrollTo()
+        compose.onNodeWithText("Plan de cuotas (no son pagos)").assertIsDisplayed()
+        compose.onNodeWithText("Cuota 1 · 2026-11-10").assertIsDisplayed()
+        compose.onNodeWithText("Pago parcial").assertIsDisplayed()
+    }
+
+    @Test
+    fun debtDetailShowsAdjustmentsAndForgivenessAsSeparateHistoryActions() {
+        compose.setContent {
+            DebtDetailScreen(
+                debt = debt(DebtObligationType.PAYABLE),
+                hasFinancialHistory = true,
+                onNavigateBack = {},
+                onEdit = {},
+                onDelete = {},
+                activities = listOf(
+                    DebtSettlementActivity(
+                        eventId = "adjustment-1",
+                        principalMinor = 500L,
+                        interestMinor = 0L,
+                        occurredAt = 1_791_000_000_000L,
+                        isVoided = false,
+                        eventType = "ADJUSTMENT",
+                        principalDeltaMinor = 500L,
+                    ),
+                    DebtSettlementActivity(
+                        eventId = "forgiveness-1",
+                        principalMinor = 1_000L,
+                        interestMinor = 0L,
+                        occurredAt = 1_791_000_000_001L,
+                        isVoided = false,
+                        eventType = "FORGIVENESS",
+                        principalDeltaMinor = -1_000L,
+                    ),
+                ),
+            )
+        }
+
+        compose.onNodeWithTag("debt-settlement-activities").performScrollTo()
+        compose.onNodeWithText("Ajuste de principal").assertIsDisplayed()
+        compose.onNodeWithText("Condonación de principal").assertIsDisplayed()
+        compose.onNodeWithText("Aumenta el saldo").assertIsDisplayed()
+        compose.onNodeWithText("Reduce el saldo").assertIsDisplayed()
+    }
+
+    @Test
+    fun debtListDistinguishesPlannedInstallmentFromCompletedPayment() {
+        val pendingDebt = debt(DebtObligationType.PAYABLE)
+        val partialDebt = pendingDebt.copy(debtId = "88000000-0000-4000-8000-000000000006", counterpartyName = "Prestamo parcial")
+        val settledDebt = pendingDebt.copy(debtId = "88000000-0000-4000-8000-000000000005", counterpartyName = "Préstamo pagado")
+        compose.setContent {
+            DebtListScreen(
+                debts = listOf(pendingDebt, settledDebt, partialDebt),
+                selectedType = null,
+                onTypeSelected = {},
+                onDebtSelected = {},
+                onAddPayable = {},
+                onAddReceivable = {},
+                scheduledInstallments = mapOf(
+                    pendingDebt.debtId to DebtScheduleItem(
+                        id = "planned-1",
+                        installmentNumber = 1,
+                        dueDate = LocalDate.parse("2026-11-10"),
+                        principalMinor = 2_000L,
+                        status = "PENDING",
+                    ),
+                    settledDebt.debtId to DebtScheduleItem(
+                        id = "paid-1",
+                        installmentNumber = 1,
+                        dueDate = LocalDate.parse("2026-10-01"),
+                        principalMinor = 2_000L,
+                        status = "PAID",
+                    ),
+                    partialDebt.debtId to DebtScheduleItem(
+                        id = "partial-1",
+                        installmentNumber = 1,
+                        dueDate = LocalDate.parse("2026-10-15"),
+                        principalMinor = 2_000L,
+                        status = "PARTIAL",
+                    ),
+                ),
+            )
+        }
+
+        compose.onNodeWithText("Cuota planificada · 2026-11-10").assertIsDisplayed()
+        compose.onNodeWithText("Pendiente · no es pago").assertIsDisplayed()
+        compose.onNodeWithText("Pago completado").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Pago parcial registrado").performScrollTo().assertIsDisplayed()
     }
 
     private fun debt(type: DebtObligationType) = DebtSummary(

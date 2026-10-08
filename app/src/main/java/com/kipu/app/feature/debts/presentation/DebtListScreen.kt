@@ -1,5 +1,6 @@
 package com.kipu.app.feature.debts.presentation
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
+import com.kipu.app.feature.debts.domain.model.DebtScheduleItem
 import com.kipu.app.feature.debts.domain.model.DebtSummary
 import java.text.NumberFormat
 import java.util.Currency
@@ -38,6 +40,7 @@ fun DebtListScreen(
     onDebtSelected: (String) -> Unit,
     onAddPayable: () -> Unit,
     onAddReceivable: () -> Unit,
+    scheduledInstallments: Map<String, DebtScheduleItem> = emptyMap(),
     errorMessage: String? = null,
 ) {
     val filtered = debts.filter { selectedType == null || it.obligationType == selectedType }
@@ -82,7 +85,11 @@ fun DebtListScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(filtered, key = DebtSummary::debtId) { debt ->
-                        DebtListItem(debt, onClick = { onDebtSelected(debt.debtId) })
+                        DebtListItem(
+                            debt = debt,
+                            scheduledInstallment = scheduledInstallments[debt.debtId],
+                            onClick = { onDebtSelected(debt.debtId) },
+                        )
                     }
                 }
             }
@@ -91,11 +98,11 @@ fun DebtListScreen(
 }
 
 @Composable
-private fun DebtListItem(debt: DebtSummary, onClick: () -> Unit) {
+private fun DebtListItem(debt: DebtSummary, scheduledInstallment: DebtScheduleItem?, onClick: () -> Unit) {
     val formatter = NumberFormat.getCurrencyInstance(Locale.Builder().setLanguage("es").setRegion("PE").build())
     runCatching { Currency.getInstance(debt.currencyCode) }.getOrNull()?.let { formatter.currency = it }
     Card(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp).clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp).animateContentSize().clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(18.dp),
     ) {
@@ -109,6 +116,24 @@ private fun DebtListItem(debt: DebtSummary, onClick: () -> Unit) {
                     color = if (debt.status == DebtLifecycleStatus.CANCELLED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 debt.dueDate?.let { Text("Vence $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                scheduledInstallment?.let { installment ->
+                    Text(
+                        if (installment.status == "PAID") "Cuota · ${installment.dueDate}"
+                        else "Cuota planificada · ${installment.dueDate}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        when (installment.status) {
+                            "PENDING" -> "Pendiente · no es pago"
+                            "PARTIAL" -> "Pago parcial registrado"
+                            "PAID" -> "Pago completado"
+                            else -> "Plan de cuotas · no es pago"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Text(formatter.format(debt.remainingPrincipalMinor / 100.0), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }

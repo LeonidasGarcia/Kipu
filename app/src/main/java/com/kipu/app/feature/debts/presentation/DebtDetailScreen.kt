@@ -32,7 +32,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
 import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
+import com.kipu.app.feature.debts.domain.model.DebtScheduleItem
 import com.kipu.app.feature.debts.domain.model.DebtSummary
+import kotlin.math.absoluteValue
 import java.text.NumberFormat
 import java.util.Currency
 import java.util.Locale
@@ -43,6 +45,8 @@ data class DebtSettlementActivity(
     val interestMinor: Long,
     val occurredAt: Long,
     val isVoided: Boolean,
+    val eventType: String = "PAYMENT",
+    val principalDeltaMinor: Long? = null,
 )
 
 @Composable
@@ -56,6 +60,7 @@ fun DebtDetailScreen(
     onSchedule: () -> Unit = {},
     errorMessage: String? = null,
     activities: List<DebtSettlementActivity> = emptyList(),
+    installments: List<DebtScheduleItem> = emptyList(),
 ) {
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     val currency = runCatching { Currency.getInstance(debt.currencyCode) }.getOrNull()
@@ -106,6 +111,29 @@ fun DebtDetailScreen(
             debt.notes?.takeIf(String::isNotBlank)?.let { notes ->
                 Text(notes, style = MaterialTheme.typography.bodyLarge)
             }
+            if (installments.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().animateContentSize().testTag("debt-installment-plan"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(20.dp),
+                ) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Plan de cuotas (no son pagos)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        installments.sortedBy(DebtScheduleItem::installmentNumber).forEach { installment ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().animateContentSize(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text("Cuota ${installment.installmentNumber} · ${installment.dueDate}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                    Text(installmentStatusLabel(installment.status), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text(formatter.format(installment.principalMinor / 100.0), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
             if (activities.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth().animateContentSize().testTag("debt-settlement-activities"),
@@ -113,12 +141,32 @@ fun DebtDetailScreen(
                     shape = RoundedCornerShape(20.dp),
                 ) {
                     Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Historial de pagos y cobros", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Historial de pagos, ajustes y condonaciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         activities.forEach { activity ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text("Principal · reduce el saldo", style = MaterialTheme.typography.bodyMedium)
-                                Text(formatter.format(activity.principalMinor / 100.0), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                                if (activity.interestMinor > 0L) {
+                                when (activity.eventType) {
+                                    "PAYMENT" -> Text("Principal · reduce el saldo", style = MaterialTheme.typography.bodyMedium)
+                                    "ADJUSTMENT" -> {
+                                        Text("Ajuste de principal", style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            if ((activity.principalDeltaMinor ?: 0L) >= 0L) "Aumenta el saldo" else "Reduce el saldo",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    "FORGIVENESS" -> {
+                                        Text("Condonación de principal", style = MaterialTheme.typography.bodyMedium)
+                                        Text("Reduce el saldo", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    else -> Text("Movimiento de deuda", style = MaterialTheme.typography.bodyMedium)
+                                }
+                                val displayedPrincipal = if (activity.eventType == "PAYMENT") {
+                                    activity.principalMinor
+                                } else {
+                                    (activity.principalDeltaMinor ?: activity.principalMinor).absoluteValue
+                                }
+                                Text(formatter.format(displayedPrincipal / 100.0), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                if (activity.eventType == "PAYMENT" && activity.interestMinor > 0L) {
                                     Text(
                                         if (debt.obligationType.name == "PAYABLE") "Interés · gasto operativo" else "Interés · ingreso operativo",
                                         style = MaterialTheme.typography.bodyMedium,
@@ -151,7 +199,7 @@ fun DebtDetailScreen(
             }
             AnimatedVisibility(visible = hasFinancialHistory) {
                 Text(
-                    "Con historial financiero no se puede borrar.",
+                    "El saldo pendiente, la apertura y cualquier movimiento se conservan como historial.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -163,7 +211,7 @@ fun DebtDetailScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("¿Eliminar esta deuda?") },
-            text = { Text("La deuda y su apertura histórica se quitarán de tu lista. Esta acción no se puede deshacer.") },
+            text = { Text("Se elimina la obligacion y sus cuotas sin pagos asociados. Esta accion no se puede deshacer.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -178,4 +226,12 @@ fun DebtDetailScreen(
             },
         )
     }
+}
+
+private fun installmentStatusLabel(status: String): String = when (status) {
+    "PENDING", "PLANNED" -> "Pendiente de pago"
+    "PARTIAL" -> "Pago parcial"
+    "PAID" -> "Pago registrado"
+    "CANCELLED" -> "Cuota cancelada"
+    else -> "Estado: $status"
 }
