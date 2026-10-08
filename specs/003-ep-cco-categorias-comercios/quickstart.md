@@ -31,13 +31,16 @@
 12. Set a personal Tambo → Alimentación preference, then evaluate a compatible future Tambo operation with a different general suggestion. Confirm the personal preference is proposed only for that user and future operation; confirm inactive, plan-blocked, or incompatible categories require a new choice and confirmed history does not change.
 13. With two users and offline edits, verify alias and preference records remain owner-scoped, retry idempotently, and do not restore a tombstoned record or silently overwrite an incompatible revision.
 
-## Expected evidence
+## Sprint 5 implementation evidence (2026-10-08)
 
-- Unit tests prove hierarchy, quota, eligibility, catalog substring search, exact alias matching, ambiguity review, Premium/consent gates, preference precedence and conflict decisions.
-- Room migration tests prove the historical v3→v4 baseline and the S5 v18→v19 migration preserve existing movements and exact raw merchant text.
-- Worker tests prove command retry/idempotency and conflict preservation.
-- Database tests prove constraints, RLS, grants, Premium/consent enforcement, preference isolation, soft deletion and no merchant catalog client DML.
-- Compose and real-device checks prove no tags, accessible states and local success while offline.
-- Timed acceptance evidence records the 2-minute category-to-movement flow for at least 95% of participants and a cached merchant-search result or availability state within 1 second.
+- `.\gradlew.bat testDebugUnitTest`: passed, 471 unit tests.
+- Targeted `connectedDebugAndroidTest` checks passed on the Samsung SM-A165M (Android 16): `MerchantAliasRulesScreenTest`, `MerchantCategoryPreferenceScreenTest`, `MerchantRuleDatabaseTest`, `EpCcoEndToEndTest`, and `SyncCategoryCommandsWorkerTest`. The full Android instrumentation suite was not run.
+- `npx --yes supabase@latest db reset --local`: passed from an empty local database and applied all local migrations, including the three EP-CCO S5 migrations.
+- `npx --yes supabase@latest test db --local supabase/tests/database/merchant_rules_s5.test.sql`: passed, 39 pgTAP checks.
+- No remote Supabase writes were made. The linked/live migration history was observed behind the local S4/October head; reconcile it through the approved release process, then review effective RLS/grants before remote integration.
 
-These are future validation steps, not evidence that S5 is implemented or tested. Supabase live migration alignment and effective RLS/grant review are release gates. This refinement performs no tests and writes no remote data.
+## Remaining release evidence
+
+- Supabase security/performance advisors were not run.
+- Timed usability evidence for the 2-minute category-to-movement flow and the 1-second merchant search target was not collected.
+- Remote migration application, effective RLS/grant review, and the full Android instrumentation suite remain release gates. The current S5 implementation is locally verified but is not marked release-ready.

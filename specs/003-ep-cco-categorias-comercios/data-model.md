@@ -47,10 +47,11 @@ No tiene owner, alias, regla personal ni operación de alta por cliente.
 | `normalizedPattern` | Patrón normalizado guardado para comparación exacta: case-fold, quitar acentos, recortar y colapsar espacios; conserva puntuación y no admite comodines ni matching parcial. |
 | `merchantId` | Referencia obligatoria a un comercio canónico activo del catálogo Kipu. |
 | `revision`, `deletedAt` | Revisión para sincronización; baja lógica/tombstone para propagar eliminación sin DELETE directo. |
+| `syncState`, `syncError` | Estado local de outbox: pendiente, sincronizado, conflicto o fallo con código recuperable. |
 
 Crear toda regla nueva requiere Premium y confirmación manual del comercio canónico. Si varias reglas elegibles con el mismo patrón apuntan a comercios distintos, la evaluación queda en revisión humana, sin resolver por prioridad. Una regla no crea ni edita catálogo y solo afecta señales futuras.
 
-El diseño remoto reutiliza `merchant_rules` para estas filas owner-scoped después de validar y ajustar sus constraints/RPCs; su presencia actual no demuestra por sí sola que ya cumpla HU-16. `merchant_rules.category_id` no representa la preferencia personal de categoría de HU-17.
+Room guarda las filas en `merchant_alias_rules` con clave owner+id. Las migraciones S5 crean la tabla remota dedicada `public.merchant_alias_rules`, RLS forzada y lectura owner-scoped; la escritura pasa únicamente por `upsert_merchant_alias_rule_v1` y `delete_merchant_alias_rule_v1`. La tabla histórica `merchant_rules` no se reutiliza porque su contrato parcial mezcla otros campos y no satisface estas reglas de HU-16. `merchant_rules.category_id` tampoco representa la preferencia personal de categoría de HU-17.
 
 ## MovementClassification
 
@@ -61,6 +62,8 @@ El diseño remoto reutiliza `merchant_rules` para estas filas owner-scoped despu
 | `merchantId` | Opcional; debe referenciar una entrada activa del catálogo. |
 | `merchantProvisionalText` | Opcional; solo se permite sin `merchantId`; no crea catálogo. |
 | `merchantRawText` | Texto fuente exacto de una señal, si existe; se conserva sin normalización ni reemplazo. |
+
+Room y `public.financial_movements` almacenan `merchant_raw_text` en la fila del movimiento. El comando `PRESERVE_MERCHANT_SOURCE_TEXT` solo escribe si el campo está vacío; reintentar el mismo valor es idempotente y otro valor se rechaza. No modifica importe, estado, asiento ni clasificación confirmada.
 
 `categoryId` y `merchantId` son independientes. Actualizar o limpiar uno preserva el otro.
 
@@ -75,11 +78,12 @@ En transacciones nuevas, una categoría `EXPENSE` solo puede clasificar gastos y
 | Field | Rules |
 |-------|-------|
 | `ownerId` + `merchantId` | Identidad compuesta; una preferencia vigente por usuario y comercio. |
+| `id` | Identidad estable que se conserva al actualizar y al reactivar desde un tombstone. |
 | `categoryId` | Categoría elegida por el usuario; debe pertenecer al usuario o al catálogo y ser elegible para el tipo futuro. |
-| `revision`, `updatedAt` | Permiten sincronización idempotente y detectar cambios fuera de orden. |
-| `deletedAt` | Tombstone opcional para propagar la baja. |
+| `revision`, `updatedAt`, `deletedAt` | Permiten sincronización idempotente, detectar cambios fuera de orden y propagar la baja sin borrar la fila. |
+| `syncState`, `syncError` | Estado local del comando y código de conflicto/rechazo recuperable. |
 
-La preferencia es distinta de `merchant_rules.category_id` y `CategoryPresentation`. No agrega una puerta Premium independiente. Solo se aplica a operaciones futuras del mismo usuario/comercio si la categoría y su raíz están activas, habilitadas por plan y compatibles con el tipo; si no, se pide una elección. Nunca reescribe movimientos confirmados.
+Room guarda una preferencia por `(user_id, merchant_id)`. Supabase usa `public.merchant_category_preferences` con unicidad por propietario/comercio, RLS forzada y solo `SELECT` directo; los RPC `upsert_merchant_category_preference_v1` y `delete_merchant_category_preference_v1` autorizan cambios con revisión esperada. La preferencia es distinta de `merchant_rules.category_id` y `CategoryPresentation`. No agrega una puerta Premium independiente. Solo se aplica a operaciones futuras del mismo usuario/comercio si la categoría y su raíz están activas, habilitadas por plan y compatibles con el tipo; si no, se pide una elección. Nunca reescribe movimientos confirmados.
 
 ## CategoryConflict
 

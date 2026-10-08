@@ -12,7 +12,7 @@ Extender la base EP-CCO de HU-14/HU-15 y el trabajo de categorías tipadas ya in
 
 Un alias Premium compara igualdad exacta entre texto de señal y patrón después de normalizar mayúsculas, minúsculas, acentos y espacios; conserva intacta la cadena fuente y propone una identidad existente del catálogo. La preferencia de categoría es una relación privada distinta, prevalece sobre una sugerencia general solo para operaciones futuras compatibles y elegibles, y nunca reclasifica movimientos confirmados.
 
-La clasificación y evidencia local siguen asociadas a `financial_movements`; no se crea una segunda verdad financiera. El Room actual está en versión 18 y el plan prevé una migración forward-only a v19 para este incremento. El Supabase actual contiene `merchant_rules` y `transactions.merchant_raw_text`, pero no una relación separada de preferencia ni RPCs dedicados para los comandos S5. Room guarda cambio y outbox atómicamente; Supabase debe validar propiedad, entitlement, categoría elegible y recibos idempotentes antes de aceptar los comandos.
+La clasificación y evidencia local siguen asociadas a `financial_movements`; no se crea una segunda verdad financiera. Room migra de v18 a v19 con retención de datos. El inventario remoto observado antes de implementar contenía `merchant_rules` y `transactions.merchant_raw_text`, pero no una relación separada de preferencia ni RPCs dedicados S5; las migraciones locales agregan tablas privadas dedicadas y comandos versionados. Room guarda cambio y outbox atómicamente; Supabase valida propietario, entitlement para alias nuevos, categoría elegible y recibos idempotentes antes de aceptar comandos.
 
 ## Technical Context
 
@@ -50,7 +50,7 @@ La clasificación y evidencia local siguen asociadas a `financial_movements`; no
 | VI. Financial Lifecycles Preserve History | PASS | Inactivar o personalizar una categoría no rompe las referencias históricas; ninguna operación borra movimientos. |
 | VII. Native Android and Boundaries | PASS | Reglas de jerarquía, cupo, elegibilidad y conflictos se mantienen en dominio Kotlin puro; Room/Supabase/UI permanecen adaptadores. |
 | VIII. Specification-Driven | PASS | El alcance S5 traza HU-16/HU-17 y FR-026 a FR-039. HU-14/HU-15 conservan su trazabilidad S2; HU-50 sigue excluida hasta S8. |
-| IX. Quality Is Correctness | PASS | Incluye pruebas de dominio, Room v3->v4, sincronización, RLS, migración, accesibilidad y dispositivo real. |
+| IX. Quality Is Correctness | PASS | Incluye pruebas de dominio, Room v18->v19, sincronización, RLS, migración, accesibilidad y dispositivo real. |
 | X. Product Boundary | PASS | No incorpora etiquetas, IA, pagos, Open Banking ni nuevas clases de movimiento. |
 
 **Pre-research result**: PASS.
@@ -64,7 +64,7 @@ La clasificación y evidencia local siguen asociadas a `financial_movements`; no
 | RLS, catálogo y límites de acceso | PASS CON GATE | Los comandos S5 derivan owner de `auth.uid()`; los cambios no mutan `merchant_services` y la migración debe cerrar los huecos de preferencias/RPC antes de release. |
 | Migraciones y aislamiento | GATE PENDIENTE | Room actual está en v18 y local Supabase alcanza migraciones de octubre post-S4; Supabase live está detrás y debe alinearse por release antes de validar integración S5. |
 | UX, filtros y accesibilidad | PASS | [ui-contract.md](contracts/ui-contract.md) mantiene la búsqueda directa, añade administración de alias y elección de categoría elegible, y comunica revisión/conflicto sin depender solo del color. |
-| Verificación integral | PENDIENTE DE IMPLEMENTACIÓN | [quickstart.md](quickstart.md) define pruebas de dominio, Room v18->v19, worker, Compose, PostgreSQL/RLS y evidencia de release; ninguna se ejecutó durante este refinamiento. |
+| Verificación integral | PARCIALMENTE COMPLETA | [quickstart.md](quickstart.md) registra 471 pruebas unitarias, pruebas instrumentadas dirigidas, migración local limpia y 39 pruebas pgTAP; advisors, prueba de usabilidad cronometrada, suite instrumentada completa y revisión remota siguen pendientes. |
 
 ## Project Structure
 
@@ -92,19 +92,19 @@ app/src/main/java/com/kipu/app/
 ├── feature/categories/
 │   ├── domain/{model,CategoriesRepository.kt,usecase/}
 │   ├── data/
-│   │   ├── local/{CategoryEntity.kt,CategoryPresentationEntity.kt,MerchantCatalogEntity.kt,MerchantAliasRuleEntity.kt,MerchantCategoryPreferenceEntity.kt,CategoryConflictEntity.kt,CategoryDao.kt,MerchantCatalogDao.kt}
-│   │   ├── remote/{CategoriesApi.kt,CategoryDtos.kt,MerchantRuleDtos.kt}
+│   │   ├── local/{CategoryEntity.kt,CategoryPresentationEntity.kt,MerchantCatalogEntity.kt,MerchantRuleEntities.kt,CategoryConflictEntity.kt,CategoryDao.kt,MerchantCatalogDao.kt}
+│   │   ├── remote/{CategoriesApi.kt,CategoryDtos.kt}
 │   │   ├── sync/{CategorySyncScheduler.kt,SyncCategoryCommandsWorker.kt}
 │   │   └── OfflineFirstCategoriesRepository.kt
 │   ├── di/CategoriesModule.kt
-│   └── presentation/{categories,components,merchant-rules}/
+│   └── presentation/{categories,components,merchantrules}/
 ├── feature/accounts/data/local/{FinancialMovementEntity.kt,FinancialMovementDao.kt,InstrumentSyncOutboxEntity.kt}
 ├── navigation/{KipuNavHost.kt,SettingsNavigation.kt}
 └── feature/settings/presentation/ProfileSettingsScreen.kt
 
 app/src/test/java/com/kipu/app/{core,feature/categories}/
 app/src/androidTest/java/com/kipu/app/{core/database,feature/categories,feature/accounts}/
-app/schemas/com.kipu.app.core.database.KipuDatabase/19.json   # destino planificado S5; base actual v18
+app/schemas/com.kipu.app.core.database.KipuDatabase/19.json   # Room v19 exportado para S5
 
 supabase/
 ├── migrations/                         # migración S5 forward-only, tras alinear el proyecto live
@@ -113,7 +113,7 @@ supabase/
 
 **Structure Decision**: Se conserva el módulo Android único y la vertical `feature/categories` con frontera `presentation -> domain <- data`. `feature/accounts` conserva el ownership de los movimientos y expone una mutación de clasificación atómica; categorías no duplica el ledger ni crea un editor financiero nuevo.
 
-El árbol anterior refleja la base implementada hasta S4 y HU-14/HU-15; los archivos S5 son destinos planificados, no evidencia de implementación existente. La migración Room de este incremento parte de v18 y exporta v19. La historia de S2 que menciona Room v3→v4 y la matriz arquitectónica que lista HU-14..17 en S2 se conservan como antecedentes de planificación; para este incremento prevalece la asignación HU-16/HU-17 a S5 del backlog vigente.
+Este árbol refleja el código resultante de la implementación S5. La migración Room parte de v18 y exporta v19. La historia de S2 que menciona Room v3→v4 y la matriz arquitectónica que lista HU-14..17 en S2 se conservan como antecedentes; para este incremento prevalece la asignación HU-16/HU-17 a S5 del backlog vigente.
 
 ## Architecture and Implementation Strategy
 
@@ -128,7 +128,7 @@ El árbol anterior refleja la base implementada hasta S4 y HU-14/HU-15; los arch
 - Crear toda regla de alias nueva requiere Premium y confirmación manual del comercio canónico. Evaluar una señal requiere además entitlement y consentimiento vigentes; si falta cualquiera, no se procesa la señal y siguen disponibles la búsqueda y el registro manual.
 - Una señal evaluable debe llegar como `CaptureCandidate` con procedencia y estado de revisión definidos por la capacidad de captura aprobada. S5 no agrega ese pipeline. La creación offline Premium debe depender de entitlement verificado o lease firmado/acotado, nunca de un booleano local editable; texto original y contenido de señal no van a logs ni telemetría.
 - Alias sin coincidencia conserva el texto fuente separado para revisión. Si reglas elegibles con el mismo texto normalizado resuelven a comercios canónicos distintos, se solicita una decisión humana, sin desempate automático por prioridad.
-- `MerchantCategoryPreference` es un agregado privado distinto de `merchant_rules.category_id` y `CategoryPresentation`. No tiene puerta Premium independiente; solo prevalece sobre sugerencias generales para operaciones futuras cuando comercio, categoría y tipo son compatibles y la categoría está activa y habilitada por plan.
+- `MerchantAliasRule` y `MerchantCategoryPreference` se almacenan en relaciones privadas separadas (`merchant_alias_rules` y `merchant_category_preferences`); ambas son distintas de `merchant_rules.category_id` y `CategoryPresentation`. La preferencia no tiene puerta Premium independiente; solo prevalece sobre sugerencias generales para operaciones futuras cuando comercio, categoría y tipo son compatibles y la categoría está activa y habilitada por plan.
 - Cambiar o quitar una regla o preferencia solo afecta sugerencias futuras; nunca cambia movimientos confirmados.
 
 ### Persistence and synchronization
@@ -141,9 +141,9 @@ El árbol anterior refleja la base implementada hasta S4 y HU-14/HU-15; los arch
 
 ### Remote boundary
 
-- La base ya posee `merchant_rules`, `merchant_services`, `transactions.merchant_raw_text`, categorías privadas y RPCs de categorías; eso es inventario parcial, no evidencia de que las reglas actuales satisfagan HU-16 ni de que HU-17 exista. El plan usa `merchant_rules` como persistencia de reglas alias personales tras validar/ajustar sus restricciones y comandos; agrega una relación separada para preferencias. Una migración SQL forward-only debe agregar los contratos RPC/idempotencia necesarios y validar entitlement/consentimiento del lado de confianza. `category_presentations` continúa limitado a nombre/icono/color.
+- El inventario remoto observado antes de S5 ya poseía `merchant_rules`, `merchant_services`, `transactions.merchant_raw_text`, categorías privadas y RPCs de categorías; esto era parcial y no probaba que HU-16/HU-17 estuvieran implementadas. Las migraciones S5 locales agregan las tablas privadas dedicadas `merchant_alias_rules` y `merchant_category_preferences`, conservan el catálogo de solo lectura y agregan RPCs versionados con recibos. `category_presentations` continúa limitado a nombre/icono/color.
 - Las operaciones de categorías y clasificación usan RPCs tipadas que derivan el usuario de `auth.uid()`, validan jerarquía/cupo/revisión y escriben cambio+recibo en una única transacción.
-- Los nuevos comandos de alias/preferencia derivan el dueño de `auth.uid()`, validan referencias activas/elegibles, revisiones, entitlement Premium verificado (no un booleano de cliente) para crear reglas y recibos idempotentes. La operación offline requiere una lease verificable que no exceda el entitlement; señal requiere además consentimiento vigente. No ejecutan DML sobre el catálogo. Soft delete debe ser a través del comando autorizado porque el inventario live consultado no mostró policy DELETE para `merchant_rules`/`merchant_services`/`categories`.
+- Los nuevos comandos de alias/preferencia derivan el dueño de `auth.uid()`, validan referencias activas/elegibles, revisiones, entitlement Premium verificado para crear alias en el servidor y recibos idempotentes. El cliente puede aceptar un comando offline con una lease Premium firmada y acotada; al sincronizar, el servidor vuelve a validar la proyección de facturación y puede rechazar una lease que ya no cumpla su regla de entitlement vigente. La evaluación de señal además exige consentimiento vigente. No ejecutan DML sobre el catálogo. Soft delete se realiza mediante RPC autorizada; las tablas privadas exponen SELECT owner-scoped y fuerzan RLS.
 - Supabase live va detrás de las migraciones locales S4/Octubre. Alinear/aplicar las migraciones pendientes, revisar RLS/grants y confirmar el esquema de destino es un gate antes de integración o release; este plan no autoriza cambios directos en el proyecto remoto.
 
 ### UI and navigation
@@ -163,7 +163,7 @@ El árbol anterior refleja la base implementada hasta S4 y HU-14/HU-15; los arch
 - PostgreSQL: migraciones sobre el head live alineado, restricciones, RLS/grants, catálogo read-only, RPC de alias/preferencia, Premium/consentimiento, recibos, cross-user y datos existentes.
 - Compose/dispositivo: navegación, TalkBack, objetivo táctil de 48dp, escalado al 200%, offline/reinicio/reconexión y estados límite/vacío/conflicto.
 
-Las verificaciones enumeradas son trabajo futuro de implementación. No se ejecutaron durante este refinamiento. No se debe habilitar el gate de integración/release Supabase hasta reconciliar el historial remoto atrasado con las migraciones versionadas locales.
+Las verificaciones ejecutadas y pendientes están registradas en [quickstart.md](quickstart.md). Las pruebas locales no habilitan integración o release Supabase: primero se debe reconciliar el historial remoto atrasado con las migraciones versionadas locales y revisar RLS/grants efectivos.
 
 ## Complexity Tracking
 

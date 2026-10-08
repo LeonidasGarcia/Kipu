@@ -53,10 +53,35 @@ paths:
       responses:
         '200': { description: Conflict resolved }
         '409': { description: Conflict already resolved or stale choice }
+  /rpc/preserve_merchant_source_text_v1:
+    post:
+      summary: Stores immutable source merchant text for an owned movement.
+      description: Stores the exact, non-empty source string only when the field is empty. A different existing value is rejected. The command is idempotent and never stores normalized alias text in this field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [p_payload]
+              properties:
+                p_payload:
+                  type: object
+                  required: [operation_id, payload_hash, movement_id, merchant_raw_text]
+                  properties:
+                    operation_id: { type: string, format: uuid }
+                    payload_hash: { type: string, minLength: 1 }
+                    movement_id: { type: string, format: uuid }
+                    merchant_raw_text: { type: string, minLength: 1 }
+      responses:
+        '200': { description: Applied or duplicate command receipt }
+        '400': { description: Empty source text or invalid command }
+        '403': { description: Movement owner mismatch }
+        '409': { description: Source text is already set to a different value }
   /rpc/upsert_merchant_alias_rule_v1:
     post:
-      summary: Planned S5 command; creates or revises an owner-scoped exact-match alias rule.
-      description: New-rule creation requires server-verified Premium entitlement or a verifiable bounded offline lease. Evaluation is local only after signal entitlement and consent are verified. The existing merchant_rules table alone is not evidence this command is implemented.
+      summary: Creates or revises an owner-scoped exact-match alias rule.
+      description: The client requires current verified Premium entitlement or a bounded signed offline lease before accepting a new rule locally. On sync, the server independently requires an active verified Premium billing projection for new-rule creation. Evaluation is local only after signal entitlement and consent are verified.
       requestBody:
         required: true
         content:
@@ -75,7 +100,6 @@ paths:
                     expected_revision: { type: [integer, 'null'], minimum: 0 }
                     normalized_pattern: { type: string, minLength: 1, maxLength: 160 }
                     merchant_id: { type: string, format: uuid }
-                    signed_entitlement_lease: { type: [string, 'null'] }
       responses:
         '200': { description: Applied or duplicate command receipt }
         '400': { description: Empty pattern or missing/inactive canonical merchant }
@@ -83,7 +107,7 @@ paths:
         '409': { description: Stale revision or incompatible rule conflict }
   /rpc/delete_merchant_alias_rule_v1:
     post:
-      summary: Planned S5 owner-scoped soft deletion of an alias rule.
+      summary: Soft deletes an owner-scoped alias rule.
       description: Writes a tombstone through an authorized command; does not require direct table DELETE.
       requestBody:
         required: true
@@ -107,8 +131,8 @@ paths:
         '409': { description: Stale revision }
   /rpc/upsert_merchant_category_preference_v1:
     post:
-      summary: Planned S5 command; creates or revises one personal category preference for an identified merchant.
-      description: No independent Premium gate. Server validates owner, category/merchant references, movement-type compatibility and category eligibility. Preference applies to future suggestions only.
+      summary: Creates or revises one personal category preference for an identified merchant.
+      description: No independent Premium gate. The server validates owner, category and merchant references, active-root and plan eligibility. Movement-type compatibility is checked when resolving a preference for a future operation. Preference never changes confirmed history.
       requestBody:
         required: true
         content:
@@ -134,7 +158,7 @@ paths:
         '409': { description: Stale revision }
   /rpc/delete_merchant_category_preference_v1:
     post:
-      summary: Planned S5 owner-scoped, idempotent soft deletion of a personal category preference.
+      summary: Soft deletes an owner-scoped personal category preference.
       requestBody:
         required: true
         content:
