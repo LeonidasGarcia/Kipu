@@ -116,8 +116,8 @@ Both feature directories contain spec, plan, tasks, research, data-model and con
 - The additive S5 migration adds internal forced-RLS event receipts and reconciliation jobs, per-token leases, server-only RPCs, atomic RTDN and restore persistence, and a bounded no-token sweep. Restore candidates use the same authenticated `verify-purchase` flow; the Kipu owner still comes from Supabase Auth. An owner conflict leaves the purchase and waiting work item attached to the existing owner.
 - Purchase tokens remain request-scoped in memory. The database receives only SHA-256 token hashes and allowlisted billing-event fields. The restore marker is a client flow hint and cannot set or transfer the owner.
 - `./gradlew testDebugUnitTest` passed: **452 tests, 0 failures**.
-- `deno test --allow-env supabase/functions/verify-purchase supabase/functions/play-rtdn supabase/functions/reconcile-billing` passed: **35 tests, 0 failures**.
-- The HU-55 pgTAP files passed: **61 assertions** across `billing_rtdn_reconciliation_test.sql` and `billing_reconciliation_sweep_test.sql`, including OIDC/receipt contract checks, atomic restore resume, no-token waiting, owner conflict, RLS/grants, privacy, lease recovery, and no entitlement mutation from the scheduler.
+- `deno test --allow-env supabase/functions/verify-purchase supabase/functions/play-rtdn supabase/functions/reconcile-billing` passed: **36 tests, 0 failures**. The added ordering regression delivers a newer RTDN first and an older event afterward, then verifies that each distinct message re-queries current Play state.
+- The HU-55 pgTAP files passed: **72 assertions** across `billing_rtdn_reconciliation_test.sql` and `billing_reconciliation_sweep_test.sql`, including OIDC/receipt contract checks, atomic restore resume, no-token waiting, owner conflict, RLS/grants, privacy, lease recovery, out-of-order retry after lease release, and no entitlement mutation from the scheduler.
 - The S5 migration was manually applied to the local Docker database for these pgTAP runs. `git diff --check` passed.
 
 ### Remaining gates

@@ -91,7 +91,7 @@ T094 source, local database, Edge boundary, and unsigned release APK review is c
 - The authenticated restore path supplies current device tokens to the same verifier. Supabase Auth remains the owner source; the client restore marker only selects an atomic server persistence path. A token bound to another account returns a conflict without reassigning its purchase or binding a waiting receipt/job to the caller.
 - Internal receipt/job tables enable and force RLS, deny client table access, use server-executor policies, and expose only narrowly granted service-role functions. The migration validates existing S3 schema and global token-hash uniqueness, and fails visibly on duplicate hashes or conflicting index definitions.
 - `reconcile-billing` requires a dedicated scheduler secret with a minimum length, limits the batch size, returns generic failures, and only reclaims leases/classifies hash-only jobs. It imports no Google Play provider and makes no provider call or entitlement change.
-- Local checks passed: **35 Deno tests**, **61 pgTAP assertions**, and **452 Android JVM tests**. The database assertions include restore resume and owner-conflict behavior.
+- Local checks passed: **36 Deno tests**, **72 pgTAP assertions**, and **452 Android JVM tests**. The new RTDN ordering cases verify that an older event delivered after a newer one is retried after the active lease and persists the current provider result; restore resume and owner-conflict behavior also remain covered.
 
 ### Remote baseline and release gates
 
