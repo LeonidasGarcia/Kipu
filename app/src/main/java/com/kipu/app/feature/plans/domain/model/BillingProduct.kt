@@ -42,6 +42,7 @@ class EphemeralPurchaseToken internal constructor(private val value: String) {
 data class BillingPurchaseRequest(
     val productId: String,
     val purchaseToken: EphemeralPurchaseToken,
+    val restoreCandidate: Boolean = false,
 ) {
     init { require(productId.isNotBlank()) }
     override fun toString(): String = "BillingPurchaseRequest(productId=$productId, purchaseToken=[REDACTED])"

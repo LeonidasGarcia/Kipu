@@ -33,6 +33,14 @@ verify_jwt = true
 enabled = true
 verify_jwt = true
 
+[functions.play-rtdn]
+enabled = true
+verify_jwt = false
+
+[functions.reconcile-billing]
+enabled = true
+verify_jwt = false
+
 [functions.auth-access]
 enabled = true
 verify_jwt = false

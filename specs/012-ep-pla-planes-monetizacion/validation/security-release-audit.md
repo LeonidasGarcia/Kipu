@@ -53,7 +53,7 @@ T094 source, local database, Edge boundary, and unsigned release APK review is c
 
 ## Sprint 4 Offline Entitlement Security Review — 2026-10-02
 
-**Status**: Signed-grant enforcement and local database checks pass. Android device execution, release signing-key provisioning, and external deployment remain release gates.
+**Status**: Signed-grant enforcement and local database checks pass. Android device integration is now verified; release signing-key provisioning and external deployment remain release gates.
 
 ### Verified in source and local checks
 
@@ -63,11 +63,40 @@ T094 source, local database, Edge boundary, and unsigned release APK review is c
 - Category/instrument quota checks and the EP-MOV advanced-filter gate consume the shared evaluator. Free registration, basic history search/type/date filters, and local outbox paths remain available after Premium denial; over-limit resources and financial history are retained.
 - Room v17→18 is additive. Schema 18 is generated, a v17 row-preservation migration test is present and compiles, and cloud-backup/device-transfer rules continue to exclude the complete `kipu.db` files.
 - The local Supabase migration is applied and recorded as `20261003042759`. The new `entitlement_lease_test.sql` passes 8 pgTAP assertions: `authenticated` can execute `get_feature_access()` while `anon` and `PUBLIC` cannot; the function keeps SECURITY DEFINER, owner-from-`auth.uid()`, and an empty `search_path`; its legacy offline field is null and it has no rolling 72-hour calculation. A transaction-scoped function smoke test also passed and rolled back temporary fixture objects.
-- Automated evidence: 371 Android JVM tests pass; the full Android instrumented-test source set compiles; 17 Deno verify-purchase tests pass; `git diff --check` passes.
+- Automated evidence at the original review: 371 Android JVM tests pass; the full Android instrumented-test source set compiles; 17 Deno verify-purchase tests pass; `git diff --check` passes.
+
+### Follow-up validation — 2026-10-08
+
+- `MovementRoomMigrationTest`: **7/7 passed** on Samsung SM-A165M / Android 16, including the v17→18 preservation case for financial rows, outbox state, and the legacy entitlement cache.
+- `MovementHistoryAccessIntegrationTest`: **6/6 passed** on the same device, including expiry, offline concession, Free fallback, and reconnect behavior.
+- `entitlement_lease_test.sql`: **8 pgTAP assertions passed** against the local PostgreSQL migration; the transaction-scoped RPC smoke test rolled back its fixture objects. Backup/device-transfer exclusions for `kipu.db`, WAL, and SHM remain configured in both Android backup rule files.
+- T112 and T113 are complete. The full local migration-history replay remains blocked before this additive migration by the pre-existing missing `public.recurrence_occurrences` dependency; this limitation does not change the targeted migration test result.
 
 ### Environment and release limits
 
 - The local Postgres container is missing the pre-existing `public.v_feature_access` view and `public.user_devices` relation even though the current production database has the view. The migration does not create or alter those baseline objects. Its local behavior was smoke-tested with transaction-only fixtures; no fixture objects or rows were retained.
-- No emulator, AVD, or attached Android device is available, so the new Room migration and movement access instrumented tests were compiled but not executed.
+- The connected-device tests above use in-memory/temporary test databases and synthetic fixtures; they do not verify a real Play purchase or production signing key.
 - The production ES256 private key and matching Android public verification configuration have not been provisioned. Until the approved environment supplies both sides, new offline Premium grants are unavailable and the safe behavior is Kipu Free after any already-valid lease expires.
 - No remote Supabase migration, Edge deployment, release signing, or publication was performed.
+
+
+## Sprint 5 RTDN and reconciliation security review — 2026-10-08
+
+**Status**: Isolated source and local automated checks passed. Remote configuration and non-production Play/Pub/Sub acceptance remain open release gates.
+
+### Verified in source and local checks
+
+- `play-rtdn` validates the Google OIDC JWT signature using Google JWKS and checks issuer, audience, service-account email, email verification, and time claims before decoding the Pub/Sub envelope. Package identity and supported notification types are validated before persistence.
+- RTDN delivery identity and purchase tokens are hashed. The Edge function passes a current token only in memory to the shared Google Play verifier. Receipts, jobs, sanitized billing events, logs, and RPC bodies do not contain the raw purchase token or raw notification payload.
+- The authenticated restore path supplies current device tokens to the same verifier. Supabase Auth remains the owner source; the client restore marker only selects an atomic server persistence path. A token bound to another account returns a conflict without reassigning its purchase or binding a waiting receipt/job to the caller.
+- Internal receipt/job tables enable and force RLS, deny client table access, use server-executor policies, and expose only narrowly granted service-role functions. The migration validates existing S3 schema and global token-hash uniqueness, and fails visibly on duplicate hashes or conflicting index definitions.
+- `reconcile-billing` requires a dedicated scheduler secret with a minimum length, limits the batch size, returns generic failures, and only reclaims leases/classifies hash-only jobs. It imports no Google Play provider and makes no provider call or entitlement change.
+- Local checks passed: **36 Deno tests**, **72 pgTAP assertions**, and **452 Android JVM tests**. The new RTDN ordering cases verify that an older event delivered after a newer one is retried after the active lease and persists the current provider result; restore resume and owner-conflict behavior also remain covered.
+
+### Remote baseline and release gates
+
+- P30 §4.3–4.4 and related flow rules were aligned in the owning `KipuApp` documentation working tree on 2026-10-08. The change specifies request-scoped in-memory tokens, hash-only waiting with no provider call or entitlement mutation, and no extension of the last verified term. It is outside this feature branch and remains uncommitted for review in its owning repository.
+- Read-only remote Supabase inspection on 2026-10-08 found the database verifier RPC `public.verify_play_purchase(jsonb)` and `public.v_feature_access` projection. The Android route `/functions/v1/verify-purchase/billing/verify` is not available remotely: only `auth-access` and `plans` Edge functions are active, and `plans` does not route that path. The remote `public.get_feature_access()` also still computes `offline_valid_until` as `now() + interval '72 hours'`; migration `20261003042759_sprint_4_disable_rolling_feature_access_lease.sql` is absent from remote history. The database objects alone therefore do not establish an end-to-end usable HU-54 verifier or the current HU-59 lease contract for this client.
+- The latest remote migration is `20260930035146`; no S5 migration, `play-rtdn`, or `reconcile-billing` function is deployed. `pg_cron` and `pg_net` are absent and `cron.job` is unavailable. Vault is installed, but no billing/play/reconciliation scheduler secret was found. No remote write or deployment was made.
+- The local full migration reset fails at the pre-existing missing `public.recurrence_occurrences` dependency. The S5 migration was manually applied only to the local Docker database for targeted pgTAP runs; its migration-history replay is not certified.
+- No non-production Google Play verification, Pub/Sub push, Vault read, Cron invocation, or deployed-function acceptance was performed. `T118` remains open until the live verifier route and deployment baseline are usable/reconciled; `T128` remains open until non-production integration and deployed function/scheduler evidence are available.

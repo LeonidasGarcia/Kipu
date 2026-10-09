@@ -46,6 +46,14 @@ Deno.test("caller credentials stay on auth/catalog reads and server key stays on
         effective_expires_at: "2026-10-26T12:00:00.000Z",
       }]);
     }
+    if (url.endsWith("/persist_verified_restored_billing_purchase")) {
+      return Response.json([{
+        result: "VERIFIED",
+        purchase_id: "purchase-id",
+        effective_premium: true,
+        effective_expires_at: "2026-10-26T12:00:00.000Z",
+      }]);
+    }
     if (url.endsWith("/claim_billing_purchase_acknowledgement")) {
       return Response.json(true);
     }
@@ -82,6 +90,19 @@ Deno.test("caller credentials stay on auth/catalog reads and server key stays on
     expiresAt: "2026-10-26T12:00:00.000Z",
     sanitizedPayload: { provider: "GOOGLE_PLAY", purchaseState: "PURCHASED" },
   });
+  const restored = await store.persistPurchase({
+    userId: userId!,
+    storeProductId: "kipu_pro_monthly",
+    purchaseTokenHash: "b".repeat(64),
+    orderId: null,
+    purchaseState: "PURCHASED",
+    entitlementState: "ACTIVE",
+    acknowledgementState: "PENDING",
+    startsAt: "2026-09-26T12:00:00.000Z",
+    expiresAt: "2026-10-26T12:00:00.000Z",
+    sanitizedPayload: { provider: "GOOGLE_PLAY", purchaseState: "PURCHASED" },
+    restoreCandidate: true,
+  });
 
   assert(
     userId === "73000000-0000-4000-8000-000000000001",
@@ -95,6 +116,7 @@ Deno.test("caller credentials stay on auth/catalog reads and server key stays on
     persisted.effectivePremium && persisted.effectiveExpiresAt !== null,
     "server writer result is returned to the handler",
   );
+  assert(restored.effectivePremium, "restored purchase uses the restore writer result");
   const userReads = requests.filter((request) =>
     request.url.includes("/auth/v1/user") ||
     request.url.includes("/billing_products?")
@@ -114,6 +136,9 @@ Deno.test("caller credentials stay on auth/catalog reads and server key stays on
   const rpc = requests.find((request) =>
     request.url.endsWith("/persist_verified_billing_purchase")
   );
+  const restoreRpc = requests.find((request) =>
+    request.url.endsWith("/persist_verified_restored_billing_purchase")
+  );
   assert(
     rpc?.headers.get("authorization") === "Bearer server-only-service-key",
     "only server RPCs use the service role credential",
@@ -122,6 +147,11 @@ Deno.test("caller credentials stay on auth/catalog reads and server key stays on
     !rpc?.body.includes("purchaseToken"),
     "RPC persists no raw provider token",
   );
+  assert(
+    restoreRpc?.headers.get("authorization") === "Bearer server-only-service-key",
+    "restore reconciliation uses only the server RPC credential",
+  );
+  assert(!restoreRpc?.body.includes("purchaseToken"), "restore RPC receives only the token hash");
   assert(
     !requests.some((request) =>
       request.headers.get("authorization") ===

@@ -38,8 +38,9 @@ private data class VerifyPurchaseRequestDto(
     val productId: String,
     val purchaseToken: String,
     val installationPublicKey: String? = null,
+    val restoreCandidate: Boolean = false,
 ) {
-    override fun toString(): String = "VerifyPurchaseRequestDto(productId=$productId, purchaseToken=[REDACTED], installationPublicKey=${installationPublicKey != null})"
+    override fun toString(): String = "VerifyPurchaseRequestDto(productId=$productId, purchaseToken=[REDACTED], installationPublicKey=${installationPublicKey != null}, restoreCandidate=$restoreCandidate)"
 }
 
 @Serializable
@@ -101,7 +102,12 @@ class VerifyPurchaseApi(
                 bearerAuth(session.accessToken)
                 header("Content-Type", ContentType.Application.Json.toString())
                 accept(ContentType.Application.Json)
-                setBody(VerifyPurchaseRequestDto(request.productId, request.purchaseToken.forVerification(), installationPublicKey))
+                setBody(VerifyPurchaseRequestDto(
+                    request.productId,
+                    request.purchaseToken.forVerification(),
+                    installationPublicKey,
+                    request.restoreCandidate,
+                ))
             }
             val body = response.body<VerifyPurchaseResponseDto>()
             if (response.status == HttpStatusCode.Conflict || body.code == "TOKEN_ACCOUNT_CONFLICT") {

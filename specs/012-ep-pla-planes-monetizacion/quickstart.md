@@ -190,3 +190,17 @@ Confirm:
 - Migration evidence is attached.
 - Production/release contains no fake entitlement, test purchaser, development billing state, server secret or claim of verified Play Billing.
 - The operational demo covers Free, informative Premium intent, offline navigation and later synchronization.
+
+## 9. Sprint 5 — HU-55 RTDN, restore, and no-token recovery
+
+These are future acceptance scenarios. Do not apply migrations or enable the push subscription until the live Supabase baseline and deployment gates in the plan are reconciled.
+
+1. **Authenticated RTDN**: Deliver a valid non-production Pub/Sub message with the configured Google OIDC issuer, service-account identity, exact audience, and a purchase token already associated with the test account. Confirm server verification uses the current Google Play result and only the request-scoped token.
+2. **Reject invalid delivery**: Repeat with invalid JWT signature/claims, malformed envelope, wrong application package, and unsupported notification type. Confirm there is no purchase, receipt terminalization, acknowledgement, or entitlement mutation; any security log contains only a safe reason code.
+3. **Duplicate and order**: Redeliver the same Pub/Sub `messageId` and then deliver a distinct older RTDN event after a newer one. Confirm the duplicate returns the canonical receipt without repeating effects, while the distinct old event rechecks current Play state and cannot roll back the projection.
+4. **Restore on another device**: Sign into the same Kipu account on a second test installation, restore a current Play-owned candidate, and verify it through the existing authenticated `verify-purchase` path. Confirm no new purchase is opened and no owner is changed.
+5. **Owner conflict**: Restore a token already associated with another Kipu account. Confirm rejection without reassignment, grant issuance, or change to the original owner's purchase.
+6. **Retryable provider/database failure**: Fail the current provider or persistence attempt. Confirm `RETRYABLE`, Pub/Sub redelivery or explicit restore retry, no raw-token persistence, and no Free downgrade or access extension.
+7. **Lost event / hash only**: Start with a known purchase hash and no RTDN or restore token. Run the scheduled sweep. Confirm `WAITING_FOR_TOKEN`/`RETRYABLE`, no Google Play call, no grant, extension, or revocation based on assumed absence; any previously verified expiry still applies and waiting does not extend access beyond HU-56/HU-59 validity. Then supply a fresh token through RTDN or restore and confirm one idempotent verification.
+8. **Privacy and least privilege**: Inspect tables, function logs, retry metadata, receipts, responses, RLS, and grants. Confirm no raw purchase token, OIDC JWT, unfiltered RTDN body, or client billing DML is present or permitted.
+9. **Live readiness**: Compare remote objects and migration history with the local migration sequence (remote history currently reported only through 2026-09-30); verify deployed functions and Cron extensions/secrets without applying a remote change in this validation step. Record any P30 §4.3–4.4 wording alignment before release acceptance.

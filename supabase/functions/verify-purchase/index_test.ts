@@ -58,6 +58,7 @@ function harness(options: {
 } = {}) {
   const rows = new Map<string, { owner: string; id: string; state: string }>();
   const eventPayloads: Record<string, unknown>[] = [];
+  const persistedInputs: import("./index.ts").PersistInput[] = [];
   const calls = {
     verify: 0,
     persist: 0,
@@ -92,6 +93,7 @@ function harness(options: {
     },
     persistPurchase: async (input) => {
       calls.persist++;
+      persistedInputs.push(input);
       eventPayloads.push(input.sanitizedPayload);
       const existing = rows.get(input.purchaseTokenHash);
       if (existing && existing.owner !== input.userId) {
@@ -152,8 +154,21 @@ function harness(options: {
     calls,
     rows,
     eventPayloads,
+    persistedInputs,
   };
 }
+
+Deno.test("restore verification marks its request for atomic pending RTDN resumption", async () => {
+  const h = harness();
+  const response = await h.handler(request({
+    productId: monthly.storeProductId,
+    purchaseToken: "restore-token",
+    restoreCandidate: true,
+  }));
+  assert(response.status === 200, "restore candidate uses the authenticated verifier");
+  assert(h.persistedInputs.length > 0, "purchase persistence is called");
+  assert(h.persistedInputs.every((input) => input.restoreCandidate === true), "restore marker reaches every atomic persistence write");
+});
 
 Deno.test("requires a verified caller before product lookup or provider access", async () => {
   const h = harness({ owner: null });

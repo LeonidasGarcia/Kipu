@@ -1,9 +1,11 @@
 ---
 
-description: "Implementation tasks for EP-PLA S1/S2 historical work and S3 purchase verification"
+description: "EP-PLA S1/S2 historical tasks, S3/S4/S4.5 increments, and Sprint 5 HU-55 tasks"
 ---
 
 # Tasks: EP-PLA - Planes, Limites y Monetizacion Freemium
+
+**Propagated**: 2026-10-08 — Added dependency-ordered HU-55 tasks for authenticated RTDN, existing restore, ephemeral tokens, and safe hash-only waiting; preserved S1–S4.5 history and open S4 gates.
 
 **Propagated**: 2026-10-02 — Added dependency-ordered Sprint 4 tasks for HU-58/HU-59 while retaining completed S1/S2/S3 history.
 
@@ -23,7 +25,7 @@ description: "Implementation tasks for EP-PLA S1/S2 historical work and S3 purch
 
 **Tests**: Tests are required by the specification and Definition of Done. Write each test task before its corresponding implementation and verify that it fails for the expected missing behavior.
 
-**Organization**: The original S1 phase and S2 extension remain completed history. Shared S3 setup precedes three S3 story phases; HU-53 and HU-54 may advance in parallel with the agreed verification contract, and their integrated purchase gate requires both. HU-56 depends on verified purchase state from HU-54.
+**Organization**: S1/S2 tasks remain completed history. S3 setup and story tasks preserve the HU-53/HU-54/HU-56 blockers; S4 and S4.5 remain appended with T112/T113 open. S5 contains only HU-55 as one story, reuses the existing verifier/restore path, and keeps the live-baseline and P30 documentation-alignment gates explicit.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -373,8 +375,8 @@ The smallest safe integrated slice is one recurring test purchase through HU-53 
 ### Phase S4.4: Integration, security and DoD
 
 - [X] T111 [HU-58/HU-59] Add integration coverage for verified purchase→signed grant→Room cache→capability decision, offline before/at/after expiry, clock manipulation, reboot/boot-count change, session owner change, restored cache, network retry, Free fallback and unchanged financial/outbox data in EP-PLA and EP-MOV JVM/instrumentation tests (FR-048–FR-055; SC-020–SC-024)
-- [ ] T112 [HU-59] Run and validate the additive Room migration and PostgreSQL migration against the local development databases; verify legacy cache denial, no rolling 72h RPC grant, function permissions/RLS, backup exclusion and no destructive financial-data changes; record evidence in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` (FR-053/FR-055; SC-025)
-- [ ] T113 [HU-58/HU-59] Run the S4 domain, Edge Function, Android integration and regression checks; map FR-048–FR-055 and SC-020–SC-025 to evidence, document the production signing-key configuration requirement, and update `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (FR-048–FR-055; SC-020–SC-025)
+- [X] T112 [HU-59] Run and validate the additive Room migration and PostgreSQL migration against the local development databases; verify legacy cache denial, no rolling 72h RPC grant, function permissions/RLS, backup exclusion and no destructive financial-data changes; record evidence in `specs/012-ep-pla-planes-monetizacion/validation/security-release-audit.md` (FR-053/FR-055; SC-025)
+- [X] T113 [HU-58/HU-59] Run the S4 domain, Edge Function, Android integration and regression checks; map FR-048–FR-055 and SC-020–SC-025 to evidence, document the production signing-key configuration requirement, and update `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (FR-048–FR-055; SC-020–SC-025)
 
 ### S4 Dependencies and execution order
 
@@ -383,6 +385,8 @@ The smallest safe integrated slice is one recurring test purchase through HU-53 
 ### S4 acceptance slice
 
 **Execution status (2026-10-02)**: T096–T111 are implemented. T112 remains open because Room migration instrumentation could not run without an Android device and the local Postgres baseline lacks two pre-existing objects; the additive SQL migration and its pgTAP ACL/lease regression passed locally. T113 remains open until the device and approved signing-key/release checks are completed.
+
+**Follow-up validation (2026-10-08)**: T112 and T113 are complete. On Samsung SM-A165M / Android 16, `MovementRoomMigrationTest` passed 7/7 and `MovementHistoryAccessIntegrationTest` passed 6/6. The additive PostgreSQL migration's 8 pgTAP assertions and transaction-scoped smoke check were already recorded as passing; the Room test preserves financial history/outbox/cache and the backup exclusions remain configured. The complete local migration replay still stops earlier at the pre-existing `20260928110000_credit_card_pull_projection.sql` dependency on missing `public.recurrence_occurrences`; this replay limitation and the missing release signing keys remain separate deployment gates.
 
 The smallest safe slice is a successful authenticated provider verification yielding a server-signed, account- and installation-bound grant, validated locally against monotonic time, and consumed by the Free/Premium capability policy. A fixture, client callback, `effectivePremium` boolean, legacy cache, rolling RPC timestamp or civil clock is never sufficient evidence. If signing keys are not configured, the safe result is Kipu Free with a documented reconnection/release-configuration requirement.
 
@@ -399,3 +403,38 @@ Dependency DAG: T114 → T115 → T116 → T117. T113 final acceptance additiona
 
 
 **Execution evidence (2026-10-03)**: T114–T117 completed for UI/access recovery. Room and access instrumentation now execute on Pixel_10; the original T112/T113 remain open for the complete local PostgreSQL baseline and production signing/release/provider validation. Complete Sprint 4 acceptance also requires EP-MOV T110 (source-provenance baseline gap).
+
+## Sprint 5 — HU-55: Reconciliación y restauración de compras (13 pts)
+
+**Goal**: Process authenticated Google Play RTDN, restore purchases on another installation under the same Kipu account, and safely manage event/reconciliation work. Reuse the S3 verifier, HU-56 lifecycle rules, and the existing S4.5 restore entry point. Do not implement HU-54/HU-56, HU-06 (S9), or the full HU-60 (S10) surface.
+
+### Phase S5.1: Dependency and contract gates
+
+- [ ] T118 [US1] Confirm the HU-54 verifier and HU-56 projection are usable and record the live Supabase catalog/migration/function/Cron baseline before any S5 deployment; coordinate the approved no-token scope against P30 §4.3–4.4 in its owning documentation context and record the alignment gate in `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` (FR-059–FR-067; SC-028–SC-034; external S3 and live-baseline prerequisites)
+- [X] T119 [P] [US1] Finalize the HU-55 event receipt/job model and RTDN processing contract, including stable message identity, normalized outcomes, current-token source, unknown-owner handling, P30 scope note, RLS/grants, and the no-token state machine in `specs/012-ep-pla-planes-monetizacion/data-model.md` and `specs/012-ep-pla-planes-monetizacion/contracts/rtdn-event-processing.md` (FR-059–FR-067; SC-028–SC-034)
+
+### Phase S5.2: Persistence and RTDN receiver
+
+- [X] T120 [P] [US1] Add failing Edge Function and pgTAP coverage for Pub/Sub OIDC claim validation, malformed/unsupported messages, stable-message redelivery, duplicate/out-of-order processing, token privacy, owner isolation, receipt/job RLS, and `WAITING_FOR_TOKEN`/`RETRYABLE` without a provider call or entitlement mutation in `supabase/functions/play-rtdn/index_test.ts` and `supabase/tests/database/billing_rtdn_reconciliation_test.sql` (FR-059–FR-061/FR-064/FR-066; SC-028/SC-029/SC-032–SC-034; depends on T119)
+- [X] T121 [US1] Add the versioned additive migration for internal RTDN receipt and reconciliation-job state, unique message identity, per-purchase leases, safe status constraints and minimal server grants; keep raw tokens out, preserve `internal.billing_events`, enable/force RLS, and fail visibly on unexpected schema drift in `supabase/migrations/` and migration regression coverage (FR-061/FR-064/FR-066; SC-029/SC-032–SC-034; depends on T120)
+- [X] T122 [US1] Implement the `play-rtdn` Pub/Sub receiver with Google OIDC signature/issuer/email/audience/expiry checks before envelope parsing, package/type validation, safe token hashing, and acknowledgement/retry behavior from the contract in `supabase/functions/play-rtdn/index.ts` (FR-059/FR-060/FR-066; SC-028/SC-033; depends on T120–T121)
+- [X] T123 [US1] Reuse one server-only billing verification boundary for RTDN and `verify-purchase`; correlate known token hashes, reject unknown RTDN ownership without creating/transferring a user, and atomically update current provider projection, sanitized `internal.billing_events`, receipt/job result and effective entitlement with idempotent duplicate/out-of-order handling, preserving the existing S3 acknowledgement rules without duplicate acknowledgement in `supabase/functions/verify-purchase/` and shared billing reconciliation code (FR-060/FR-061/FR-065–FR-067; SC-029/SC-031/SC-033; depends on T121–T122)
+
+### Phase S5.3: Restore and no-token reconciliation
+
+- [X] T124 [P] [US1] Add failing restore/recovery coverage for same-account second-device candidates, no candidate with an existing hash-only purchase, token-owner conflict, provider timeout, and account aggregation; prove that no-token cases remain pending/retryable and do not mint, extend, expire, revoke, or clear an entitlement by assumption in `app/src/test/java/com/kipu/app/feature/plans/data/BillingRecoveryTest.kt` and billing repository coverage (FR-062/FR-063/FR-067; SC-030/SC-031/SC-034; depends on T119)
+- [X] T125 [US1] Integrate `BillingRepository.restoreAndVerifyAccess()` and `PlayBillingGateway.recoverPurchaseUpdates()` with the existing authenticated `verify-purchase` flow; retain the active Kipu owner, verify every current candidate, report explicit pending/retry/conflict/no-candidate outcomes, and preserve known access only through its verified HU-56/HU-59 validity when no token is available in `app/src/main/java/com/kipu/app/feature/plans/data/billing/BillingRepository.kt` and existing recovery UI (FR-062/FR-063/FR-067; SC-030/SC-031/SC-034; depends on T115 and T124)
+- [X] T126 [US1] Add failing job/lease and integration coverage for exclusive per-purchase processing, stale lease recovery, retry backoff, hash-only scheduler sweeps that make zero Google Play calls, no assumed entitlement changes, and resume only after a fresh RTDN/restore token in `supabase/tests/database/billing_rtdn_reconciliation_test.sql` and reconciliation function tests (FR-064–FR-066; SC-032–SC-034; depends on T119–T121)
+- [X] T127 [US1] Implement the server-only scheduled reconciliation sweep and per-purchase lease lifecycle; reclaim abandoned leases and classify hash-only work as `WAITING_FOR_TOKEN`/`RETRYABLE`, but query Google Play only inside a current RTDN or authenticated restore request carrying an ephemeral token; keep Cron credentials in Vault and configure cadence operationally in `supabase/functions/reconcile-billing/index.ts` and the versioned Supabase migration/configuration (FR-064–FR-066; SC-032–SC-034; depends on T126)
+
+### Phase S5.4: Acceptance and operational evidence
+
+- [ ] T128 [US1] Run the HU-55 acceptance matrix for valid/invalid Pub/Sub auth, duplicate and out-of-order events, restore/owner conflict, transient failures, no-token waiting/resume, privacy, RLS/grants, and non-production Play/Pub/Sub integration; reconcile migration history and deployed function/scheduler evidence, map FR-059–FR-067 and SC-028–SC-034, and update `specs/012-ep-pla-planes-monetizacion/validation/quickstart-results.md` and `validation/security-release-audit.md` (depends on T118, T123, T125, and T127)
+
+### S5 dependencies and execution order
+
+- T118 is a release/deployment prerequisite; S5 artifacts and isolated implementation may be prepared while the live baseline is reviewed, but no remote migration or production RTDN enablement precedes it. T119 establishes the state model and source-of-truth contract. T120 is test-first; T121 adds the internal schema; T122 implements the publisher-authenticated receiver; T123 follows after receipt storage and the verifier boundary are ready. T124 is test-first for restore; T125 reuses completed S4.5 T115 behavior. T126 is test-first for leases and the no-token sweep; T127 implements only lease recovery/classification absent a current token. T128 is the final acceptance/evidence gate and waits for the P30 documentation alignment in T118 and all integrated paths.
+
+Dependency DAG: T119 → T120 → T121 → T122 → T123; T119 → T124 → T125; T119–T121 → T126 → T127; T118 + T123 + T125 + T127 → T128.
+
+**S5 acceptance slice**: an authenticated RTDN with a known owner and request-scoped token reaches the shared verifier and applies only current provider state; a same-account restore reuses that verifier; a hash-only missed-event job remains `WAITING_FOR_TOKEN`/`RETRYABLE` with no provider call or entitlement mutation until a new RTDN/restore token arrives. No S5 task edits or replaces the S3 purchase boundary, S4 lease, or financial history.
