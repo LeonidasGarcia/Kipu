@@ -10,7 +10,7 @@ The provider token is decoded only into request-scoped memory. The receiver hash
 
 ## Processing rules
 
-1. Use the stable Pub/Sub message identity plus configured subscription identity to derive a unique event identity. A terminal duplicate returns its canonical receipt without repeating persistence, acknowledgement, or entitlement effects.
+1. Use the stable Pub/Sub message identity plus configured subscription identity to derive a unique event identity. A terminal duplicate returns its canonical receipt without repeating persistence, acknowledgement, or entitlement effects. An in-flight redelivery requests Pub/Sub retry without changing the canonical receipt or lease held by the active verifier.
 2. A valid event is a trigger only. If its token hash maps to an existing `billing_purchases` owner, pass the current token to the shared server verifier and use Google Play's current response as authority. An older but distinct event still queries current Play state; arrival time and RTDN type never override that state.
 3. Pub/Sub has no Kipu user session. An unknown token hash cannot create or transfer ownership. Store only a safe `WAITING_FOR_TOKEN` receipt/job, acknowledge that message, and wait for an authenticated device restore/verification to establish an owner. A later restore can correlate the same token hash and resume the receipt through the shared verifier.
 4. A temporary provider or persistence failure leaves a nonterminal `RETRYABLE` result and no entitlement mutation. Return a retryable server response so Pub/Sub can redeliver the event with a fresh request-scoped token. Do not persist a token to make the retry possible.
@@ -24,6 +24,7 @@ The provider token is decoded only into request-scoped memory. The receiver hash
 | Condition | Logical result | Receiver behavior |
 |---|---|---|
 | Valid event applied or terminal duplicate | `COMPLETED` / canonical prior result | Acknowledge with successful 2xx. |
+| Same event redelivered while its verifier lease is active | `RETRYABLE` response; canonical receipt remains `PROCESSING` | Return retryable 5xx without starting another provider query or changing the active lease. |
 | Valid authenticated event has no owner association or no usable token | `WAITING_FOR_TOKEN` | Persist only safe identity/hash metadata and acknowledge; a future authenticated restore can resume it. |
 | Temporary Play, database, or internal-service failure with current token | `RETRYABLE` | Return retryable 5xx so Pub/Sub redelivers; never change entitlement. |
 | Invalid push identity | Rejected before billing mutation | Return authentication failure; do not create a billing receipt. |

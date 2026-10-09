@@ -222,6 +222,34 @@ Deno.test("terminal redelivery returns the prior result without querying Google 
   );
 });
 
+Deno.test("in-flight duplicate requests retry without verifying or finalizing", async () => {
+  const h = harness({
+    begin: {
+      receiptId: "receipt-active",
+      duplicate: true,
+      receiptStatus: "RETRYABLE",
+      userId: "73000000-0000-4000-8000-000000000001",
+      storeProductId: "kipu_pro_monthly",
+      billingProductId: "product-monthly",
+      jobId: "job-active",
+      leaseOwner: null,
+      safeResultCode: "PURCHASE_PROCESSING",
+    },
+  });
+
+  const response = await h.handler(pushRequest(subscriptionEvent));
+  const result = await responseBody(response);
+  assert(
+    response.status === 503 && result.outcome === "RETRYABLE",
+    "in-flight duplicate tells Pub/Sub to retry later",
+  );
+  assert(
+    h.calls.verify === 0 && h.calls.complete === 0 &&
+      h.calls.finishOutcomes.length === 0,
+    "duplicate does not verify or mutate the active worker's receipt",
+  );
+});
+
 Deno.test("an older RTDN delivered later re-verifies current Play state", async () => {
   const h = harness();
   const newerEvent = {

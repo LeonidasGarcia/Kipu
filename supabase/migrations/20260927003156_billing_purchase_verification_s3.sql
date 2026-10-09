@@ -266,7 +266,7 @@ begin
   returning existing.id into v_purchase_id;
 
   if v_purchase_id is null then
-    return query select 'TOKEN_ACCOUNT_CONFLICT'::text, null::uuid, false, null::timestamptz;
+    return query select 'TOKEN_ACCOUNT_CONFLICT'::text, null::uuid, false;
     return;
   end if;
 

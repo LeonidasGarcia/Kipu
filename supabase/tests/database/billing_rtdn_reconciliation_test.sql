@@ -1,5 +1,5 @@
 begin;
-select plan(58);
+select plan(64);
 
 select ok(
   to_regclass('internal.billing_event_receipts') is not null,
@@ -36,6 +36,10 @@ select ok(
   'client roles have no reconciliation table access'
 );
 select ok(
+  not has_schema_privilege('billing_verification_executor', 'public', 'CREATE'),
+  'forward migration does not leave CREATE on public with the executor role'
+);
+select ok(
   not exists (select 1 from pg_attribute a join pg_class c on c.oid = a.attrelid
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'internal' and c.relname = 'billing_event_receipts'
@@ -56,6 +60,23 @@ select ok(
       and not has_function_privilege('anon', p.oid, 'EXECUTE')
       and not has_function_privilege('authenticated', p.oid, 'EXECUTE')),
   'only the server role can begin RTDN processing'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'begin_billing_rtdn_event'
+      and p.proowner = 'billing_verification_executor'::regrole
+      and p.prosecdef and p.proconfig @> array['search_path=""']::text[]),
+  'forward replacement retains the RTDN executor owner and pinned empty search path'
+);
+select ok(
+  exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'persist_verified_billing_purchase'
+      and p.proowner = 'billing_verification_executor'::regrole
+      and p.prosecdef and p.proconfig @> array['search_path=""']::text[]
+      and has_function_privilege('service_role', p.oid, 'EXECUTE')
+      and not has_function_privilege('anon', p.oid, 'EXECUTE')
+      and not has_function_privilege('authenticated', p.oid, 'EXECUTE')),
+  'forward purchase-writer replacement retains its owner, pinned path, and service-only ACL'
 );
 select ok(
   exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -143,6 +164,13 @@ create temporary table rtdn_known_owner as
 select * from public.begin_billing_rtdn_event(
   repeat('f', 64), 'pgtap-known-purchase', repeat('9', 64), 'SUBSCRIPTION'
 );
+create temporary table rtdn_known_redelivery as
+select * from public.begin_billing_rtdn_event(
+  repeat('f', 64), 'pgtap-known-purchase', repeat('9', 64), 'SUBSCRIPTION'
+);
+select is((select receipt_status from rtdn_known_redelivery), 'RETRYABLE', 'in-flight redelivery asks Pub/Sub to retry');
+select is((select receipt_status from internal.billing_event_receipts where event_identity_hash = repeat('f', 64)), 'PROCESSING', 'in-flight redelivery leaves the canonical receipt owned by its active verifier');
+select is((select lease_owner from internal.billing_reconciliation_jobs where purchase_token_hash = repeat('9', 64)), (select lease_owner from rtdn_known_owner), 'in-flight redelivery preserves the active per-purchase lease');
 create temporary table rtdn_atomic_result as
 select * from public.persist_verified_rtdn_billing_purchase(
   '73000000-0000-4000-8000-000000000003',
