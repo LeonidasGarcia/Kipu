@@ -10,9 +10,16 @@ import androidx.navigation.navArgument
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
 import androidx.navigation.NavBackStackEntry
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
 import com.kipu.app.feature.accounts.domain.model.CreditCard
@@ -24,6 +31,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.feature.accounts.presentation.instruments.UnifiedInstrumentFormScreen
 import com.kipu.app.feature.accounts.presentation.instruments.RateCatalogScreen
 import com.kipu.app.feature.settings.presentation.SettingsViewModel
+import com.kipu.app.feature.debts.presentation.DebtListScreen
+import com.kipu.app.feature.debts.presentation.DebtListViewModel
 
 const val ACCOUNTS_DASHBOARD_ROUTE = "accounts/dashboard"
 const val ACCOUNT_FORM_ROUTE = "accounts/create"
@@ -65,12 +74,60 @@ fun NavGraphBuilder.accountsDestinations(
     navController: NavController,
     movementsSelected: State<Boolean>,
     onSelectMoney: () -> Unit,
+    debtsSelected: State<Boolean> = androidx.compose.runtime.mutableStateOf(false),
+    onBackFromDebtTab: () -> Unit = onSelectMoney,
 ) {
     composable(ACCOUNTS_DASHBOARD_ROUTE) { backStackEntry ->
-        BackHandler(enabled = movementsSelected.value) { onSelectMoney() }
-        RetainedRootTabs(movementsSelected = movementsSelected) {
-            Box { AccountsRootContent(navController, backStackEntry, movementsSelected) }
-            Box { MovementHistoryContent(navController, backStackEntry, movementsSelected) }
+        val debtListViewModel: DebtListViewModel = hiltViewModel(backStackEntry)
+        val debtListState by debtListViewModel.state.collectAsStateWithLifecycle()
+        val selectedTabIndex = remember(movementsSelected, debtsSelected) {
+            derivedStateOf {
+                when {
+                    debtsSelected.value -> 2
+                    movementsSelected.value -> 1
+                    else -> 0
+                }
+            }
+        }
+        BackHandler(enabled = movementsSelected.value || debtsSelected.value) {
+            if (debtsSelected.value) onBackFromDebtTab() else onSelectMoney()
+        }
+        RetainedRootTabs(selectedTabIndex = selectedTabIndex) {
+            val moneySelected = selectedTabIndex.value == 0
+            val movementTabSelected = selectedTabIndex.value == 1
+            val debtTabSelected = selectedTabIndex.value == 2
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (moneySelected) Modifier else Modifier.clearAndSetSemantics { })
+                    .rootTabInputShield(active = moneySelected),
+            ) {
+                AccountsRootContent(navController, backStackEntry, movementsSelected)
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (movementTabSelected) Modifier else Modifier.clearAndSetSemantics { })
+                    .rootTabInputShield(active = movementTabSelected),
+            ) {
+                MovementHistoryContent(navController, backStackEntry, movementsSelected)
+            }
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(if (debtTabSelected) Modifier else Modifier.clearAndSetSemantics { })
+                    .rootTabInputShield(active = debtTabSelected),
+            ) {
+                DebtListScreen(
+                    debts = debtListState.debts,
+                    selectedType = debtListState.selectedType,
+                    onTypeSelected = debtListViewModel::selectType,
+                    onDebtSelected = navController::navigateToDebtDetail,
+                    scheduledInstallments = debtListState.scheduledInstallments,
+                    errorMessage = debtListState.errorMessage,
+                    isLoading = debtListState.isLoading,
+                )
+            }
         }
     }
 
@@ -82,7 +139,11 @@ fun NavGraphBuilder.accountsDestinations(
             navArgument("startPurchase") { type = NavType.BoolType; defaultValue = false },
         ),
     ) { backStackEntry ->
-        val viewModel: AccountsViewModel = hiltViewModel()
+        val dashboardBackStackEntry = navController.previousBackStackEntry
+            ?.takeIf { it.destination.route == ACCOUNTS_DASHBOARD_ROUTE }
+        val viewModel: AccountsViewModel = dashboardBackStackEntry
+            ?.let { hiltViewModel(it) }
+            ?: hiltViewModel(backStackEntry)
         val instrumentId = backStackEntry.arguments?.getString("instrumentId").orEmpty()
         val isCard = backStackEntry.arguments?.getBoolean("isCard") ?: false
         val startPurchaseOnOpen = backStackEntry.arguments?.getBoolean("startPurchase") ?: false
@@ -157,6 +218,16 @@ fun NavGraphBuilder.accountsDestinations(
             onUpdatePersonalTea = viewModel::updatePersonalTea,
             onNavigateBack = { navController.popBackStack() },
         )
+    }
+}
+
+private fun Modifier.rootTabInputShield(active: Boolean): Modifier = pointerInput(active) {
+    if (!active) {
+        awaitPointerEventScope {
+            while (true) {
+                awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+            }
+        }
     }
 }
 

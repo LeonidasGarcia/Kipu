@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.InstallmentScheduleItem
@@ -39,6 +41,7 @@ import com.kipu.app.feature.accounts.domain.model.PurchaseCandidate
 import com.kipu.app.feature.accounts.domain.usecase.SimulateInstallments
 import com.kipu.app.ui.component.MoneyText
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @Composable
 fun InstallmentSimulatorScreen(
@@ -47,15 +50,22 @@ fun InstallmentSimulatorScreen(
     teaBps: Int? = null,
     onConfirmPurchase: (installments: Int) -> Unit,
     onRejectPurchase: () -> Unit,
+    selectedInstallments: Int? = null,
+    onInstallmentsChanged: (Int) -> Unit = {},
+    showHeader: Boolean = true,
+    showActions: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    var selectedInstallments by remember { mutableIntStateOf(candidate.suggestedInstallments.coerceIn(1, 36)) }
+    var localInstallments by remember(candidate.id) {
+        mutableIntStateOf(candidate.suggestedInstallments.coerceIn(1, 36))
+    }
+    val installments = selectedInstallments ?: localInstallments
 
-    val simulation = remember(selectedInstallments, candidate, card, teaBps) {
+    val simulation = remember(installments, candidate, card, teaBps) {
         SimulateInstallments()(
             candidate = candidate,
             card = card,
-            installmentsCount = selectedInstallments,
+            installmentsCount = installments,
             acceptedReferenceTeaBps = teaBps,
         )
     }
@@ -73,18 +83,19 @@ fun InstallmentSimulatorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Header
-            Column {
-                Text(
-                    text = "Confirmar compra a crédito",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = "${card.issuer} •••• ${card.lastFourDigits} | ${candidate.merchant}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (showHeader) {
+                Column {
+                    Text(
+                        text = "Simulación de compra",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = "${card.issuer} •••• ${card.lastFourDigits} | ${candidate.merchant}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             // Purchase amount
@@ -102,6 +113,12 @@ fun InstallmentSimulatorScreen(
                         text = "Monto principal",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = candidate.merchant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     MoneyText(
                         money = candidate.amount,
@@ -123,19 +140,23 @@ fun InstallmentSimulatorScreen(
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Text(
-                        text = "$selectedInstallments ${if (selectedInstallments == 1) "cuota (directo)" else "cuotas"}",
+                        text = "$installments ${if (installments == 1) "cuota (directo)" else "cuotas"}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 Slider(
-                    value = selectedInstallments.toFloat(),
-                    onValueChange = { selectedInstallments = it.toInt().coerceIn(1, 36) },
+                    value = installments.toFloat(),
+                    onValueChange = { value ->
+                        val next = value.roundToInt().coerceIn(1, 36)
+                        if (selectedInstallments == null) localInstallments = next
+                        onInstallmentsChanged(next)
+                    },
                     valueRange = 1f..36f,
                     steps = 34,
                     modifier = Modifier.semantics {
-                        contentDescription = "Selector de 1 a 36 cuotas, actual $selectedInstallments"
+                        contentDescription = "Selector de 1 a 36 cuotas, actual $installments"
                     },
                 )
             }
@@ -212,22 +233,23 @@ fun InstallmentSimulatorScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onRejectPurchase,
-                    modifier = Modifier.weight(1f),
+            if (showActions) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Rechazar")
-                }
-                Button(
-                    onClick = { onConfirmPurchase(selectedInstallments) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Confirmar")
+                    OutlinedButton(
+                        onClick = onRejectPurchase,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    ) {
+                        Text("Editar compra")
+                    }
+                    Button(
+                        onClick = { onConfirmPurchase(installments) },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                    ) {
+                        Text("Confirmar compra")
+                    }
                 }
             }
         }

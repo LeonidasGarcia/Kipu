@@ -24,7 +24,10 @@ import com.kipu.app.feature.debts.domain.model.SetDebtScheduleCommand
 import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 
 @Singleton
@@ -35,7 +38,10 @@ class OfflineFirstDebtRepository @Inject constructor(
     private val reminderReconciler: DebtReminderReconciler = NoOpDebtReminderReconciler,
 ) : DebtRepository {
     override fun observeDebts(userId: String): Flow<List<DebtSummary>> =
-        debtDao.observeSummaries(userId).map { rows -> rows.map { row -> row.toDomain() } }
+        debtDao.observeSummaries(userId)
+            .map { rows -> rows.map { row -> row.toDomain() } }
+            .distinctUntilChanged()
+            .flowOn(Dispatchers.Default)
 
     override fun observeDebt(userId: String, debtId: String): Flow<DebtSummary?> =
         debtDao.observeSummary(userId, debtId).map { it?.toDomain() }

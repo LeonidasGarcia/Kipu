@@ -90,6 +90,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun MovementEditorRoute(
     transactionId: String,
+    merchantDisplayName: String? = null,
     onDismiss: () -> Unit,
     onSaved: () -> Unit = {},
     viewModel: MovementEditorViewModel = hiltViewModel(),
@@ -97,8 +98,8 @@ fun MovementEditorRoute(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    LaunchedEffect(transactionId) {
-        viewModel.loadTransaction(transactionId)
+    LaunchedEffect(transactionId, merchantDisplayName) {
+        viewModel.loadTransaction(transactionId, merchantDisplayName)
     }
 
     LaunchedEffect(viewModel) {
@@ -368,6 +369,7 @@ fun MovementEditorContent(
             }
         }
 
+        if (!uiState.isSpecialized) {
         // Fixed badges row: Movement Type & Currency (immutable per spec)
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -489,6 +491,21 @@ fun MovementEditorContent(
             value = uiState.merchantName,
             onValueChange = onMerchantChanged,
             label = { Text(stringResource(R.string.movement_merchant)) },
+            placeholder = uiState.selectedMerchantDisplayName?.let { name -> { Text(name) } },
+            supportingText = when {
+                uiState.selectedMerchantId != null -> {
+                    {
+                        Text(
+                            uiState.selectedMerchantDisplayName?.let { "Del catálogo · $it" }
+                                ?: "Del catálogo"
+                        )
+                    }
+                }
+                uiState.merchantName.isNotBlank() -> {
+                    { Text("Texto libre") }
+                }
+                else -> null
+            },
             singleLine = true,
             shape = RoundedCornerShape(12.dp),
             enabled = !uiState.isSpecialized && !uiState.hasConflict,
@@ -559,6 +576,7 @@ fun MovementEditorContent(
         MovementChangeSummary(uiState)
 
         Spacer(modifier = Modifier.height(24.dp))
+        }
 
         // Save Button
         Button(

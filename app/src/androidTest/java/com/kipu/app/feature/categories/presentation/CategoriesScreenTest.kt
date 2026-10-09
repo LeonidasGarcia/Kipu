@@ -6,6 +6,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -25,6 +27,7 @@ import com.kipu.app.feature.categories.domain.usecase.CategoryItem
 import com.kipu.app.feature.categories.presentation.categories.CategoriesUiState
 import com.kipu.app.feature.categories.presentation.categories.CategoriesViewModel
 import com.kipu.app.feature.categories.presentation.categories.CategoryRootCard
+import com.kipu.app.feature.categories.presentation.categories.CategoryFormContent
 import com.kipu.app.feature.categories.presentation.categories.CategoriesScreen
 import com.kipu.app.feature.categories.presentation.categories.CategoryTab
 import com.kipu.app.feature.categories.presentation.categories.QuotaBanner
@@ -95,8 +98,8 @@ class CategoriesScreenTest {
 
         composeTestRule.onNodeWithText("Alimentación").assertIsDisplayed()
         composeTestRule.onNodeWithText("Restaurantes").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Personalizada · consume cupo Free").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Activa").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Personalizada").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Personalizada · consume cupo Free").assertCountEquals(0)
         composeTestRule.onNodeWithText("Agregar subcategoría").assertIsDisplayed()
     }
 
@@ -217,9 +220,10 @@ class CategoriesScreenTest {
             )
         }
 
-        composeTestRule.onNodeWithText("Gastos: 5/5 • Ingresos: 0/5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("5/5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0/5").assertIsDisplayed()
         composeTestRule.onNodeWithText(
-            "Límite del plan Gratuito alcanzado. Desactiva una categoría para activar otra."
+            "Cupo completo · libera una categoría para activar otra."
         ).assertIsDisplayed()
     }
 
@@ -239,7 +243,33 @@ class CategoriesScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithText("Gastos: 3/5 • Ingresos: 0/5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("3/5").assertIsDisplayed()
+        composeTestRule.onNodeWithText("0/5").assertIsDisplayed()
+    }
+
+    @Test
+    fun customIconAndColorStayVisibleAsSelectedAndSubcategoryUsesCategoryConcepts() {
+        composeTestRule.setContent {
+            CategoryFormContent(
+                name = "",
+                icon = "restaurant",
+                color = "#AA3311",
+                parentId = CategoryId.generate(),
+                availableRoots = emptyList(),
+                onNameChange = {},
+                onIconChange = {},
+                onColorChange = {},
+                onParentIdChange = {},
+                onDismiss = {},
+                onBack = {},
+                onConfirm = {},
+            )
+        }
+
+        composeTestRule.onNodeWithTag("more_icons_button").assertIsSelected()
+        composeTestRule.onNodeWithTag("custom_color_picker_button").assertIsSelected()
+        composeTestRule.onNodeWithText("Ej. Restaurantes, Cafeterías...").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Recordar comercio frecuente").assertCountEquals(0)
     }
 
     @Test
@@ -267,11 +297,18 @@ class CategoriesScreenTest {
 
         composeTestRule.onNodeWithText("Alimentación").assertIsDisplayed()
         composeTestRule.onNodeWithText("Sin tipo histórico").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Agregar subcategoría").assertCountEquals(0)
         assertFalse(composeTestRule.onAllNodesWithText("Salario").fetchSemanticsNodes().isNotEmpty())
+
+        composeTestRule.onNodeWithContentDescription("Expandir Alimentación").performClick()
+        composeTestRule.onNodeWithText("Agregar subcategoría").assertIsDisplayed()
 
         composeTestRule.onNodeWithText("Ingresos").performClick()
         composeTestRule.onNodeWithText("Salario").assertIsDisplayed()
         composeTestRule.onNodeWithText("Sin tipo histórico").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Agregar subcategoría").assertCountEquals(0)
+        composeTestRule.onNodeWithContentDescription("Expandir Salario").performClick()
+        composeTestRule.onNodeWithText("Agregar subcategoría").assertIsDisplayed()
         assertTrue(composeTestRule.onAllNodesWithText("Alimentación").fetchSemanticsNodes().isEmpty())
     }
 

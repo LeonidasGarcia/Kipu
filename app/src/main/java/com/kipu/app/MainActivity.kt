@@ -43,6 +43,7 @@ import androidx.compose.animation.fadeOut
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavController
 import com.kipu.app.core.security.LocalAuthenticatorGateway
 import com.kipu.app.core.security.LocalLockCoordinator
 import com.kipu.app.core.security.LockScreenOverlay
@@ -53,6 +54,8 @@ import com.kipu.app.feature.auth.domain.AuthRepository
 import com.kipu.app.feature.auth.domain.model.AuthResult
 import com.kipu.app.feature.plans.data.local.PlanPreferencesDao
 import com.kipu.app.feature.settings.data.local.ProfilePreferencesDao
+import com.kipu.app.feature.debts.domain.model.DebtObligationType
+import com.kipu.app.feature.debts.presentation.DebtCreationTypeSheet
 import com.kipu.app.navigation.ACCOUNT_FORM_ROUTE
 import com.kipu.app.navigation.ACCOUNTS_DASHBOARD_ROUTE
 import com.kipu.app.navigation.AUTH_LOGIN_ROUTE
@@ -65,7 +68,9 @@ import com.kipu.app.navigation.BIOMETRIC_ROUTE
 import com.kipu.app.navigation.CARD_FORM_ROUTE
 import com.kipu.app.navigation.DeepLinkResult
 import com.kipu.app.navigation.DEBT_LIST_ROUTE
+import com.kipu.app.navigation.navigateToDebtOpening
 import com.kipu.app.navigation.KipuNavigationBar
+import com.kipu.app.navigation.RootTabMotion
 import com.kipu.app.navigation.MOVEMENTS_HISTORY_PATTERN
 import com.kipu.app.navigation.MOVEMENTS_HISTORY_ROUTE
 import com.kipu.app.navigation.NOTIFICATION_CENTER_ROUTE
@@ -164,6 +169,8 @@ class MainActivity : FragmentActivity() {
             val isMasked = profileState.value?.hideBalances ?: false
 
             val movementsSelected = rememberSaveable(currentUserId) { mutableStateOf(false) }
+            val debtsSelected = rememberSaveable(currentUserId) { mutableStateOf(false) }
+            var showDebtCreationSheet by rememberSaveable(currentUserId) { mutableStateOf(false) }
 
             var lastKnownUserId by remember { mutableStateOf(currentUserId) }
             LaunchedEffect(currentUserId) {
@@ -171,6 +178,7 @@ class MainActivity : FragmentActivity() {
                     navController.clearBackStack(ACCOUNTS_DASHBOARD_ROUTE)
                     navController.clearBackStack(MOVEMENTS_HISTORY_PATTERN)
                     navController.clearBackStack(MOVEMENTS_HISTORY_ROUTE)
+                    navController.clearBackStack(DEBT_LIST_ROUTE)
                 }
                 lastKnownUserId = currentUserId
 
@@ -241,6 +249,16 @@ class MainActivity : FragmentActivity() {
                         Box(modifier = Modifier.fillMaxSize()) {
                             val navBackStackEntry by navController.currentBackStackEntryAsState()
                             val currentRoute = navBackStackEntry?.destination?.route
+                            val isDebtTabSelected = currentRoute == DEBT_LIST_ROUTE ||
+                                (currentRoute == ACCOUNTS_DASHBOARD_ROUTE && debtsSelected.value)
+                            val rootTabRoute = when {
+                                currentRoute == ACCOUNTS_DASHBOARD_ROUTE && debtsSelected.value -> DEBT_LIST_ROUTE
+                                currentRoute == ACCOUNTS_DASHBOARD_ROUTE && movementsSelected.value -> MOVEMENTS_HISTORY_ROUTE
+                                else -> currentRoute
+                            }
+                            LaunchedEffect(currentRoute, debtsSelected.value) {
+                                if (!isDebtTabSelected) showDebtCreationSheet = false
+                            }
 
                             val isRootDestination = currentRoute == ACCOUNTS_DASHBOARD_ROUTE ||
                                 currentRoute == DEBT_LIST_ROUTE ||
@@ -257,32 +275,41 @@ class MainActivity : FragmentActivity() {
                                 bottomBar = {
                                     if (shouldShowBottomBar) {
                                         KipuNavigationBar(
-                                            currentRoute = if (currentRoute == ACCOUNTS_DASHBOARD_ROUTE && movementsSelected.value) MOVEMENTS_HISTORY_ROUTE else currentRoute,
+                                            currentRoute = rootTabRoute,
                                             onNavigateToDinero = {
                                                 movementsSelected.value = false
+                                                debtsSelected.value = false
                                                 if (currentRoute != ACCOUNTS_DASHBOARD_ROUTE) {
-                                                    navController.navigate(ACCOUNTS_DASHBOARD_ROUTE) {
-                                                        popUpTo(ACCOUNTS_DASHBOARD_ROUTE)
-                                                        launchSingleTop = true
-                                                    }
+                                                    navController.navigateRootTab(ACCOUNTS_DASHBOARD_ROUTE)
                                                 }
                                             },
                                             onNavigateToMovimientos = {
-                                                if (currentRoute == ACCOUNTS_DASHBOARD_ROUTE) {
-                                                    movementsSelected.value = true
-                                                } else if (currentRoute != MOVEMENTS_HISTORY_ROUTE) {
-                                                    navController.navigate(MOVEMENTS_HISTORY_ROUTE) { launchSingleTop = true }
+                                                movementsSelected.value = true
+                                                debtsSelected.value = false
+                                                if (currentRoute != ACCOUNTS_DASHBOARD_ROUTE) {
+                                                    navController.navigateRootTab(ACCOUNTS_DASHBOARD_ROUTE)
                                                 }
                                             },
                                             onNavigateToDeudas = {
-                                                movementsSelected.value = false
-                                                if (currentRoute != DEBT_LIST_ROUTE) {
-                                                    navController.navigate(DEBT_LIST_ROUTE) { launchSingleTop = true }
+                                                if (currentRoute == MOVEMENTS_HISTORY_ROUTE ||
+                                                    currentRoute == MOVEMENTS_HISTORY_PATTERN ||
+                                                    currentRoute.startsWith("movements/history")
+                                                ) {
+                                                    movementsSelected.value = true
+                                                }
+                                                debtsSelected.value = true
+                                                if (currentRoute != ACCOUNTS_DASHBOARD_ROUTE) {
+                                                    navController.navigateRootTab(ACCOUNTS_DASHBOARD_ROUTE)
                                                 }
                                             },
                                             onRegisterClick = {
                                                 if (accessState is LocalAccess.Available) {
-                                                    navController.currentBackStackEntry?.savedStateHandle?.set("open_register_movement", true)
+                                                    if (isDebtTabSelected) {
+                                                        showDebtCreationSheet = true
+                                                    } else {
+                                                        navController.currentBackStackEntry?.savedStateHandle
+                                                            ?.set("open_register_movement", true)
+                                                    }
                                                 }
                                             },
                                         )
@@ -290,7 +317,18 @@ class MainActivity : FragmentActivity() {
                                 },
                             ) { innerPadding ->
                                 val reducedMotion = rememberReducedMotionEnabled()
-                                val navigationOffset = with(LocalDensity.current) { 24.dp.roundToPx() }
+                                val navigationOffset = with(LocalDensity.current) { 8.dp.roundToPx() }
+                                // Keep this as a getter: root-tab click handlers update selection
+                                // immediately before navigating back to the retained dashboard.
+                                // A captured Boolean would still describe the outgoing debt tab
+                                // while NavHost chooses the incoming transition.
+                                val selectedDashboardTabForMotion = {
+                                    when {
+                                        debtsSelected.value -> 2
+                                        movementsSelected.value -> 1
+                                        else -> 0
+                                    }
+                                }
                                 NavHost(
                                     navController = navController,
                                     startDestination = AUTH_START_ROUTE,
@@ -301,14 +339,28 @@ class MainActivity : FragmentActivity() {
                                     enterTransition = {
                                         val initialRoute = initialState.destination.route
                                         val targetRoute = targetState.destination.route
-                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
+                                        if (reducedMotion) {
                                             EnterTransition.None
+                                        } else if (RootTabMotion.isRootTransition(initialRoute, targetRoute, selectedDashboardTabForMotion())) {
+                                            val movingForward = RootTabMotion.isForward(initialRoute, targetRoute, selectedDashboardTabForMotion())
+                                            slideInHorizontally(
+                                                initialOffsetX = { if (movingForward) navigationOffset else -navigationOffset },
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            ) + fadeIn(
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            )
                                         } else if (isDetailRoute(targetRoute)) {
                                             slideInHorizontally(
                                                 initialOffsetX = { navigationOffset },
-                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Standard),
                                             ) + fadeIn(
-                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Standard),
                                             )
                                         } else {
                                             fadeIn(
@@ -319,8 +371,35 @@ class MainActivity : FragmentActivity() {
                                     exitTransition = {
                                         val initialRoute = initialState.destination.route
                                         val targetRoute = targetState.destination.route
-                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
+                                        if (reducedMotion) {
                                             ExitTransition.None
+                                        } else if (RootTabMotion.isRootTransition(initialRoute, targetRoute, selectedDashboardTabForMotion())) {
+                                            val movingForward = RootTabMotion.isForward(initialRoute, targetRoute, selectedDashboardTabForMotion())
+                                            slideOutHorizontally(
+                                                targetOffsetX = { if (movingForward) -navigationOffset else navigationOffset },
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            ) + fadeOut(
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            )
+                                        } else if (isDetailRoute(targetRoute)) {
+                                            slideOutHorizontally(
+                                                targetOffsetX = { -navigationOffset },
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.NavEnterMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            ) + fadeOut(
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.NavEnterMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            )
                                         } else {
                                             fadeOut(
                                                 animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
@@ -330,8 +409,29 @@ class MainActivity : FragmentActivity() {
                                     popEnterTransition = {
                                         val initialRoute = initialState.destination.route
                                         val targetRoute = targetState.destination.route
-                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
+                                        if (reducedMotion) {
                                             EnterTransition.None
+                                        } else if (RootTabMotion.isRootTransition(initialRoute, targetRoute, selectedDashboardTabForMotion())) {
+                                            val movingForward = RootTabMotion.isForward(initialRoute, targetRoute, selectedDashboardTabForMotion())
+                                            slideInHorizontally(
+                                                initialOffsetX = { if (movingForward) navigationOffset else -navigationOffset },
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            ) + fadeIn(
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            )
+                                        } else if (isDetailRoute(initialRoute)) {
+                                            slideInHorizontally(
+                                                initialOffsetX = { -navigationOffset },
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Standard),
+                                            ) + fadeIn(
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Standard),
+                                            )
                                         } else if (isDetailRoute(targetRoute)) {
                                             fadeIn(
                                                 animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Decelerate),
@@ -345,14 +445,28 @@ class MainActivity : FragmentActivity() {
                                     popExitTransition = {
                                         val initialRoute = initialState.destination.route
                                         val targetRoute = targetState.destination.route
-                                        if (reducedMotion || (isTopLevelRoute(initialRoute) && isTopLevelRoute(targetRoute))) {
+                                        if (reducedMotion) {
                                             ExitTransition.None
+                                        } else if (RootTabMotion.isRootTransition(initialRoute, targetRoute, selectedDashboardTabForMotion())) {
+                                            val movingForward = RootTabMotion.isForward(initialRoute, targetRoute, selectedDashboardTabForMotion())
+                                            slideOutHorizontally(
+                                                targetOffsetX = { if (movingForward) -navigationOffset else navigationOffset },
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            ) + fadeOut(
+                                                animationSpec = tween(
+                                                    KipuMotionTokens.RootTabSwitchMillis,
+                                                    easing = KipuEasingTokens.Standard,
+                                                ),
+                                            )
                                         } else if (isDetailRoute(initialRoute)) {
                                             slideOutHorizontally(
                                                 targetOffsetX = { navigationOffset },
-                                                animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Standard),
                                             ) + fadeOut(
-                                                animationSpec = tween(KipuMotionTokens.NavExitMillis, easing = KipuEasingTokens.Accelerate),
+                                                animationSpec = tween(KipuMotionTokens.NavEnterMillis, easing = KipuEasingTokens.Standard),
                                             )
                                         } else {
                                             fadeOut(
@@ -387,6 +501,7 @@ class MainActivity : FragmentActivity() {
                                             navController.clearBackStack(ACCOUNTS_DASHBOARD_ROUTE)
                                             navController.clearBackStack(MOVEMENTS_HISTORY_PATTERN)
                                             navController.clearBackStack(MOVEMENTS_HISTORY_ROUTE)
+                                            navController.clearBackStack(DEBT_LIST_ROUTE)
                                             navController.navigate(AUTH_LOGIN_ROUTE) {
                                                 popUpTo(0) { inclusive = true }
                                             }
@@ -396,6 +511,8 @@ class MainActivity : FragmentActivity() {
                                         navController = navController,
                                         movementsSelected = movementsSelected,
                                         onSelectMoney = { movementsSelected.value = false },
+                                        debtsSelected = debtsSelected,
+                                        onBackFromDebtTab = { debtsSelected.value = false },
                                     )
                                     movementDestinations(
                                         navController = navController,
@@ -410,6 +527,16 @@ class MainActivity : FragmentActivity() {
                                 }
                             }
 
+                            if (showDebtCreationSheet && isDebtTabSelected && accessState is LocalAccess.Available) {
+                                DebtCreationTypeSheet(
+                                    onDismissRequest = { showDebtCreationSheet = false },
+                                    onTypeSelected = { type ->
+                                        showDebtCreationSheet = false
+                                        navController.navigateToDebtOpening(type)
+                                    },
+                                )
+                            }
+
                             if (lockState == LocalLockState.LOCKED) {
                                 LockScreenOverlay(
                                     gateway = localAuthenticatorGateway,
@@ -420,6 +547,7 @@ class MainActivity : FragmentActivity() {
                                             navController.clearBackStack(ACCOUNTS_DASHBOARD_ROUTE)
                                             navController.clearBackStack(MOVEMENTS_HISTORY_PATTERN)
                                             navController.clearBackStack(MOVEMENTS_HISTORY_ROUTE)
+                                            navController.clearBackStack(DEBT_LIST_ROUTE)
                                             navController.navigate(AUTH_LOGIN_ROUTE) {
                                                 popUpTo(0) { inclusive = true }
                                             }
@@ -448,6 +576,14 @@ class MainActivity : FragmentActivity() {
         } else {
             ACCOUNTS_DASHBOARD_ROUTE
         }
+    }
+}
+
+private fun NavController.navigateRootTab(route: String) {
+    navigate(route) {
+        popUpTo(ACCOUNTS_DASHBOARD_ROUTE) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 

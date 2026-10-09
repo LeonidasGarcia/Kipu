@@ -106,7 +106,7 @@ class QuickMovementScreenTest {
         compose.onNodeWithText("Categoría *").assertDoesNotExist()
         compose.onNodeWithTag("category_picker_open").assertDoesNotExist()
 
-        val saveBounds = compose.onNodeWithContentDescription("Guardar transacción")
+        val saveBounds = compose.onNodeWithContentDescription("Confirmar transferencia")
             .assertHasClickAction()
             .fetchSemanticsNode().boundsInRoot
         with(compose.density) {

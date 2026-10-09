@@ -45,8 +45,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -174,8 +172,6 @@ fun CategoryFormContent(
     onIconChange: (String) -> Unit,
     onColorChange: (String) -> Unit,
     onParentIdChange: (CategoryId?) -> Unit,
-    rememberFrequentMerchant: Boolean = false,
-    onRememberFrequentMerchantChange: ((Boolean) -> Unit)? = null,
     onDismiss: () -> Unit,
     onBack: () -> Unit,
     onConfirm: () -> Unit,
@@ -447,7 +443,7 @@ fun CategoryFormContent(
                         .testTag("category_name_input"),
                     placeholder = {
                         Text(
-                            text = if (isSubcategory) "Ej. Disney+, Spotify, Farmacia..." else "Ej. Entretenimiento, Salud...",
+                            text = if (isSubcategory) "Ej. Restaurantes, Cafeterías..." else "Ej. Entretenimiento, Salud...",
                             color = colors.inkSecondary.copy(alpha = 0.7f),
                             fontSize = 14.sp,
                         )
@@ -521,23 +517,28 @@ fun CategoryFormContent(
                     }
 
                     // 7mo elemento: botón "+" de Más iconos
+                    val hasCustomIcon = QUICK_ICONS.none { icon.equals(it, ignoreCase = true) }
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .border(
-                                width = 1.dp,
-                                color = colors.border,
+                                width = if (hasCustomIcon) 2.dp else 1.dp,
+                                color = if (hasCustomIcon) colors.primary else colors.border,
                                 shape = RoundedCornerShape(12.dp),
                             )
-                            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                            .background(
+                                if (hasCustomIcon) colors.primary.copy(alpha = 0.12f)
+                                else colors.surfaceVariant.copy(alpha = 0.5f),
+                            )
                             .clickable { showIconCatalogDialog = true }
+                            .semantics { selected = hasCustomIcon }
                             .testTag("more_icons_button"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Add,
-                            contentDescription = "Más iconos",
+                            imageVector = if (hasCustomIcon) resolveCategoryIcon(icon) else Icons.Default.Add,
+                            contentDescription = if (hasCustomIcon) "Icono personalizado seleccionado" else "Más iconos",
                             modifier = Modifier.size(22.dp),
                             tint = colors.primaryText,
                         )
@@ -571,8 +572,8 @@ fun CategoryFormContent(
                                 .clip(CircleShape)
                                 .background(chipColor)
                                 .border(
-                                    width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) colors.inkPrimary else Color.Transparent,
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) colors.primary else colors.border.copy(alpha = 0.3f),
                                     shape = CircleShape,
                                 )
                                 .clickable { onColorChange(hex) }
@@ -599,65 +600,32 @@ fun CategoryFormContent(
                     }
 
                     // 7mo elemento: botón de Paleta HSV avanzada
+                    val hasCustomColor = QUICK_COLORS.none { color.equals(it, ignoreCase = true) }
                     Box(
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .border(1.dp, colors.border, CircleShape)
-                            .background(colors.surfaceVariant.copy(alpha = 0.5f))
+                            .border(
+                                width = if (hasCustomColor) 2.dp else 1.dp,
+                                color = if (hasCustomColor) colors.primary else colors.border,
+                                shape = CircleShape,
+                            )
+                            .background(
+                                if (hasCustomColor) parseHexColor(color)
+                                else colors.surfaceVariant.copy(alpha = 0.5f),
+                            )
                             .clickable { showColorModalDialog = true }
+                            .semantics { selected = hasCustomColor }
                             .testTag("custom_color_picker_button"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Palette,
-                            contentDescription = "Selector de color personalizado",
-                            tint = colors.primaryText,
+                            imageVector = if (hasCustomColor) Icons.Default.Check else Icons.Default.Palette,
+                            contentDescription = if (hasCustomColor) "Color personalizado seleccionado" else "Selector de color personalizado",
+                            tint = if (hasCustomColor) colors.inkPrimary else colors.primaryText,
                             modifier = Modifier.size(22.dp),
                         )
                     }
-                }
-            }
-
-            // 5. SWITCH: RECORDAR COMERCIO FRECUENTE (Solo si es subcategoría Y el callback existe)
-            if (isSubcategory && onRememberFrequentMerchantChange != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(16.dp))
-                        .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                        .background(colors.surfaceVariant.copy(alpha = 0.5f))
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Recordar comercio frecuente",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = colors.inkPrimary,
-                        )
-                        Text(
-                            text = "Auto-completa la subcategoría en futuros gastos con este nombre",
-                            fontSize = 12.sp,
-                            color = colors.inkSecondary,
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Switch(
-                        checked = rememberFrequentMerchant,
-                        onCheckedChange = onRememberFrequentMerchantChange,
-                        modifier = Modifier.testTag("new_subcategory_frequent_merchant_switch"),
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = colors.primary,
-                            uncheckedThumbColor = Color.White,
-                            uncheckedTrackColor = colors.dragHandle,
-                        ),
-                    )
                 }
             }
 

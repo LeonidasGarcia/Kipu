@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,6 +32,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CreditCard
@@ -43,7 +47,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +76,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -82,10 +86,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.core.finance.domain.CreditCalculations
-import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.FinancialMovement
 import com.kipu.app.core.finance.domain.model.Money
@@ -94,15 +96,16 @@ import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card as FinancialCard
+import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
+import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
-import com.kipu.app.feature.accounts.domain.model.PurchaseCandidate
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
+import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.feature.accounts.presentation.components.CardStylePresets
 import com.kipu.app.feature.accounts.presentation.components.CardStyleType
-import com.kipu.app.feature.accounts.presentation.instruments.InstallmentSimulatorScreen
 import com.kipu.app.feature.accounts.presentation.instruments.PayCardDialog
 import com.kipu.app.ui.component.MoneyText
 import com.kipu.app.ui.component.formatMinorUnits
@@ -112,7 +115,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
-import java.util.UUID
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -153,30 +155,29 @@ fun AccountDetailScreen(
     val creditCardSummary = (card as? CreditCard)?.let { target ->
         dashboard.dashboardData?.creditCards?.firstOrNull { it.card.id == target.id }
     }
-    val observedCardMovements by remember(card?.id) {
-        (card as? CreditCard)?.let { target ->
-            viewModel.observeCardMovements(target.id)
-        } ?: flowOf(emptyList())
-    }.collectAsStateWithLifecycle(initialValue = emptyList())
-    val effectiveCardMovements = cardMovements ?: observedCardMovements
+    val observedCardMovementsFlow = remember(card?.id) {
+        val movementFlow = (card as? CreditCard)?.let { viewModel.observeCardMovements(it.id) }
+        if (movementFlow == null) {
+            flowOf<List<FinancialMovement>?>(null)
+        } else {
+            movementFlow.map { movements -> movements as List<FinancialMovement>? }
+        }
+    }
+    val observedCardMovements by observedCardMovementsFlow.collectAsStateWithLifecycle(initialValue = null)
+    val effectiveCardMovements = cardMovements ?: observedCardMovements.orEmpty()
+    val isCardMovementsLoading = card is CreditCard && cardMovements == null && observedCardMovements == null
+    val nextInstallmentPaymentFlow = remember(card?.id) {
+        (card as? CreditCard)?.let { viewModel.observeNextInstallmentPayment(it.id) }
+            ?: flowOf<CardPaymentSuggestion?>(null)
+    }
+    val nextInstallmentPayment by nextInstallmentPaymentFlow.collectAsStateWithLifecycle(initialValue = null)
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var isSubmitting by remember(instrumentId) { mutableStateOf(false) }
+    var keepDetailOpenAfterSave by remember(instrumentId) { mutableStateOf(false) }
     var showCardPayment by remember(instrumentId) { mutableStateOf(false) }
     var showPurchaseDraft by remember(instrumentId, startPurchaseOnOpen) { mutableStateOf(startPurchaseOnOpen) }
-    var purchaseMerchant by remember(instrumentId) { mutableStateOf("") }
-    var purchaseAmount by remember(instrumentId) { mutableStateOf("") }
-    var purchaseCategoryId by remember(instrumentId) { mutableStateOf<String?>(null) }
-    var purchaseCategoryMenuExpanded by remember(instrumentId) { mutableStateOf(false) }
-    var purchaseCandidate by remember(instrumentId) { mutableStateOf<PurchaseCandidate?>(null) }
-    val selectedPurchaseCategory = purchaseCategories.firstOrNull { it.id == purchaseCategoryId }
-
-    LaunchedEffect(purchaseCategories, purchaseCategoryId) {
-        if (purchaseCategoryId != null && purchaseCategories.none { it.id == purchaseCategoryId }) {
-            purchaseCategoryId = null
-        }
-    }
 
     LaunchedEffect(viewModel, instrumentId, isCard) {
         viewModel.refreshCreditUtilizationNotifications(instrumentId.takeIf { isCard })
@@ -188,13 +189,19 @@ fun AccountDetailScreen(
                 is AccountUiEvent.ShowMessage -> {
                     if (isSubmitting) {
                         isSubmitting = false
-                        onReturnToDashboard(event.message)
+                        if (keepDetailOpenAfterSave) {
+                            keepDetailOpenAfterSave = false
+                            snackbarHostState.showSnackbar(event.message)
+                        } else {
+                            onReturnToDashboard(event.message)
+                        }
                     } else {
                         snackbarHostState.showSnackbar(event.message)
                     }
                 }
                 is AccountUiEvent.Error -> {
                     isSubmitting = false
+                    keepDetailOpenAfterSave = false
                     snackbarHostState.showSnackbar(event.message)
                 }
             }
@@ -208,6 +215,7 @@ fun AccountDetailScreen(
         creditCardSummary = creditCardSummary,
         creditNotifications = creditNotifications.filter { it.cardId == instrumentId },
         cardMovements = effectiveCardMovements,
+        isCardMovementsLoading = isCardMovementsLoading,
         isLoading = instruments.isLoading,
         modifier = modifier,
         snackbarHostState = snackbarHostState,
@@ -219,6 +227,21 @@ fun AccountDetailScreen(
                 val iconToken = if (preset == target.preset) target.iconToken else preset?.defaultIconToken
                 viewModel.updateAppearance(
                     accountId = target.id,
+                    alias = alias,
+                    preset = preset,
+                    colorToken = colorToken,
+                    iconToken = iconToken,
+                )
+            }
+        },
+        onSaveCardAppearance = { alias, preset ->
+            (card as? CreditCard)?.let { target ->
+                isSubmitting = true
+                keepDetailOpenAfterSave = true
+                val colorToken = if (preset == target.preset) target.colorToken else preset?.defaultColorToken
+                val iconToken = if (preset == target.preset) target.iconToken else preset?.defaultIconToken
+                viewModel.updateCardAppearance(
+                    cardId = target.id,
                     alias = alias,
                     preset = preset,
                     colorToken = colorToken,
@@ -253,6 +276,7 @@ fun AccountDetailScreen(
     if (showCardPayment && creditCardSummary != null) {
         PayCardDialog(
             creditCardWithSummary = creditCardSummary,
+            nextInstallmentDue = nextInstallmentPayment,
             eligibleAccounts = dashboard.dashboardData?.liquidAccounts.orEmpty(),
             onPayCreditCard = viewModel::payCreditCard,
             onDismiss = { showCardPayment = false },
@@ -260,114 +284,26 @@ fun AccountDetailScreen(
     }
 
     if (showPurchaseDraft && card is CreditCard) {
-        AlertDialog(
-            onDismissRequest = { showPurchaseDraft = false },
-            title = { Text("Nueva compra con crédito") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("La compra se reconocerá como gasto solo al confirmarla.")
-                    OutlinedTextField(
-                        value = purchaseMerchant,
-                        onValueChange = { purchaseMerchant = it.take(100) },
-                        label = { Text("Comercio") },
-                        singleLine = true,
+        CreditPurchaseDraftSheet(
+            card = card,
+            categories = purchaseCategories,
+            onDismiss = { showPurchaseDraft = false },
+            onConfirmPurchase = { candidate, installments ->
+                if (!isSubmitting) {
+                    isSubmitting = true
+                    viewModel.confirmCreditPurchase(
+                        cardId = card.id,
+                        amount = candidate.amount,
+                        merchant = candidate.merchant,
+                        effectiveAt = candidate.occurredAt,
+                        installments = installments,
+                        categoryId = requireNotNull(candidate.categoryId),
+                        merchantId = candidate.merchantId,
                     )
-                    OutlinedTextField(
-                        value = purchaseAmount,
-                        onValueChange = { purchaseAmount = it },
-                        label = { Text("Importe (${card.currency.name})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                    )
-                    Box {
-                        OutlinedButton(
-                            onClick = { purchaseCategoryMenuExpanded = true },
-                            enabled = purchaseCategories.isNotEmpty(),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(selectedPurchaseCategory?.name ?: "Seleccionar categoría de gasto")
-                        }
-                        DropdownMenu(
-                            expanded = purchaseCategoryMenuExpanded,
-                            onDismissRequest = { purchaseCategoryMenuExpanded = false },
-                        ) {
-                            purchaseCategories.forEach { category ->
-                                DropdownMenuItem(
-                                    text = { Text(category.name) },
-                                    onClick = {
-                                        purchaseCategoryId = category.id
-                                        purchaseCategoryMenuExpanded = false
-                                    },
-                                )
-                            }
-                        }
-                    }
-                    if (purchaseCategories.isEmpty()) {
-                        Text("No hay categorías de gasto disponibles.", style = MaterialTheme.typography.bodySmall)
-                    }
+                    showPurchaseDraft = false
                 }
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val amountMinor = MoneyInputParser.parseMinorUnits(purchaseAmount)
-                    if (isValidCreditPurchaseDraft(amountMinor, purchaseMerchant, selectedPurchaseCategory?.id)) {
-                        purchaseCandidate = PurchaseCandidate(
-                            id = UUID.randomUUID().toString(),
-                            cardId = card.id,
-                            amount = Money(requireNotNull(amountMinor), card.currency),
-                            merchant = purchaseMerchant.trim(),
-                            occurredAt = Instant.now(),
-                            suggestedInstallments = 3,
-                            categoryId = requireNotNull(selectedPurchaseCategory).id,
-                        )
-                        showPurchaseDraft = false
-                    } else {
-                        coroutineScope.launch {
-                            val message = if (selectedPurchaseCategory == null) {
-                                "Selecciona una categoría para clasificar la compra."
-                            } else {
-                                "Indica un comercio y un importe válido."
-                            }
-                            snackbarHostState.showSnackbar(message)
-                        }
-                    }
-                }) { Text("Ver simulación") }
-            },
-            dismissButton = { TextButton(onClick = { showPurchaseDraft = false }) { Text("Cancelar") } },
         )
-    }
-
-    purchaseCandidate?.let { candidate ->
-        val creditCard = card as? CreditCard
-        if (creditCard != null) {
-            Dialog(onDismissRequest = { purchaseCandidate = null }) {
-                androidx.compose.material3.Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.extraLarge,
-                ) {
-                    InstallmentSimulatorScreen(
-                        candidate = candidate,
-                        card = creditCard,
-                        teaBps = null,
-                        onConfirmPurchase = { installments ->
-                            if (!isSubmitting) {
-                                isSubmitting = true
-                                viewModel.confirmCreditPurchase(
-                                    cardId = creditCard.id,
-                                    amount = candidate.amount,
-                                    merchant = candidate.merchant,
-                                    effectiveAt = candidate.occurredAt,
-                                    installments = installments,
-                                    categoryId = requireNotNull(candidate.categoryId),
-                                )
-                                purchaseCandidate = null
-                            }
-                        },
-                        onRejectPurchase = { purchaseCandidate = null },
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -381,6 +317,7 @@ fun AccountDetailContent(
     isLoading: Boolean,
     onNavigateBack: () -> Unit,
     onSaveAppearance: (alias: String, preset: AccountPreset?) -> Unit,
+    onSaveCardAppearance: (alias: String?, preset: CardPreset?) -> Unit = { _, _ -> },
     onCorrectOpeningBalance: (Long) -> Unit,
     onArchive: () -> Unit,
     onReactivate: () -> Unit,
@@ -390,6 +327,7 @@ fun AccountDetailContent(
     onNavigateToRateCatalog: (String) -> Unit = {},
     onStartCreditPurchase: () -> Unit = {},
     cardMovements: List<FinancialMovement> = emptyList(),
+    isCardMovementsLoading: Boolean = false,
     isSubmitting: Boolean = false,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -397,6 +335,10 @@ fun AccountDetailContent(
     val title = account?.alias ?: card?.alias ?: card?.let { "${it.issuer} ${it.network}" } ?: "Detalle"
     var alias by remember(instrumentKey, account?.alias) { mutableStateOf(account?.alias.orEmpty()) }
     var selectedPreset by remember(instrumentKey, account?.preset) { mutableStateOf(account?.preset) }
+    var presetMenuExpanded by remember(instrumentKey) { mutableStateOf(false) }
+    var cardAlias by remember(instrumentKey, card?.alias) { mutableStateOf(card?.alias.orEmpty()) }
+    var selectedCardPreset by remember(instrumentKey, card?.preset) { mutableStateOf(card?.preset) }
+    var cardPresetMenuExpanded by remember(instrumentKey) { mutableStateOf(false) }
     var showArchiveConfirmation by remember(instrumentKey) { mutableStateOf(false) }
     var showReactivateConfirmation by remember(instrumentKey) { mutableStateOf(false) }
     var showOpeningCorrection by remember(instrumentKey) { mutableStateOf(false) }
@@ -472,6 +414,7 @@ fun AccountDetailContent(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp)
+                    .navigationBarsPadding()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -511,6 +454,82 @@ fun AccountDetailContent(
                         summary = creditCardSummary,
                     )
 
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("card_presentation_card"),
+                        shape = MaterialTheme.shapes.large,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("Identificación de la tarjeta", style = MaterialTheme.typography.titleMedium)
+                            OutlinedTextField(
+                                value = cardAlias,
+                                onValueChange = { cardAlias = it.take(80) },
+                                label = { Text("Nombre visible") },
+                                placeholder = { Text("${card.issuer} · ${card.network.name}") },
+                                singleLine = true,
+                                enabled = !isSubmitting,
+                                modifier = Modifier.fillMaxWidth().testTag("card_alias_field"),
+                            )
+                            Box {
+                                OutlinedButton(
+                                    onClick = { cardPresetMenuExpanded = true },
+                                    enabled = !isSubmitting,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                        .testTag("card_preset_selector"),
+                                ) {
+                                    Icon(Icons.Default.CreditCard, contentDescription = null)
+                                    Text(
+                                        selectedCardPreset?.defaultName ?: "Diseño original",
+                                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Elegir diseño")
+                                }
+                                DropdownMenu(
+                                    expanded = cardPresetMenuExpanded,
+                                    onDismissRequest = { cardPresetMenuExpanded = false },
+                                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                                ) {
+                                    CardPreset.entries.forEach { preset ->
+                                        DropdownMenuItem(
+                                            text = { Text(preset.defaultName) },
+                                            modifier = Modifier.testTag("card_preset_" + preset.name.lowercase()),
+                                            onClick = {
+                                                selectedCardPreset = preset
+                                                cardPresetMenuExpanded = false
+                                            },
+                                            trailingIcon = if (selectedCardPreset == preset) {
+                                                { Icon(Icons.Default.CheckCircle, contentDescription = "Seleccionado") }
+                                            } else {
+                                                null
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                "Los consumos, el límite y las fechas de pago no cambian.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Button(
+                                onClick = {
+                                    onSaveCardAppearance(cardAlias.trim().takeIf(String::isNotBlank), selectedCardPreset)
+                                },
+                                enabled = !isSubmitting,
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                    .testTag("save_card_presentation"),
+                            ) {
+                                Text(if (isSubmitting) "Guardando..." else "Guardar cambios")
+                            }
+                        }
+                    }
+
                     // R10 CTAs and Actions
                     CreditCardActionsSection(
                         card = card,
@@ -528,6 +547,7 @@ fun AccountDetailContent(
                     CreditCardMovementsSection(
                         movements = cardMovements,
                         currency = card.currency,
+                        isLoading = isCardMovementsLoading,
                     )
                 } else {
                     // Liquid Account or Debit Card view (preserved in full)
@@ -564,63 +584,147 @@ fun AccountDetailContent(
                         }
                     }
 
-                    account?.let { target ->
-                        Text("Presentación", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                        OutlinedTextField(
-                            value = alias,
-                            onValueChange = { value ->
-                                alias = value.take(80)
-                                aliasError = if (value.isBlank()) "Escribe un alias para identificar la cuenta." else null
-                            },
-                            label = { Text("Alias de la cuenta") },
-                            singleLine = true,
-                            isError = aliasError != null,
-                            supportingText = aliasError?.let { { Text(it) } },
-                            shape = MaterialTheme.shapes.medium,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Text("Institución / presentación", style = MaterialTheme.typography.titleSmall)
-                        AccountPreset.entries.chunked(3).forEach { presetRow ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    account?.let {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().testTag("account_presentation_card"),
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                presetRow.forEach { preset ->
-                                    FilterChip(
-                                        selected = selectedPreset == preset,
-                                        onClick = { selectedPreset = preset },
-                                        label = { Text(preset.defaultName) },
-                                        modifier = Modifier.weight(1f),
-                                    )
+                                Text(
+                                    "Presentación",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    "Personaliza cómo identificas esta cuenta.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                OutlinedTextField(
+                                    value = alias,
+                                    onValueChange = { value ->
+                                        alias = value.take(80)
+                                        aliasError = if (value.isBlank()) "Escribe un alias para identificar la cuenta." else null
+                                    },
+                                    label = { Text("Nombre de la cuenta") },
+                                    singleLine = true,
+                                    isError = aliasError != null,
+                                    supportingText = aliasError?.let { { Text(it) } },
+                                    shape = MaterialTheme.shapes.medium,
+                                    modifier = Modifier.fillMaxWidth().testTag("account_alias_field"),
+                                )
+                                if (account.type != AccountType.CASH) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("Institución", style = MaterialTheme.typography.labelLarge)
+                                    Box(modifier = Modifier.fillMaxWidth()) {
+                                        OutlinedButton(
+                                            onClick = { presetMenuExpanded = true },
+                                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                                                .testTag("account_preset_selector"),
+                                            shape = MaterialTheme.shapes.medium,
+                                            ) {
+                                                Icon(
+                                                    imageVector = selectedPreset?.let(::accountPresetIcon)
+                                                        ?: Icons.Default.AccountBalance,
+                                                    contentDescription = null,
+                                                )
+                                                Text(
+                                                    selectedPreset?.defaultName ?: "Elegir institución",
+                                                    modifier = Modifier.weight(1f).padding(start = 8.dp),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Elegir institución")
+                                        }
+                                        DropdownMenu(
+                                            expanded = presetMenuExpanded,
+                                            onDismissRequest = { presetMenuExpanded = false },
+                                            modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                                        ) {
+                                            AccountPreset.entries.filter { preset ->
+                                                when (account.type) {
+                                                    AccountType.DIGITAL_WALLET -> preset == AccountPreset.YAPE ||
+                                                        preset == AccountPreset.PLIN || preset == AccountPreset.GENERIC
+                                                    AccountType.SAVINGS, AccountType.BANK -> preset != AccountPreset.CASH &&
+                                                        preset != AccountPreset.YAPE && preset != AccountPreset.PLIN
+                                                    AccountType.CASH -> false
+                                                    AccountType.CREDIT_LIABILITY -> preset != AccountPreset.CASH
+                                                }
+                                            }.forEach { preset ->
+                                                DropdownMenuItem(
+                                                    text = { Text(preset.defaultName) },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            imageVector = accountPresetIcon(preset),
+                                                            contentDescription = null,
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        selectedPreset = preset
+                                                        presetMenuExpanded = false
+                                                    },
+                                                    trailingIcon = if (selectedPreset == preset) {
+                                                        { Icon(Icons.Default.CheckCircle, contentDescription = "Seleccionada") }
+                                                    } else {
+                                                        null
+                                                    },
+                                                    modifier = Modifier.testTag("account_preset_" + preset.name.lowercase()),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                }
+                                Button(
+                                    onClick = {
+                                        if (alias.isBlank()) {
+                                            aliasError = "Escribe un alias para identificar la cuenta."
+                                        } else {
+                                            onSaveAppearance(alias.trim(), selectedPreset)
+                                        }
+                                    },
+                                    enabled = !isSubmitting && alias.isNotBlank(),
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                        .testTag("save_account_presentation"),
+                                ) {
+                                    Text(if (isSubmitting) "Guardando..." else "Guardar presentación")
                                 }
                             }
                         }
-                        Button(
-                            onClick = {
-                                if (alias.isBlank()) {
-                                    aliasError = "Escribe un alias para identificar la cuenta."
-                                } else {
-                                    onSaveAppearance(alias.trim(), selectedPreset)
-                                }
-                            },
-                            enabled = !isSubmitting && alias.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                        ) {
-                            Text(if (isSubmitting) "Guardando..." else "Guardar presentación")
-                        }
 
-                        Text("Saldo inicial", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                        Text(
-                            text = "Corregir solo si el saldo con el que abriste la cuenta fue registrado incorrectamente. La corrección conserva el historial original mediante un reverso y un nuevo ajuste auditado.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        OutlinedButton(
-                            onClick = { showOpeningCorrection = true },
-                            enabled = !isSubmitting,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.large,
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         ) {
-                            Text("Corregir saldo inicial")
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(
+                                    "Saldo inicial",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Text(
+                                    text = "Corregir solo si el saldo con el que abriste la cuenta fue registrado incorrectamente. La corrección conserva el historial original mediante un reverso y un nuevo ajuste auditado.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                OutlinedButton(
+                                    onClick = { showOpeningCorrection = true },
+                                    enabled = !isSubmitting,
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                                ) {
+                                    Text("Corregir saldo inicial")
+                                }
+                            }
                         }
 
                         if (!archived) {
@@ -641,7 +745,6 @@ fun AccountDetailContent(
                             }
                         }
                     }
-
                     if (card != null && card !is CreditCard) {
                         if (!archived) {
                             OutlinedButton(
@@ -753,12 +856,12 @@ private fun Kibo3DCreditCard(
 ) {
     var isFlipped by remember { mutableStateOf(false) }
     val reducedMotion = rememberReducedMotionEnabled()
-    val rotation by animateFloatAsState(
+    val rotation = animateFloatAsState(
         targetValue = if (isFlipped) 180f else 0f,
         animationSpec = if (reducedMotion) {
             snap()
         } else {
-            tween(durationMillis = KipuMotionTokens.SlowMillis, easing = FastOutSlowInEasing)
+            tween(durationMillis = KipuMotionTokens.CardFlipMillis, easing = FastOutSlowInEasing)
         },
         label = "kibo3DCardRotationY",
     )
@@ -806,7 +909,7 @@ private fun Kibo3DCreditCard(
                 .fillMaxWidth()
                 .height(204.dp)
                 .graphicsLayer {
-                    this.rotationY = rotation
+                    this.rotationY = rotation.value
                     this.cameraDistance = 12f * density
                 }
                 .clickable { isFlipped = !isFlipped }
@@ -835,25 +938,31 @@ private fun Kibo3DCreditCard(
                     )
                 }
 
-                if (rotation <= 90f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = if (rotation.value <= 90f) 1f else 0f },
+                ) {
                     CreditCardFrontContent(
                         card = card,
                         cardForeground = cardForeground,
                         accentColor = cardAccent,
                         networkDisplay = networkDisplay,
                     )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { rotationY = 180f },
-                    ) {
-                        CreditCardBackContent(
-                            card = card,
-                            cardForeground = cardForeground,
-                            accentColor = cardAccent,
-                        )
-                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            rotationY = 180f
+                            alpha = if (rotation.value > 90f) 1f else 0f
+                        },
+                ) {
+                    CreditCardBackContent(
+                        card = card,
+                        cardForeground = cardForeground,
+                        accentColor = cardAccent,
+                    )
                 }
             }
         }
@@ -862,6 +971,7 @@ private fun Kibo3DCreditCard(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
+                .heightIn(min = 48.dp)
                 .clickable { isFlipped = !isFlipped }
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1581,6 +1691,7 @@ private fun CreditCardActionsSection(
 private fun CreditCardMovementsSection(
     movements: List<FinancialMovement>,
     currency: Currency,
+    isLoading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val sortedMovements = remember(movements) {
@@ -1615,7 +1726,20 @@ private fun CreditCardMovementsSection(
             }
         }
 
-        if (sortedMovements.isEmpty()) {
+        if (isLoading) {
+            Card(
+                shape = MaterialTheme.shapes.medium,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth().testTag("card_movements_loading"),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                }
+            }
+        } else if (sortedMovements.isEmpty()) {
             Card(
                 shape = MaterialTheme.shapes.medium,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
@@ -1664,7 +1788,7 @@ private fun CreditCardMovementsSection(
                             MovementKind.OPENING -> Icons.Default.AccountBalance
                         }
                         val title = when (movement.kind) {
-                            MovementKind.CREDIT_PURCHASE -> "Consumo con tarjeta"
+                            MovementKind.CREDIT_PURCHASE -> movement.merchantName?.takeIf(String::isNotBlank) ?: "Consumo con tarjeta"
                             MovementKind.CARD_PAYMENT_LIABILITY, MovementKind.CARD_PAYMENT_CASH -> "Pago amortizador"
                             MovementKind.ADJUSTMENT -> "Ajuste de crédito"
                             MovementKind.REVERSAL -> "Reverso de movimiento"
@@ -1712,6 +1836,13 @@ private fun CreditCardMovementsSection(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                    if (movement.status == com.kipu.app.core.finance.domain.model.MovementStatus.PENDING) {
+                                        Text(
+                                            text = "Pendiente de sincronizar",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                        )
+                                    }
                                 }
                             }
 
@@ -1807,3 +1938,6 @@ private fun AccountType.toDetailLabel(): String = when (this) {
     AccountType.DIGITAL_WALLET -> "Billetera digital"
     AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
 }
+
+private fun accountPresetIcon(preset: AccountPreset) =
+    if (preset.defaultIconToken == "wallet") Icons.Default.AccountBalanceWallet else Icons.Default.AccountBalance

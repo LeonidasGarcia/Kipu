@@ -12,6 +12,7 @@ import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
+import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
 import com.kipu.app.feature.accounts.domain.model.DebitCard
 import java.time.Instant
@@ -71,6 +72,7 @@ interface FinancialInstrumentsRepository {
     fun observeCardDebt(cardId: CardId): Flow<Money>
     fun observeMovementsByAccount(accountId: AccountId): Flow<List<FinancialMovement>>
     fun observeMovementsByCard(cardId: CardId): Flow<List<FinancialMovement>> = flowOf(emptyList())
+    fun observeNextInstallmentPayment(cardId: CardId): Flow<CardPaymentSuggestion?> = flowOf(null)
     fun observeActiveComputableCount(): Flow<Int>
     suspend fun getActiveComputableCount(): Int
     suspend fun hasCardWithIdentity(issuer: String, network: CardNetwork, lastFourDigits: String): Boolean

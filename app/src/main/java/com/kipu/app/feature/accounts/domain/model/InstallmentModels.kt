@@ -26,6 +26,7 @@ data class PurchaseCandidate(
     val suggestedInstallments: Int = 1,
     val status: CandidateStatus = CandidateStatus.PENDING,
     val categoryId: String? = null,
+    val merchantId: String? = null,
 ) {
     init {
         require(amount.minorUnits > 0) { "Purchase amount must be positive: ${amount.minorUnits}" }
@@ -47,6 +48,15 @@ data class InstallmentScheduleItem(
         require(principalPortion.currency == amount.currency && interestPortion.currency == amount.currency) {
             "Currency mismatch in installment schedule item"
         }
+    }
+}
+
+data class CardPaymentSuggestion(
+    val dueDate: LocalDate,
+    val amount: Money,
+) {
+    init {
+        require(amount.minorUnits > 0L) { "Suggested card payment must be positive" }
     }
 }
 

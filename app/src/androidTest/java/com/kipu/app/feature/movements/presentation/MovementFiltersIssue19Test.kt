@@ -73,6 +73,24 @@ class MovementFiltersIssue19Test {
         assertEquals(1, attempts)
     }
 
+    @Test fun frequentPeriodsStayCompactAndSecondaryPresetsRemainAvailable() {
+        compose.setContent { KipuTheme { MovementFiltersSheet(MovementHistoryUiState(), {}, {
+            it.validate()
+        }) } }
+
+        compose.onNodeWithText("Todas").assertIsDisplayed()
+        compose.onNodeWithText("Hoy").assertIsDisplayed()
+        compose.onNodeWithText("Este mes").assertIsDisplayed()
+        compose.onNodeWithText("Personalizado").assertIsDisplayed()
+        compose.onNodeWithText("7 días").assertDoesNotExist()
+        compose.onNodeWithText("Año").assertDoesNotExist()
+
+        compose.onNodeWithText("Más periodos").performClick()
+        compose.onNodeWithText("7 días").assertIsDisplayed().performClick()
+        compose.onNodeWithText("7 días").assertIsSelected()
+        compose.onNodeWithText("Año").assertIsDisplayed()
+    }
+
     @Test fun thousandReferencesAreLazyAndSelectionSurvivesSearchAndRemoval() {
         val selected = mutableStateOf(setOf("id-0"))
         val options = (0..999).map { MovementReferenceOption("id-$it", "Cuenta %04d".format(it)) }
