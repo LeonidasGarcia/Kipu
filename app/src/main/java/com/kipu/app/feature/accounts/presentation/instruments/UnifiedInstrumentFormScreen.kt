@@ -1109,6 +1109,7 @@ fun UnifiedInstrumentFormScreen(
     // Modal Sheet 1: Issuer Bank Picker
     CalmEmeraldBankSelectionSheet(
         visible = isBankSheetVisible,
+        isCreditCard = kind == InstrumentKind.CREDIT_CARD,
         currentBankCode = bank.code,
         bankChoices = if (kind == InstrumentKind.SAVINGS_DEBIT) bankChoices.filterNot { it.isRetail } else bankChoices,
         onConfirm = { chosenBank ->

@@ -514,7 +514,6 @@ fun PastelCategoryPickerBottomSheet(
     }
     var selectedIconId by remember { mutableStateOf("tv") }
     var selectedColorHex by remember { mutableStateOf("#EDE9FE") }
-    var rememberFrequentMerchant by remember { mutableStateOf(true) }
 
     // Async creation status
     var localIsCreating by remember { mutableStateOf(false) }
@@ -595,8 +594,6 @@ fun PastelCategoryPickerBottomSheet(
                         onIconChange = { selectedIconId = it },
                         onColorChange = { selectedColorHex = it },
                         onParentIdChange = { selectedParentId = it?.value ?: "" },
-                        rememberFrequentMerchant = rememberFrequentMerchant,
-                        onRememberFrequentMerchantChange = { rememberFrequentMerchant = it },
                         onBack = { currentScreen = PastelFlowScreen.BROWSE_CATEGORIES },
                         onDismiss = onDismiss,
                         onConfirm = {
@@ -609,7 +606,7 @@ fun PastelCategoryPickerBottomSheet(
                                         newSubcategoryName.trim(),
                                         selectedIconId,
                                         selectedColorHex,
-                                        rememberFrequentMerchant,
+                                        false,
                                     )
                                     localIsCreating = false
                                     result.fold(
@@ -1394,8 +1391,6 @@ internal fun CreateSubcategoryView(
     selectedColorHex: String,
     onSelectQuickColor: (String) -> Unit,
     onOpenColorPicker: () -> Unit = {},
-    rememberFrequentMerchant: Boolean,
-    onRememberFrequentMerchantChange: (Boolean) -> Unit,
     isCreating: Boolean,
     errorMessage: String?,
     onBack: () -> Unit,
@@ -1416,8 +1411,6 @@ internal fun CreateSubcategoryView(
         onIconChange = onSelectQuickIcon,
         onColorChange = onSelectQuickColor,
         onParentIdChange = { /* updated via chooser */ },
-        rememberFrequentMerchant = rememberFrequentMerchant,
-        onRememberFrequentMerchantChange = onRememberFrequentMerchantChange,
         onBack = onBack,
         onDismiss = onDismiss,
         onConfirm = onSave,

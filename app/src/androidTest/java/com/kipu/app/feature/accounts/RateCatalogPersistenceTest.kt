@@ -5,8 +5,12 @@ import android.graphics.Bitmap
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -96,7 +100,7 @@ class RateCatalogPersistenceTest {
         assertEquals(product, reference.product)
         assertEquals(6500, reference.product.usdTeaMinBps)
         assertEquals(7690, reference.product.usdTeaMaxBps)
-        showRates(restored, "bcp-amex-usd.png", "TEA dólares: 65.00% – 76.90%")
+        showRates(restored, "bcp-amex-usd.png", "65.00% – 76.90%")
     }
 
     @Test
@@ -114,7 +118,7 @@ class RateCatalogPersistenceTest {
         assertNull(reference.product.penTeaMaxBps)
         assertNull(reference.product.usdTeaMinBps)
         assertNull(reference.product.usdTeaMaxBps)
-        showRates(restored, "interbank-amex-unpublished.png", "TEA soles: No publicado numéricamente")
+        showRates(restored, "interbank-amex-unpublished.png", "No publicado numéricamente")
     }
 
     @Test
@@ -134,7 +138,7 @@ class RateCatalogPersistenceTest {
         assertEquals(products, repository.getCreditProductCatalog().getOrThrow())
         assertTrue(resolveRateCatalogContext(restoredBcp, products) is RateCatalogContext.Resolved)
         assertTrue(resolveRateCatalogContext(restoredInterbank, products) is RateCatalogContext.Resolved)
-        showRates(restoredBcp, "bcp-amex-personal-tea.png", "TEA soles: 65.00% – 95.90%", restoredInterbank)
+        showRates(restoredBcp, "bcp-amex-personal-tea.png", "65.00% – 95.90%", restoredInterbank)
     }
 
     private fun product(issuer: String, name: String) = products.single {
@@ -184,9 +188,16 @@ class RateCatalogPersistenceTest {
             }
         }
         compose.onNodeWithText("Referencia aplicable a esta tarjeta").assertIsDisplayed()
-        compose.onNodeWithText(expectedTeaText).assertIsDisplayed()
+        compose.onNodeWithText(expectedTeaText).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ver detalle del tarifario").performScrollTo().performClick()
+        compose.onNodeWithText("Membresía").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Verificación").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Ocultar detalle").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("Membresía").assertCountEquals(0)
         card.personalTeaBps?.let {
-            compose.onNodeWithText(String.format(java.util.Locale.US, "%.2f", it / 100.0)).assertIsDisplayed()
+            compose.onNodeWithText(String.format(java.util.Locale.US, "%.2f", it / 100.0))
+                .performScrollTo().assertIsDisplayed()
         }
         compose.waitForIdle()
         captureScreenshot(screenshotName)
@@ -195,7 +206,7 @@ class RateCatalogPersistenceTest {
             compose.waitForIdle()
             compose.onNodeWithText(String.format(java.util.Locale.US, "%.2f", requireNotNull(nextCard.personalTeaBps) / 100.0))
                 .assertIsDisplayed()
-            compose.onNodeWithText("TEA soles: No publicado numéricamente").assertIsDisplayed()
+            compose.onNodeWithText("No publicado numéricamente").performScrollTo().assertIsDisplayed()
             captureScreenshot("interbank-amex-personal-tea.png")
         }
     }

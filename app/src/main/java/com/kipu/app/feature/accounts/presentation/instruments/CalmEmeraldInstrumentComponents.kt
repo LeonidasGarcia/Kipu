@@ -413,6 +413,7 @@ fun CalmEmeraldIssuerCard(
 @Composable
 fun CalmEmeraldBankSelectionSheet(
     visible: Boolean,
+    isCreditCard: Boolean,
     currentBankCode: String,
     bankChoices: List<BankChoice>,
     onConfirm: (BankChoice) -> Unit,
@@ -470,12 +471,16 @@ fun CalmEmeraldBankSelectionSheet(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Seleccionar entidad emisora",
+                        text = if (isCreditCard) "Seleccionar entidad emisora" else "Seleccionar banco",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp),
                         color = calmColors.primaryText,
                     )
                     Text(
-                        text = "Elige el banco o fintech de tu tarjeta de crédito",
+                        text = if (isCreditCard) {
+                            "Elige el banco o fintech de tu tarjeta de crédito"
+                        } else {
+                            "Elige el banco donde tienes tu cuenta"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = calmColors.secondaryMuted,
                     )
@@ -493,7 +498,12 @@ fun CalmEmeraldBankSelectionSheet(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Buscar banco o entidad…", fontSize = 14.sp) },
+                placeholder = {
+                    Text(
+                        text = if (isCreditCard) "Buscar banco o entidad…" else "Buscar banco…",
+                        fontSize = 14.sp,
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Search,

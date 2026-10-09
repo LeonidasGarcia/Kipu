@@ -17,7 +17,7 @@ import com.kipu.app.feature.movements.presentation.MovementHistoryRoute
 
 const val MOVEMENTS_HISTORY_ROUTE = "movements/history"
 const val MOVEMENTS_HISTORY_PATTERN = "movements/history?accountId={accountId}&categoryId={categoryId}&query={query}"
-const val MOVEMENT_EDITOR_ROUTE = "movements/editor/{transactionId}"
+const val MOVEMENT_EDITOR_ROUTE = "movements/editor/{transactionId}?merchantName={merchantName}"
 
 fun NavController.navigateToMovementHistory(accountId: String? = null, categoryId: String? = null, query: String? = null) {
     val params = mutableListOf<String>()
@@ -28,8 +28,11 @@ fun NavController.navigateToMovementHistory(accountId: String? = null, categoryI
     navigate(route)
 }
 
-fun NavController.navigateToMovementEditor(transactionId: String) {
-    navigate("movements/editor/$transactionId")
+fun NavController.navigateToMovementEditor(transactionId: String, merchantName: String? = null) {
+    val merchantQuery = merchantName?.takeIf(String::isNotBlank)
+        ?.let { "?merchantName=${Uri.encode(it)}" }
+        .orEmpty()
+    navigate("movements/editor/${Uri.encode(transactionId)}$merchantQuery")
 }
 
 fun NavGraphBuilder.movementsDestinations(
@@ -63,12 +66,21 @@ fun NavGraphBuilder.movementsDestinations(
     composable(
         route = MOVEMENT_EDITOR_ROUTE,
         arguments = listOf(
-            navArgument("transactionId") { type = NavType.StringType }
+            navArgument("transactionId") { type = NavType.StringType },
+            navArgument("merchantName") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            },
         )
     ) { backStackEntry ->
         val transactionId = backStackEntry.arguments?.getString("transactionId").orEmpty()
+        val historyEntry = navController.previousBackStackEntry
+        val merchantName = backStackEntry.arguments?.getString("merchantName")
+            ?: historyEntry?.savedStateHandle?.remove<String>("movement_editor_merchant_name")
         MovementEditorRoute(
             transactionId = transactionId,
+            merchantDisplayName = merchantName,
             onDismiss = { navController.popBackStack() },
             onSaved = { navController.previousBackStackEntry?.savedStateHandle?.set("movement_saved", true); navController.popBackStack() },
         )
@@ -86,8 +98,9 @@ internal fun MovementHistoryContent(navController: NavController, historyEntry: 
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
             onNavigateToNewAccount = { navController.navigateToAccountForm() },
             onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
-            onNavigateToEditor = { transactionId ->
-                navController.navigateToMovementEditor(transactionId)
+            onNavigateToEditor = { transactionId, merchantName ->
+                historyEntry.savedStateHandle["movement_editor_merchant_name"] = merchantName
+                navController.navigateToMovementEditor(transactionId, merchantName)
             },
             openRegisterMovement = openRegisterMovement && (movementsSelected?.value != false),
             onConsumeRegisterMovement = { historyEntry.savedStateHandle["open_register_movement"] = false },

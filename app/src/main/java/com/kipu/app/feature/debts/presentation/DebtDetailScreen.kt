@@ -17,10 +17,17 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
 import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
@@ -50,6 +58,7 @@ data class DebtSettlementActivity(
 )
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun DebtDetailScreen(
     debt: DebtSummary,
     hasFinancialHistory: Boolean,
@@ -68,10 +77,21 @@ fun DebtDetailScreen(
     if (currency != null) formatter.currency = currency
     Scaffold(
         topBar = {
-            Row(modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp)) {
-                TextButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("Volver") }
-                Text("Detalle de deuda", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Detalle de deuda",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                windowInsets = TopAppBarDefaults.windowInsets,
+            )
         },
     ) { insets ->
         Column(
@@ -105,7 +125,7 @@ fun DebtDetailScreen(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Text("${debt.currencyCode} · ${debt.openedOn}", style = MaterialTheme.typography.bodySmall)
-                    debt.dueDate?.let { Text("Vence el $it", style = MaterialTheme.typography.bodyMedium) }
+                    debt.dueDate?.let { Text("Vence el ${formatDebtDate(it)}", style = MaterialTheme.typography.bodyMedium) }
                 }
             }
             debt.notes?.takeIf(String::isNotBlank)?.let { notes ->
@@ -125,7 +145,7 @@ fun DebtDetailScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                             ) {
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text("Cuota ${installment.installmentNumber} · ${installment.dueDate}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                    Text("Cuota ${installment.installmentNumber} · ${formatDebtDate(installment.dueDate)}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                                     Text(installmentStatusLabel(installment.status), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 Text(formatter.format(installment.principalMinor / 100.0), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
@@ -181,11 +201,44 @@ fun DebtDetailScreen(
                     }
                 }
             }
-            Button(onClick = onSettle, enabled = debt.remainingPrincipalMinor > 0, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                Text(if (debt.obligationType.name == "PAYABLE") "Registrar pago" else "Registrar cobro")
+            if (debt.status == DebtLifecycleStatus.SETTLED) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("debt-settled-state"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        "Deuda liquidada. El saldo quedó en cero y el historial se conserva.",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            } else if (debt.status == DebtLifecycleStatus.CANCELLED) {
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("debt-cancelled-state"),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(
+                        if (debt.remainingPrincipalMinor > 0L) {
+                            "Deuda cancelada. El saldo pendiente no se registró como pago."
+                        } else {
+                            "Deuda cancelada. El historial se conserva."
+                        },
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
-            OutlinedButton(onClick = onSchedule, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                Text("Cuotas y cierre")
+            if (debt.status == DebtLifecycleStatus.ACTIVE) {
+                Button(onClick = onSettle, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text(if (debt.obligationType.name == "PAYABLE") "Registrar pago" else "Registrar cobro")
+                }
+                OutlinedButton(onClick = onSchedule, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text("Gestionar cuotas")
+                }
             }
             OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                 Text("Editar datos")

@@ -101,6 +101,7 @@ class MovementRevisionLocalTest {
         accountId: String = "acc-a",
         amountMinor: Long = 2000L,
         occurredAt: Long = 1500L,
+        categoryId: String = "food",
     ) = RegisterTransactionCommand(
         idempotencyKey = UUID.randomUUID().toString(),
         userId = userId,
@@ -109,7 +110,7 @@ class MovementRevisionLocalTest {
         currency = "PEN",
         sourceAccountId = accountId,
         destinationAccountId = null,
-        categoryId = "food",
+        categoryId = categoryId,
         occurredAt = occurredAt,
         note = "Initial expense",
     )
@@ -133,7 +134,7 @@ class MovementRevisionLocalTest {
             expectedRevision = 1L,
             payload = MovementRevisionPayload(
                 type = MovementType.EXPENSE,
-                operationKind = "STANDARD",
+                operationKind = null,
                 amountMinor = 1500L,
                 currency = "PEN",
                 sourceAccountId = "acc-a",
@@ -147,7 +148,7 @@ class MovementRevisionLocalTest {
         )
 
         val reviseResult = repository.revise(userId, reviseCmd)
-        assertTrue(reviseResult is MovementMutationResult.Success)
+        assertTrue("Unexpected revision result: $reviseResult", reviseResult is MovementMutationResult.Success)
         val success = reviseResult as MovementMutationResult.Success
         assertFalse(success.isDuplicate)
         assertEquals(2L, success.head.commandBaseRevision)
@@ -175,6 +176,48 @@ class MovementRevisionLocalTest {
     }
 
     @Test
+    fun reviseLegacyGeneralCategoryUsesTheMovementTypeInsteadOfCrashing() = runTest {
+        database.categoryDao().insertCategory(
+            CategoryEntity(
+                id = "general-food",
+                userId = null,
+                parentId = null,
+                origin = "SYSTEM",
+                categoryType = "GENERAL",
+                createdAt = 1L,
+                updatedAt = 1L,
+            ),
+        )
+        val registerResult = repository.registerTransaction(
+            registerCommand(categoryId = "general-food"),
+        ) as RegisterTransactionResult.Success
+
+        val result = repository.revise(
+            userId,
+            MovementRevisionCommand.Revise(
+                idempotencyKey = UUID.randomUUID().toString(),
+                transactionId = registerResult.transaction.id,
+                expectedRevision = 1L,
+                payload = MovementRevisionPayload(
+                    type = MovementType.EXPENSE,
+                    operationKind = null,
+                    amountMinor = 2000L,
+                    currency = "PEN",
+                    sourceAccountId = "acc-a",
+                    destinationAccountId = null,
+                    categoryId = "general-food",
+                    occurredAt = 1500L,
+                    note = "Note updated",
+                ),
+            ),
+        )
+
+        assertTrue("Unexpected general-category revision result: $result", result is MovementMutationResult.Success)
+        assertEquals(1, dao.getLedgerEntriesForTransaction(userId, registerResult.transaction.id).size)
+        assertEquals(1, dao.getRevisions(userId, registerResult.transaction.id).size)
+    }
+
+    @Test
     fun reviseReplayReturnsDuplicateWithoutNewLedgerEntries() = runTest {
         val regCmd = registerCommand(amountMinor = 2000L)
         val regResult = repository.registerTransaction(regCmd) as RegisterTransactionResult.Success
@@ -187,7 +230,7 @@ class MovementRevisionLocalTest {
             expectedRevision = 1L,
             payload = MovementRevisionPayload(
                 type = MovementType.EXPENSE,
-                operationKind = "STANDARD",
+                operationKind = null,
                 amountMinor = 1500L,
                 currency = "PEN",
                 sourceAccountId = "acc-a",
@@ -201,7 +244,7 @@ class MovementRevisionLocalTest {
         val first = repository.revise(userId, reviseCmd)
         val second = repository.revise(userId, reviseCmd)
 
-        assertTrue(first is MovementMutationResult.Success)
+        assertTrue("Unexpected first revision result: $first", first is MovementMutationResult.Success)
         assertFalse((first as MovementMutationResult.Success).isDuplicate)
 
         assertTrue(second is MovementMutationResult.Success)
@@ -226,7 +269,7 @@ class MovementRevisionLocalTest {
                     expectedRevision = 1L,
                     payload = MovementRevisionPayload(
                         type = MovementType.EXPENSE,
-                        operationKind = "STANDARD",
+                        operationKind = null,
                         amountMinor = 1500L,
                         currency = "PEN",
                         sourceAccountId = "acc-a",
@@ -271,7 +314,7 @@ class MovementRevisionLocalTest {
             expectedRevision = 1L,
             payload = MovementRevisionPayload(
                 type = MovementType.EXPENSE,
-                operationKind = "STANDARD",
+                operationKind = null,
                 amountMinor = 2000L,
                 currency = "PEN",
                 sourceAccountId = "acc-a",
@@ -281,7 +324,7 @@ class MovementRevisionLocalTest {
             ),
         )
         val reviseResult = repository.revise(userId, reviseCmd)
-        assertTrue(reviseResult is MovementMutationResult.Success)
+        assertTrue("Unexpected date revision result: $reviseResult", reviseResult is MovementMutationResult.Success)
 
         // Cash balance intact: date change appends 0 cash ledger entries!
         assertEquals(1, dao.getLedgerEntriesForTransaction(userId, txId).size)
@@ -322,7 +365,7 @@ class MovementRevisionLocalTest {
             expectedRevision = 1L,
             payload = MovementRevisionPayload(
                 type = MovementType.EXPENSE,
-                operationKind = "STANDARD",
+                operationKind = null,
                 amountMinor = 2000L,
                 currency = "PEN",
                 sourceAccountId = "acc-b",
@@ -331,7 +374,7 @@ class MovementRevisionLocalTest {
             ),
         )
         val reviseResult = repository.revise(userId, reviseCmd)
-        assertTrue(reviseResult is MovementMutationResult.Success)
+        assertTrue("Unexpected account revision result: $reviseResult", reviseResult is MovementMutationResult.Success)
 
         // acc-a should now be 0 (reversed), acc-b should be -2000
         assertEquals(0L, dao.getBalanceProjection(userId, "acc-a")?.balanceMinor)

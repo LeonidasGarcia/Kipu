@@ -66,12 +66,11 @@ class CreditAccessibilitySemanticsTest {
             }
         }
 
-        compose.onNodeWithContentDescription(
-            "Tarjeta física simulada. Principal. Tarjeta de crédito. BCP · Visa. Termina en 1234.",
-        ).assertIsDisplayed()
         compose.onAllNodesWithContentDescription(
-            "Tarjeta física simulada. Principal. Tarjeta de crédito. BCP · Visa. Termina en 1234.",
+            "Vista previa de instrumento",
+            substring = true,
         ).assertCountEquals(1)
+        compose.onNodeWithContentDescription("Vista previa de instrumento", substring = true).assertIsDisplayed()
     }
 
     @Test
@@ -97,18 +96,18 @@ class CreditAccessibilitySemanticsTest {
             }
         }
 
-        compose.onNodeWithText("Confirmar compra a crédito").assertIsDisplayed()
+        compose.onNodeWithText("Simulación de compra").assertIsDisplayed()
         compose.onAllNodesWithText("S/ 100.00").assertCountEquals(2)
         compose.onNodeWithText("05/11/2026").assertIsDisplayed()
         compose.onNodeWithText("05/12/2026").assertIsDisplayed()
         compose.onNodeWithText("Distribución referencial sin intereses", substring = true).assertIsDisplayed()
         val readingOrder = listOf(
-            compose.onNodeWithText("Confirmar compra a crédito").fetchSemanticsNode().boundsInRoot.center.y,
+            compose.onNodeWithText("Simulación de compra").fetchSemanticsNode().boundsInRoot.center.y,
             compose.onNodeWithText("Monto principal").fetchSemanticsNode().boundsInRoot.center.y,
             compose.onNodeWithContentDescription("Selector de 1 a 36 cuotas, actual 3")
                 .fetchSemanticsNode().boundsInRoot.center.y,
             compose.onNodeWithText("Cronograma proyectado").fetchSemanticsNode().boundsInRoot.center.y,
-            compose.onNodeWithText("Confirmar").fetchSemanticsNode().boundsInRoot.center.y,
+            compose.onNodeWithText("Confirmar compra").fetchSemanticsNode().boundsInRoot.center.y,
         )
         assertTrue("Screen reader traversal follows the visual top-to-bottom order", readingOrder.zipWithNext().all { it.first < it.second })
         compose.onNodeWithContentDescription("Selector de 1 a 36 cuotas, actual 3")
@@ -117,9 +116,9 @@ class CreditAccessibilitySemanticsTest {
                 check(setProgress(4f))
             }
         compose.onNodeWithText("4 cuotas").assertIsDisplayed()
-        compose.onNodeWithText("Confirmar").assertIsEnabled().performClick()
+        compose.onNodeWithText("Confirmar compra").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(4, confirmedInstallments) }
-        compose.onNodeWithText("Rechazar").assertIsEnabled().performClick()
+        compose.onNodeWithText("Editar compra").assertIsEnabled().performClick()
         compose.runOnIdle { assertTrue(rejected) }
     }
 
@@ -153,11 +152,11 @@ class CreditAccessibilitySemanticsTest {
 
         compose.onNodeWithText("Pagar desde").assertIsDisplayed()
         compose.onNodeWithText("Monto (PEN)").assertIsDisplayed()
-        compose.onNodeWithText("Deuda actual: PEN 250.00").assertIsDisplayed()
-        compose.onNodeWithText("Cuenta de Origen").assertIsDisplayed()
+        compose.onNodeWithText("Deuda total: PEN 250.00").assertIsDisplayed()
+        compose.onNodeWithText("Pagar desde").assertIsDisplayed()
         compose.onNodeWithText("Total").assertIsDisplayed()
         compose.onNodeWithText("Confirmar Pago").assertIsEnabled()
-        compose.onNodeWithText("no suma como gasto operativo.", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("no se registra como otro gasto.", substring = true).assertIsDisplayed()
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(1)
         compose.onNode(hasSetTextAction()).performTextReplacement("0")
         compose.onNodeWithText("Confirmar Pago").performClick()

@@ -109,7 +109,7 @@ fun MovementHistoryRoute(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToNewAccount: () -> Unit = {},
     onNavigateToPlans: () -> Unit = {},
-    onNavigateToEditor: (String) -> Unit = {},
+    onNavigateToEditor: (String, String?) -> Unit = { _, _ -> },
     viewModel: MovementHistoryViewModel = hiltViewModel(),
     prewarmQuickMovement: Boolean = false,
     modifier: Modifier = Modifier,
@@ -312,7 +312,7 @@ fun MovementHistoryRoute(
                             .testTag("input_search_movements"),
                     )
 
-                    // Type Filter Chips: Todos, Gastos, Ingresos, Transf.
+                    // Type Filter Chips: Todos, Gastos, Ingresos, Transferencias.
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -340,7 +340,7 @@ fun MovementHistoryRoute(
                             modifier = Modifier.testTag("chip_filter_income"),
                         )
                         CalmEmeraldTypeChip(
-                            label = "Transf.",
+                            label = "Transferencias",
                             dotColor = emeraldColors.transferBlue,
                             selected = uiState.selectedFilterType == MovementType.TRANSFER,
                             onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
@@ -609,7 +609,7 @@ fun MovementHistoryRoute(
                                 TransactionRow(
                                     item = item,
                                     onClick = { viewModel.onOpenDetail(item) },
-                                    onEditClick = { onNavigateToEditor(item.transaction.id) },
+                                    onEditClick = { onNavigateToEditor(item.transaction.id, item.merchantName) },
                                     onVoidClick = { viewModel.onSelectTransactionForVoid(item) },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -688,7 +688,10 @@ fun MovementHistoryRoute(
             uiState.detailLoading,
             uiState.detailError,
             onDismiss = viewModel::onCloseDetail,
-            onEdit = { viewModel.onCloseDetail(); onNavigateToEditor(item.transaction.id) },
+            onEdit = {
+                viewModel.onCloseDetail()
+                onNavigateToEditor(item.transaction.id, item.merchantName)
+            },
             onVoid = { viewModel.onCloseDetail(); viewModel.onSelectTransactionForVoid(item) }
         )
     }

@@ -212,12 +212,9 @@ class MovementHistoryViewModel @Inject constructor(
             accessRefresh = accessRefresh,
             retry = retry,
             invalidation = 0,
-            entitlementTick = 0,
         )
-    }.combine(combine(_datasetInvalidation, _entitlementTick) { invalidation, entitlementTick ->
-        invalidation to entitlementTick
-    }) { request, (invalidation, entitlementTick) ->
-        request.copy(invalidation = invalidation, entitlementTick = entitlementTick)
+    }.combine(_datasetInvalidation) { request, invalidation ->
+        request.copy(invalidation = invalidation)
     }.distinctUntilChanged { previous, next -> previous.key == next.key }
 
     init {
@@ -226,6 +223,7 @@ class MovementHistoryViewModel @Inject constructor(
         }
         viewModelScope.launch {
             historyRequests.combine(_advancedFilters) { request, filters -> request to filters.showPanel }
+                .combine(_entitlementTick) { requestAndPanel, _ -> requestAndPanel }
                 .collect { (request, showPanel) ->
                     val decision = try {
                         queryMovementHistoryUseCase?.evaluateAccess(
@@ -238,7 +236,13 @@ class MovementHistoryViewModel @Inject constructor(
                     } catch (_: Exception) {
                         MovementHistoryAccessDecision.RevalidationRequired(request.query.toBasicFallback())
                     }
-                    if (isCurrent(request)) _panelAccess.value = PanelAccess(request.key, showPanel, decision)
+                    if (isCurrent(request)) {
+                        val previous = _panelAccess.value
+                        val accessChangedForAdvancedQuery = previous.key == request.key &&
+                            previous.decision != decision && request.query.requiresAdvancedAccess
+                        _panelAccess.value = PanelAccess(request.key, showPanel, decision)
+                        if (accessChangedForAdvancedQuery) _datasetInvalidation.update { it + 1 }
+                    }
                 }
         }
         queryMovementHistoryUseCase?.let { useCase ->
@@ -596,7 +600,6 @@ class MovementHistoryViewModel @Inject constructor(
             accessRefresh = _accessRefresh.value,
             retry = _readRetry.value,
             invalidation = _datasetInvalidation.value,
-            entitlementTick = _entitlementTick.value,
         )
     }
 
@@ -698,10 +701,9 @@ private data class HistoryRequest(
     val accessRefresh: Int,
     val retry: Int,
     val invalidation: Int,
-    val entitlementTick: Int,
 ) {
     // Access refreshes and dataset invalidations intentionally produce a new generation, not a new page cursor.
-    val key = HistoryKey(ownerId, query, accessRefresh, retry, invalidation, entitlementTick)
+    val key = HistoryKey(ownerId, query, accessRefresh, retry, invalidation)
 }
 
 private data class HistoryKey(
@@ -710,7 +712,6 @@ private data class HistoryKey(
     val accessRefresh: Int,
     val retry: Int,
     val invalidation: Int,
-    val entitlementTick: Int,
 )
 
 private data class HistoryLoadState(

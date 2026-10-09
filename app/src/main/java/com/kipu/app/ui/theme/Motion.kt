@@ -24,9 +24,11 @@ object KipuMotionTokens {
     const val NavEnterMillis = 220
     const val NavExitMillis = QuickMillis
     const val TopLevelMillis = 160
+    const val RootTabSwitchMillis = 180
     const val SegmentMillis = QuickMillis
     const val ThemeMillis = 0
     const val SheetMillis = 300
+    const val CardFlipMillis = 280
     const val SubtreeEnterMillis = 200
     const val SubtreeExitMillis = 200
     const val StateCrossfadeMillis = QuickMillis

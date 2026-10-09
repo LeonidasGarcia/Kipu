@@ -81,6 +81,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,8 @@ import com.kipu.app.feature.categories.presentation.resolveCategoryIcon
 import com.kipu.app.ui.theme.KipuMotionTokens
 import com.kipu.app.ui.theme.KipuUiColors
 import com.kipu.app.ui.theme.rememberKipuColors
+import java.text.Normalizer
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -458,7 +461,8 @@ fun CategoriesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(displayCategories, key = { it.category.id.value }) { rootItem ->
-                        val isExpanded = expandedStates[rootItem.category.id.value] ?: true
+                        val isExpanded = expandedStates[rootItem.category.id.value]
+                            ?: rootItem.subcategories.isNotEmpty()
 
                         CategoryRootCard(
                             item = rootItem,
@@ -696,47 +700,24 @@ fun QuotaBanner(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Squircle Gear Icon
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.primary.copy(alpha = if (colors.isDark) 0.25f else 0.12f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = colors.primaryText,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Categorías personalizadas (Plan Free)",
+                        text = "Categorías personalizadas",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = colors.inkPrimary,
-                    )
-                    Text(
-                        text = "Gastos: $expenseCount/$maxCount • Ingresos: $incomeCount/$maxCount",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.inkSecondary,
                     )
                 }
 
                 if (onOpenQuotaSelection != null) {
                     IconButton(
                         onClick = onOpenQuotaSelection,
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(40.dp),
                     ) {
                         Icon(
                             imageVector = Icons.Default.ChevronRight,
@@ -747,16 +728,28 @@ fun QuotaBanner(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-
-            CategoryQuotaProgressRow("Gastos", expenseCount, maxCount, colors)
             Spacer(modifier = Modifier.height(8.dp))
-            CategoryQuotaProgressRow("Ingresos", incomeCount, maxCount, colors)
+
+            CategoryQuotaProgressRow(
+                label = "Gastos",
+                count = expenseCount,
+                maxCount = maxCount,
+                colors = colors,
+                accent = MaterialTheme.colorScheme.error,
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            CategoryQuotaProgressRow(
+                label = "Ingresos",
+                count = incomeCount,
+                maxCount = maxCount,
+                colors = colors,
+                accent = colors.primary,
+            )
 
             if (isLimitReached) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "Límite del plan Gratuito alcanzado. Desactiva una categoría para activar otra.",
+                    text = "Cupo completo · libera una categoría para activar otra.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -766,13 +759,25 @@ fun QuotaBanner(
 }
 
 @Composable
-private fun CategoryQuotaProgressRow(label: String, count: Int, maxCount: Int, colors: KipuUiColors) {
+private fun CategoryQuotaProgressRow(
+    label: String,
+    count: Int,
+    maxCount: Int,
+    colors: KipuUiColors,
+    accent: Color,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = colors.inkSecondary)
+        Text(
+            "$count/$maxCount",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.inkSecondary,
+            modifier = Modifier.width(30.dp),
+        )
         repeat(maxCount) { index ->
             Box(
                 modifier = Modifier
@@ -780,7 +785,7 @@ private fun CategoryQuotaProgressRow(label: String, count: Int, maxCount: Int, c
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp))
                     .background(
-                        if (index < count) colors.primary
+                        if (index < count) accent
                         else if (colors.isDark) colors.surfaceVariant
                         else Color(0xFFE2E8F0)
                     ),
@@ -807,6 +812,9 @@ fun CategoryRootCard(
     val isRootActive = item.category.isActive
     val cardAlpha = if (isRootActive) 1f else 0.55f
     val reducedMotion = rememberReducedMotionEnabled()
+    val rootAppearance = remember(item.category.id, item.displayName, item.icon, item.color) {
+        categoryRootAppearance(item)
+    }
     val rotationAngle = animateFloatAsState(
         targetValue = if (isExpanded) 180f else 0f,
         animationSpec = tween(if (reducedMotion) 0 else KipuMotionTokens.SegmentMillis),
@@ -834,13 +842,13 @@ fun CategoryRootCard(
                     modifier = Modifier
                         .size(46.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(parseHexColor(item.color).copy(alpha = if (colors.isDark) 0.30f else 0.16f)),
+                        .background(rootAppearance.tint.copy(alpha = if (colors.isDark) 0.30f else 0.16f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = resolveCategoryIcon(item.icon),
+                        imageVector = resolveCategoryIcon(rootAppearance.iconId),
                         contentDescription = null,
-                        tint = parseHexColor(item.color),
+                        tint = rootAppearance.tint,
                         modifier = Modifier.size(24.dp),
                     )
                 }
@@ -851,7 +859,14 @@ fun CategoryRootCard(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { onToggleExpand() },
+                        .clickable { onToggleExpand() }
+                        .semantics {
+                            stateDescription = when {
+                                item.category.isPlanLocked -> "Bloqueada por el plan Free"
+                                !isRootActive -> "Inactiva"
+                                else -> "Activa"
+                            }
+                        },
                 ) {
                     Text(
                         text = item.displayName,
@@ -877,16 +892,15 @@ fun CategoryRootCard(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        // The quota label makes the SYSTEM/CUSTOM distinction explicit in the list.
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = if (item.category.isCustom) colors.positiveContainer else colors.surfaceVariant,
                         ) {
                             Text(
                                 text = if (item.category.isCustom) {
-                                    "Personalizada · consume cupo Free"
+                                    "Personalizada"
                                 } else {
-                                    "Predeterminada · no consume cupo Free"
+                                    "Predeterminada"
                                 },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
@@ -909,14 +923,6 @@ fun CategoryRootCard(
                             text = "Inactiva · Bloquea nuevas asignaciones",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    } else {
-                        // Preserves semantic text for accessibility and automated tests
-                        Text(
-                            text = "Activa",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colors.positive,
                             fontWeight = FontWeight.Medium,
                         )
                     }
@@ -996,15 +1002,24 @@ fun CategoryRootCard(
                         var showSubMenu by remember { mutableStateOf(false) }
 
                         Surface(
-                            color = Color.Transparent,
-                            modifier = Modifier.fillMaxWidth(),
+                            color = colors.surfaceVariant.copy(alpha = if (colors.isDark) 0.32f else 0.34f),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(start = 8.dp),
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    .padding(horizontal = 9.dp, vertical = 7.dp),
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(2.dp)
+                                        .height(32.dp)
+                                        .clip(RoundedCornerShape(1.dp))
+                                        .background(colors.primary.copy(alpha = 0.55f)),
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
                                 // Subcategory Icon
                                 Box(
                                     modifier = Modifier
@@ -1085,13 +1100,6 @@ fun CategoryRootCard(
                                             color = MaterialTheme.colorScheme.error,
                                             fontSize = 11.sp,
                                         )
-                                    } else {
-                                        Text(
-                                            text = "Subcategoría",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = colors.inkSecondary,
-                                            fontSize = 11.sp,
-                                        )
                                     }
                                 }
                             }
@@ -1124,5 +1132,28 @@ fun CategoryRootCard(
                 }
             }
         }
+    }
+}
+
+private data class CategoryRootAppearance(
+    val iconId: String,
+    val tint: Color,
+)
+
+private fun categoryRootAppearance(item: CategoryItem): CategoryRootAppearance {
+    val storedTint = parseHexColor(item.color)
+    val usesPlaceholderPresentation = item.category.isSystem &&
+        item.icon.equals("category", ignoreCase = true) &&
+        item.color.equals("#757575", ignoreCase = true)
+    if (!usesPlaceholderPresentation) return CategoryRootAppearance(item.icon, storedTint)
+
+    val normalizedName = Normalizer.normalize(item.displayName, Normalizer.Form.NFD)
+        .replace("\\p{M}+".toRegex(), "")
+        .lowercase(Locale.ROOT)
+    return when (normalizedName) {
+        "alimentacion" -> CategoryRootAppearance("restaurant", Color(0xFFD97706))
+        "transporte" -> CategoryRootAppearance("directions_car", Color(0xFF0284C7))
+        "servicios" -> CategoryRootAppearance("receipt", Color(0xFF7C3AED))
+        else -> CategoryRootAppearance(item.icon, storedTint)
     }
 }

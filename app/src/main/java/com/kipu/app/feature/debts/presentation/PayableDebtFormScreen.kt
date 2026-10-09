@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -19,19 +21,31 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
@@ -89,6 +103,7 @@ fun ReceivableDebtFormScreen(
     onNavigateBack = onNavigateBack,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DebtOpeningFormScreen(
     obligationType: DebtObligationType,
@@ -112,28 +127,44 @@ private fun DebtOpeningFormScreen(
     } else {
         "El saldo de la cuenta disminuye por el principal."
     }
-
     Scaffold(
         topBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("Volver")
-                }
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            }
+            TopAppBar(
+                title = {
+                    Text(
+                        text = title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                windowInsets = TopAppBarDefaults.windowInsets,
+            )
         },
         bottomBar = {
-            Button(
-                onClick = onSave,
-                enabled = state.isValidForSave(),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)
-                    .heightIn(min = 52.dp).testTag("save-debt"),
-                shape = RoundedCornerShape(16.dp),
+            androidx.compose.material3.Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
             ) {
-                Text(if (state.isSaving) "Guardando…" else title)
+                Button(
+                    onClick = onSave,
+                    enabled = state.isValidForSave(),
+                    modifier = Modifier.fillMaxWidth()
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .heightIn(min = 52.dp)
+                        .testTag("save-debt"),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Text(if (state.isSaving) "Guardando…" else title)
+                }
             }
         },
     ) { insets ->
@@ -231,12 +262,14 @@ private fun DebtOpeningFormScreen(
                 }
             }
 
-            OutlinedTextField(
-                value = state.dueDate?.toString().orEmpty(),
-                onValueChange = { raw -> onDueDateChange(runCatching { LocalDate.parse(raw) }.getOrNull()) },
-                label = { Text("Fecha de vencimiento (opcional, AAAA-MM-DD)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+            DebtDatePickerField(
+                label = "Vencimiento (opcional)",
+                date = state.dueDate,
+                onDateChange = onDueDateChange,
+                pickerTag = "debt_due_date_picker",
+                calendarTag = "due_date_calendar",
+                confirmTag = "confirm_due_date",
+                clearTag = "clear_due_date",
             )
             OutlinedTextField(
                 value = state.notes,
@@ -251,6 +284,7 @@ private fun DebtOpeningFormScreen(
             Spacer(Modifier.heightIn(min = 4.dp))
         }
     }
+
 }
 
 @Composable

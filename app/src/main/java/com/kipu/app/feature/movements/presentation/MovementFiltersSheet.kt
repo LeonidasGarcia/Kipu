@@ -11,6 +11,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.res.stringResource
@@ -18,6 +20,7 @@ import com.kipu.app.ui.component.LocalBalanceMasked
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kipu.app.R
 import com.kipu.app.feature.movements.domain.model.*
@@ -56,6 +59,18 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
     var dates by remember { mutableStateOf(false) }
     var showPremiumOptions by rememberSaveable { mutableStateOf(false) }
     val allowed = state.accessStatus == MovementHistoryAccessDecision.Allowed
+    val today = remember { LocalDate.now() }
+    val weekStart = today.minusDays(6)
+    val monthStart = today.withDayOfMonth(1)
+    val monthEnd = today.withDayOfMonth(today.lengthOfMonth())
+    val yearStart = today.withDayOfYear(1)
+    val yearEnd = today.withMonth(12).withDayOfMonth(31)
+    var showOtherPeriods by rememberSaveable(state.ownerId) {
+        mutableStateOf(
+            (draft.fromDate == weekStart.toString() && draft.toDate == today.toString()) ||
+                (draft.fromDate == yearStart.toString() && draft.toDate == yearEnd.toString()),
+        )
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     fun updateDraft(updated: MovementFilterDraft) {
@@ -99,55 +114,200 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                     modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 12.dp)
                 )
             }
-        }
+        },
+        footer = {
+            Surface(
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedButton(
+                        onClick = { draft = MovementFilterDraft(); errors = emptyMap(); validationAttempted = false },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("btn_reset_advanced_filters"),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                    ) {
+                        Text("Limpiar")
+                    }
+                    Button(
+                        onClick = {
+                            val draftToApply = if (!allowed) {
+                                val prev = MovementFilterDraft.fromApplied(state.appliedFilters)
+                                MovementFilterDraft(
+                                    fromDate = draft.fromDate,
+                                    toDate = draft.toDate,
+                                    accountIds = prev.accountIds,
+                                    categoryIds = prev.categoryIds,
+                                    cardIds = prev.cardIds,
+                                    merchantIds = prev.merchantIds,
+                                    financialStates = prev.financialStates,
+                                    syncStatuses = prev.syncStatuses,
+                                    minAmount = prev.minAmount,
+                                    maxAmount = prev.maxAmount,
+                                    currency = prev.currency
+                                )
+                            } else {
+                                draft
+                            }
+                            val validation = onApply(draftToApply)
+                            validationAttempted = true
+                            errors = validation.errors
+                        },
+                        modifier = Modifier.weight(1.5f).heightIn(min = 48.dp).testTag("btn_apply_filters")
+                    ) {
+                        val appliedText = stringResource(R.string.history_filter_apply)
+                        val pausedCount = if (!allowed) {
+                            state.appliedFilters.accountIds.size + state.appliedFilters.categoryIds.size +
+                                state.appliedFilters.cardIds.size + state.appliedFilters.merchantIds.size +
+                                (if (state.appliedFilters.minAmountMinor != null || state.appliedFilters.maxAmountMinor != null) 1 else 0) +
+                                state.appliedFilters.financialStates.size + state.appliedFilters.syncStatuses.size
+                        } else 0
+                        if (pausedCount > 0) {
+                            Text("$appliedText ($pausedCount en pausa)")
+                        } else {
+                            Text(appliedText)
+                        }
+                }
+            }
+            }
+        },
     ) {
+
 
             // Scrollable body with weight
             Column(
                 modifier = Modifier
-                    .weight(1f, fill = false)
                     .fillMaxWidth()
+                    .fillMaxHeight()
                     .padding(horizontal = 20.dp)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Free basics first: Dates
-                Text("Periodo y Fecha", style = MaterialTheme.typography.titleSmall)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KipuFilterChip(selected = draft.fromDate.isBlank() && draft.toDate.isBlank(), onClick = {
-                        updateDraft(draft.copy(fromDate = "", toDate = ""))
-                    }, label = { Text(stringResource(R.string.history_all_dates)) })
-                    KipuFilterChip(selected = draft.fromDate == LocalDate.now().toString() && draft.toDate == draft.fromDate, onClick = {
-                        updateDraft(draft.copy(fromDate = LocalDate.now().toString(), toDate = LocalDate.now().toString()))
-                    }, label = { Text(stringResource(R.string.history_today)) })
-                    val today = LocalDate.now()
-                    listOf(
-                        Triple("7 días", today.minusDays(6), today),
-                        Triple("Este mes", today.withDayOfMonth(1), today.withDayOfMonth(today.lengthOfMonth())),
-                        Triple("Año", today.withDayOfYear(1), today.withMonth(12).withDayOfMonth(31)),
-                    ).forEach { (label, from, to) ->
-                        KipuFilterChip(selected = draft.fromDate == from.toString() && draft.toDate == to.toString(),
-                            onClick = { updateDraft(draft.copy(fromDate = from.toString(), toDate = to.toString())) },
-                            label = { Text(label) })
+                // Keep the four frequent choices visible; infrequent presets stay available
+                // behind one compact disclosure, preserving the existing date functionality.
+                val allDatesSelected = draft.fromDate.isBlank() && draft.toDate.isBlank()
+                val todaySelected = draft.fromDate == today.toString() && draft.toDate == today.toString()
+                val weekSelected = draft.fromDate == weekStart.toString() && draft.toDate == today.toString()
+                val monthSelected = draft.fromDate == monthStart.toString() && draft.toDate == monthEnd.toString()
+                val yearSelected = draft.fromDate == yearStart.toString() && draft.toDate == yearEnd.toString()
+                val customSelected = !allDatesSelected && !todaySelected && !weekSelected && !monthSelected && !yearSelected
+
+                Text("Periodo", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    KipuFilterChip(
+                        selected = allDatesSelected,
+                        onClick = {
+                            updateDraft(draft.copy(fromDate = "", toDate = ""))
+                            showOtherPeriods = false
+                        },
+                        modifier = Modifier.weight(1f).fillMaxWidth().semantics { contentDescription = "Todas las fechas" },
+                        label = { Text("Todas", maxLines = 1) },
+                    )
+                    KipuFilterChip(
+                        selected = todaySelected,
+                        onClick = {
+                            updateDraft(draft.copy(fromDate = today.toString(), toDate = today.toString()))
+                            showOtherPeriods = false
+                        },
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        label = { Text(stringResource(R.string.history_today), maxLines = 1) },
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    KipuFilterChip(
+                        selected = monthSelected,
+                        onClick = {
+                            updateDraft(draft.copy(fromDate = monthStart.toString(), toDate = monthEnd.toString()))
+                            showOtherPeriods = false
+                        },
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        label = { Text("Este mes", maxLines = 1) },
+                    )
+                    KipuFilterChip(
+                        selected = customSelected,
+                        onClick = {
+                            showOtherPeriods = false
+                            dates = true
+                        },
+                        modifier = Modifier.weight(1f).fillMaxWidth().testTag("chip_filter_custom_dates"),
+                        label = { Text("Personalizado", maxLines = 1) },
+                    )
+                }
+                if (showOtherPeriods) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        KipuFilterChip(
+                            selected = weekSelected,
+                            onClick = {
+                                updateDraft(draft.copy(fromDate = weekStart.toString(), toDate = today.toString()))
+                                showOtherPeriods = true
+                            },
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            label = { Text("7 días", maxLines = 1) },
+                        )
+                        KipuFilterChip(
+                            selected = yearSelected,
+                            onClick = {
+                                updateDraft(draft.copy(fromDate = yearStart.toString(), toDate = yearEnd.toString()))
+                                showOtherPeriods = true
+                            },
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            label = { Text("Año", maxLines = 1) },
+                        )
+                    }
+                    if (!weekSelected && !yearSelected) {
+                        TextButton(
+                            onClick = { showOtherPeriods = false },
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                        ) {
+                            Text("Menos periodos")
+                        }
+                    }
+                } else {
+                    TextButton(
+                        onClick = { showOtherPeriods = true },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                    ) {
+                        Text("Más periodos")
                     }
                 }
                 val from = runCatching { LocalDate.parse(draft.fromDate) }.getOrNull()
                 val to = runCatching { LocalDate.parse(draft.toDate) }.getOrNull()
                 val dateFormat = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OutlinedButton(onClick = { dates = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_filter_dates")) {
-                        Text(if (from == null && to == null) stringResource(R.string.history_custom_dates)
-                            else "${from?.format(dateFormat) ?: "…"} — ${to?.format(dateFormat) ?: "…"}")
+                    val dayCount = if (from != null && to != null && !to.isBefore(from)) {
+                        java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1
+                    } else null
+                    OutlinedButton(
+                        onClick = { dates = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("btn_filter_dates"),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Text(
+                                text = if (from == null && to == null) stringResource(R.string.history_custom_dates)
+                                else "${from?.format(dateFormat) ?: "…"} — ${to?.format(dateFormat) ?: "…"}",
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            dayCount?.let { Text("${it}d", style = MaterialTheme.typography.labelMedium) }
+                        }
                     }
                     FilterFieldError("from", errors["from"])
                     FilterFieldError("to", errors["to"])
-                }
-                if (from != null && to != null && !to.isBefore(from)) {
-                    Text("${java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1} días",
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
 
                 // Advanced / Premium sections
@@ -210,69 +370,6 @@ private fun MovementFiltersSheetContent(state: MovementHistoryUiState, onDismiss
                 }
 
                 Spacer(Modifier.height(8.dp))
-            }
-
-            // Sticky footer outside scroll
-            Surface(
-                tonalElevation = 2.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .imePadding()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    TextButton(
-                        onClick = { draft = MovementFilterDraft(); errors = emptyMap(); validationAttempted = false },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_reset_advanced_filters")
-                    ) {
-                        Text("Limpiar")
-                    }
-                    Button(
-                        onClick = {
-                            val draftToApply = if (!allowed) {
-                                val prev = MovementFilterDraft.fromApplied(state.appliedFilters)
-                                MovementFilterDraft(
-                                    fromDate = draft.fromDate,
-                                    toDate = draft.toDate,
-                                    accountIds = prev.accountIds,
-                                    categoryIds = prev.categoryIds,
-                                    cardIds = prev.cardIds,
-                                    merchantIds = prev.merchantIds,
-                                    financialStates = prev.financialStates,
-                                    syncStatuses = prev.syncStatuses,
-                                    minAmount = prev.minAmount,
-                                    maxAmount = prev.maxAmount,
-                                    currency = prev.currency
-                                )
-                            } else {
-                                draft
-                            }
-                            val validation = onApply(draftToApply)
-                            validationAttempted = true
-                            errors = validation.errors
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("btn_apply_filters")
-                    ) {
-                        val appliedText = stringResource(R.string.history_filter_apply)
-                        val pausedCount = if (!allowed) {
-                            state.appliedFilters.accountIds.size + state.appliedFilters.categoryIds.size +
-                                state.appliedFilters.cardIds.size + state.appliedFilters.merchantIds.size +
-                                (if (state.appliedFilters.minAmountMinor != null || state.appliedFilters.maxAmountMinor != null) 1 else 0) +
-                                state.appliedFilters.financialStates.size + state.appliedFilters.syncStatuses.size
-                        } else 0
-                        if (pausedCount > 0) {
-                            Text("$appliedText ($pausedCount en pausa)")
-                        } else {
-                            Text(appliedText)
-                        }
-                    }
-
-                }
             }
     }
     if (dates) {

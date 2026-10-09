@@ -1,5 +1,13 @@
 package com.kipu.app.feature.accounts.presentation.instruments
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,15 +18,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +42,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Currency
@@ -46,6 +62,9 @@ import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.domain.model.RateReference
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
+import com.kipu.app.ui.motion.rememberReducedMotionEnabled
+import com.kipu.app.ui.theme.KipuEasingTokens
+import com.kipu.app.ui.theme.KipuMotionTokens
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlin.math.roundToInt
@@ -65,6 +84,7 @@ fun RateCatalogScreen(
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    var showRateInfo by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
 
     var personalTeaInput by rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     var personalTeaError by rememberSaveable { androidx.compose.runtime.mutableStateOf<String?>(null) }
@@ -144,11 +164,17 @@ fun RateCatalogScreen(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                         )
-                        Text(
-                            text = RateReference.DISCLAIMER,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "La tasa del tarifario es referencial. Para simular, se prioriza tu TEA personal.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(
+                                onClick = { showRateInfo = true },
+                                modifier = Modifier.heightIn(min = 40.dp),
+                            ) { Text("Cómo leer estas tasas") }
+                        }
                     }
                 }
             }
@@ -177,7 +203,7 @@ fun RateCatalogScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Configura la TEA contratada para simular cuotas con precisión. No afecta simulaciones pasadas.",
+                                text = "Se usa en simulaciones futuras y no modifica compras registradas.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                             )
@@ -190,7 +216,7 @@ fun RateCatalogScreen(
                                 OutlinedTextField(
                                     value = personalTeaInput,
                                     onValueChange = { personalTeaInput = it; personalTeaError = null },
-                                    label = { Text("TEA (%)") },
+                                    label = { Text("TEA de tu contrato (%)") },
                                     placeholder = { Text("Ej. 45.50") },
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                     singleLine = true,
@@ -228,8 +254,11 @@ fun RateCatalogScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                val snapshotDate = (context as? RateCatalogContext.Resolved)?.product?.catalogAsOf
                 Text(
-                    text = "Tasa referencial al 24/09/2026",
+                    text = snapshotDate?.let {
+                        "Datos publicados al ${it.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))}"
+                    } ?: "Datos del catálogo referencial",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -293,6 +322,18 @@ fun RateCatalogScreen(
             }
         }
     }
+
+    if (showRateInfo) {
+        AlertDialog(
+            onDismissRequest = { showRateInfo = false },
+            icon = { Icon(Icons.Default.Info, contentDescription = null) },
+            title = { Text("Qué significa la TEA") },
+            text = { Text(RateReference.DISCLAIMER) },
+            confirmButton = {
+                TextButton(onClick = { showRateInfo = false }) { Text("Entendido") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -315,6 +356,12 @@ private fun ContextNotice(message: String) {
 
 @Composable
 private fun ReferentialRateCard(rate: CreditProductReference, currency: Currency) {
+    var detailsExpanded by rememberSaveable(rate.id) { androidx.compose.runtime.mutableStateOf(false) }
+    val reducedMotion = rememberReducedMotionEnabled()
+    val uriHandler = LocalUriHandler.current
+    val currencyName = if (currency == Currency.PEN) "soles" else "dólares"
+    val minTea = if (currency == Currency.PEN) rate.penTeaMinBps else rate.usdTeaMinBps
+    val maxTea = if (currency == Currency.PEN) rate.penTeaMaxBps else rate.usdTeaMaxBps
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -330,27 +377,85 @@ private fun ReferentialRateCard(rate: CreditProductReference, currency: Currency
                     text = "${rate.institutionName} - ${rate.productName}",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).padding(end = 12.dp),
                 )
-                rate.cardNetwork?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+                rate.cardNetwork?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                        modifier = Modifier.widthIn(min = 40.dp),
+                    )
+                }
             }
-            Spacer(modifier = Modifier.height(6.dp))
-            val minTea = if (currency == Currency.PEN) rate.penTeaMinBps else rate.usdTeaMinBps
-            val maxTea = if (currency == Currency.PEN) rate.penTeaMaxBps else rate.usdTeaMaxBps
-            Text("TEA ${if (currency == Currency.PEN) "soles" else "dólares"}: ${formatTeaRange(minTea, maxTea)}", style = MaterialTheme.typography.bodyMedium)
-            rate.publishedTeaSummary?.let { Text("Tarifario TEA: $it", style = MaterialTheme.typography.bodySmall) }
-            rate.publishedTceaSummary?.let { Text("TCEA publicada: $it", style = MaterialTheme.typography.bodySmall) }
-            rate.membershipCondition?.let { Text("Membresía: $it", style = MaterialTheme.typography.bodySmall) }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text("TEA de compras en $currencyName", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                "Membresía publicada: ${formatCatalogFee(rate.membershipFeePenMinor, "S/")} · ${formatCatalogFee(rate.membershipFeeUsdMinor, "US$ ")}",
-                style = MaterialTheme.typography.bodySmall,
+                text = formatTeaRange(minTea, maxTea),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                "Verificación: ${humanizeVerificationStatus(rate.verificationStatus)} · Vigencia sin caducidad automática",
-                style = MaterialTheme.typography.labelSmall,
+                text = "Tasa referencial del tarifario. Tu contrato define la tasa aplicable.",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            rate.sourceUrl?.let { Text(formatSourcesLabel(it), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            TextButton(
+                onClick = { detailsExpanded = !detailsExpanded },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+            ) {
+                Icon(
+                    imageVector = if (detailsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(if (detailsExpanded) "Ocultar detalle" else "Ver detalle del tarifario")
+            }
+            AnimatedVisibility(
+                visible = detailsExpanded,
+                enter = if (reducedMotion) EnterTransition.None else
+                    expandVertically(animationSpec = tween(KipuMotionTokens.SubtreeEnterMillis, easing = KipuEasingTokens.Decelerate)) +
+                        fadeIn(animationSpec = tween(KipuMotionTokens.SubtreeEnterMillis)),
+                exit = if (reducedMotion) ExitTransition.None else
+                    shrinkVertically(animationSpec = tween(KipuMotionTokens.SubtreeExitMillis, easing = KipuEasingTokens.Accelerate)) +
+                        fadeOut(animationSpec = tween(KipuMotionTokens.SubtreeExitMillis)),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HorizontalDivider()
+                    rate.publishedTeaSummary?.let { RateDetailLine("TEA publicada", it) }
+                    rate.publishedTceaSummary?.let { RateDetailLine("TCEA publicada", it) }
+                    rate.membershipCondition?.let { RateDetailLine("Condición de membresía", it) }
+                    RateDetailLine(
+                        "Membresía",
+                        "${formatCatalogFee(rate.membershipFeePenMinor, "S/")} · ${formatCatalogFee(rate.membershipFeeUsdMinor, "US$ ")}",
+                    )
+                    RateDetailLine("Verificación", humanizeVerificationStatus(rate.verificationStatus))
+                    rate.catalogAsOf?.let { RateDetailLine("Datos publicados", it.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))) }
+                    rate.effectiveTo?.let { RateDetailLine("Vigencia publicada hasta", it.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))) }
+                    rate.sourceUrl?.let { source ->
+                        TextButton(
+                            onClick = { runCatching { uriHandler.openUri(source) } },
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Abrir tarifario oficial")
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun RateDetailLine(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -361,10 +466,6 @@ private fun humanizeVerificationStatus(status: String?): String = when (status?.
     "NO_VERIFICADO" -> "No verificado"
     null, "" -> "Sin dato"
     else -> status.orEmpty().replace('_', ' ').lowercase().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-}
-
-private fun formatSourcesLabel(sourceUrl: String): String {
-    return "Fuente: $sourceUrl"
 }
 
 private fun formatTeaRange(minBps: Int?, maxBps: Int?): String = when {

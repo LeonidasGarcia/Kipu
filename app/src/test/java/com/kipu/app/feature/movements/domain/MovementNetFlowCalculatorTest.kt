@@ -30,9 +30,9 @@ class MovementNetFlowCalculatorTest {
                 movement(MovementType.EXPENSE, 30).copy(currency = "usd"))))
     }
 
-    @Test fun onlyActiveAndConfirmedHistoryContributes() {
+    @Test fun activeConfirmedAndRevisedHistoryContributes() {
         val transactions = TransactionStatus.entries.map { movement().copy(status = it) }
-        assertEquals(mapOf("PEN" to BigInteger.valueOf(200)), MovementNetFlowCalculator.calculate(transactions))
+        assertEquals(mapOf("PEN" to BigInteger.valueOf(300)), MovementNetFlowCalculator.calculate(transactions))
     }
 
     @Test fun openingsAdjustmentsReversalsAndLegacyCardPaymentsAreExcluded() {

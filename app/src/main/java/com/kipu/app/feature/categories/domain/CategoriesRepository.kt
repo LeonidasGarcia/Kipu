@@ -34,6 +34,7 @@ interface CategoriesRepository {
 
     fun searchMerchants(query: String): Flow<List<MerchantCatalogEntry>>
     fun observeMerchantCatalog(): Flow<List<MerchantCatalogEntry>> = flowOf(emptyList())
+    suspend fun getMerchantById(id: MerchantId): MerchantCatalogEntry? = null
     fun observeMerchantCategoryFilters(): Flow<List<MerchantCategoryFilter>> = flowOf(emptyList())
     fun observeMovementClassification(movementId: MovementId): Flow<MovementClassification?>
     suspend fun updateMovementClassification(classification: MovementClassification): Result<Unit>

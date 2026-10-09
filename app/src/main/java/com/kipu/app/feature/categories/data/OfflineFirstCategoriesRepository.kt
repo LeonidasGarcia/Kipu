@@ -529,6 +529,9 @@ class OfflineFirstCategoriesRepository @Inject constructor(
     override fun observeMerchantCatalog(): Flow<List<MerchantCatalogEntry>> =
         merchantDao.getAllActiveMerchants().map { entities -> entities.map(::toMerchantCatalogEntry) }
 
+    override suspend fun getMerchantById(id: MerchantId): MerchantCatalogEntry? =
+        merchantDao.getMerchantById(id.value)?.let(::toMerchantCatalogEntry)
+
     override fun observeMerchantCategoryFilters(): Flow<List<MerchantCategoryFilter>> {
         val userId = currentUserId() ?: return flowOf(emptyList())
         return merchantDao.observeMerchantCategoryFilters(userId).map { filters ->

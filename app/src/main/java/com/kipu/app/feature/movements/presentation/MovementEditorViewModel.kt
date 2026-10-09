@@ -1,6 +1,5 @@
 package com.kipu.app.feature.movements.presentation
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kipu.app.core.finance.domain.MoneyInputParser
@@ -10,6 +9,8 @@ import com.kipu.app.core.session.SessionCoordinator
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.usecase.ObserveInstruments
 import com.kipu.app.feature.categories.domain.model.CategoryType
+import com.kipu.app.feature.categories.domain.model.MerchantId
+import com.kipu.app.feature.categories.domain.CategoriesRepository
 import com.kipu.app.feature.categories.domain.usecase.ObserveCategories
 import com.kipu.app.feature.movements.data.local.MovementConflictProposalEntity
 import com.kipu.app.feature.movements.data.local.MovementRevisionSnapshotCodec
@@ -24,6 +25,8 @@ import com.kipu.app.feature.movements.domain.model.MovementType
 import com.kipu.app.ui.component.formatMinorUnits
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,6 +52,7 @@ data class MovementEditorUiState(
     val initialCategoryId: String? = null,
     val initialCategoryName: String? = null,
     val initialMerchantName: String? = null,
+    val initialMerchantId: String? = null,
     val initialOccurredAt: Long = 0L,
     val initialNote: String? = null,
 
@@ -59,6 +63,8 @@ data class MovementEditorUiState(
     val selectedCategoryId: String? = null,
     val selectedCategoryName: String? = null,
     val merchantName: String = "",
+    val selectedMerchantId: String? = null,
+    val selectedMerchantDisplayName: String? = null,
     val occurredAt: Long = 0L,
     val note: String = "",
 
@@ -94,7 +100,8 @@ data class MovementEditorUiState(
             val sourceChanged = selectedSourceAccountId != initialSourceAccountId
             val destChanged = selectedDestinationAccountId != initialDestinationAccountId
             val catChanged = selectedCategoryId != initialCategoryId
-            val merchantChanged = merchantName.trim() != (initialMerchantName ?: "").trim()
+            val merchantChanged = selectedMerchantId != initialMerchantId ||
+                merchantName.trim() != (initialMerchantName ?: "").trim()
             val dateChanged = occurredAt != initialOccurredAt
             val noteChanged = note.trim() != (initialNote ?: "").trim()
             return amountChanged || sourceChanged || destChanged || catChanged || merchantChanged || dateChanged || noteChanged
@@ -109,7 +116,8 @@ data class MovementEditorUiState(
             val sourceSame = selectedSourceAccountId == initialSourceAccountId
             val destSame = selectedDestinationAccountId == initialDestinationAccountId
             val catSame = selectedCategoryId == initialCategoryId
-            val merchantSame = merchantName.trim() == (initialMerchantName ?: "").trim()
+            val merchantSame = selectedMerchantId == initialMerchantId &&
+                merchantName.trim() == (initialMerchantName ?: "").trim()
             val dateSame = occurredAt == initialOccurredAt
             return noteChanged && amountSame && sourceSame && destSame && catSame && merchantSame && dateSame
         }
@@ -123,13 +131,13 @@ sealed interface MovementEditorUiEvent {
 
 @HiltViewModel
 class MovementEditorViewModel @Inject constructor(
-    private val savedStateHandle: SavedStateHandle,
     private val sessionCoordinator: SessionCoordinator,
     private val reviseTransactionUseCase: ReviseTransaction,
     private val maintenanceRepository: MovementMaintenanceRepository,
     private val movementRepository: MovementRepository,
     private val observeInstruments: ObserveInstruments,
     private val observeCategories: ObserveCategories,
+    private val categoriesRepository: CategoriesRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MovementEditorUiState())
@@ -172,19 +180,17 @@ class MovementEditorViewModel @Inject constructor(
                 }
             }
         }
-        val initialTxId = savedStateHandle.get<String>("transactionId")
-        if (!initialTxId.isNullOrBlank()) {
-            loadTransaction(initialTxId)
-        }
     }
 
-    fun loadTransaction(txId: String) {
+    fun loadTransaction(txId: String, merchantDisplayName: String? = null) {
         val userId = getUserId() ?: return
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, transactionId = txId, generalError = null) }
 
-            val head = maintenanceRepository.getRevisionHead(userId, txId)
-            val tx = movementRepository.getTransactionById(userId, txId)
+            val headDeferred = async { maintenanceRepository.getRevisionHead(userId, txId) }
+            val transactionDeferred = async { movementRepository.getTransactionById(userId, txId) }
+            val head = headDeferred.await()
+            val tx = transactionDeferred.await()
 
             if (head == null || tx == null) {
                 _uiState.update { it.copy(isLoading = false, generalError = "No se encontró el movimiento") }
@@ -204,12 +210,6 @@ class MovementEditorViewModel @Inject constructor(
 
             val formattedAmount = formatMinorUnits(head.payload.amountMinor)
 
-            val proposals = maintenanceRepository.getConflictProposals(userId, txId)
-            val activeProposal = proposals.firstOrNull { it.resolution == "PENDING" }
-            val decodedSnapshot = activeProposal?.proposedSnapshot?.let {
-                MovementRevisionSnapshotCodec.decodeSnapshot(it)
-            }
-
             _uiState.update { current ->
                 val matchingCat = current.availableCategories.firstOrNull { it.id == head.payload.categoryId }
                 current.copy(
@@ -226,6 +226,7 @@ class MovementEditorViewModel @Inject constructor(
                     initialCategoryId = head.payload.categoryId,
                     initialCategoryName = matchingCat?.displayName,
                     initialMerchantName = head.payload.merchantProvisionalText,
+                    initialMerchantId = head.payload.merchantId,
                     initialOccurredAt = head.payload.occurredAt,
                     initialNote = head.payload.note,
                     amountText = formattedAmount,
@@ -234,15 +235,75 @@ class MovementEditorViewModel @Inject constructor(
                     selectedCategoryId = head.payload.categoryId,
                     selectedCategoryName = matchingCat?.displayName,
                     merchantName = head.payload.merchantProvisionalText ?: "",
+                    selectedMerchantId = head.payload.merchantId,
+                    selectedMerchantDisplayName = merchantDisplayName,
                     occurredAt = head.payload.occurredAt,
                     note = head.payload.note ?: "",
-                    hasConflict = activeProposal != null,
-                    conflictProposal = activeProposal,
-                    conflictProposedAmountMinor = decodedSnapshot?.amountMinor,
-                    conflictProposedOccurredAt = decodedSnapshot?.occurredAt,
-                    conflictProposedSourceAccountId = decodedSnapshot?.sourceAccountId,
+                    hasConflict = false,
+                    conflictProposal = null,
+                    conflictProposedAmountMinor = null,
+                    conflictProposedOccurredAt = null,
+                    conflictProposedSourceAccountId = null,
                     isOfficialVoided = head.financialState == MovementFinancialState.VOIDED,
                 )
+            }
+
+            // Conflict history is secondary. Show the editable movement as soon as its
+            // authoritative head and transaction are ready, then enrich the editor in place.
+            viewModelScope.launch {
+                val activeProposal = try {
+                    maintenanceRepository.getConflictProposals(userId, txId)
+                        .firstOrNull { it.resolution == "PENDING" }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                }
+                if (activeProposal != null) {
+                    val decodedSnapshot = runCatching {
+                        MovementRevisionSnapshotCodec.decodeSnapshot(activeProposal.proposedSnapshot)
+                    }.getOrNull()
+                    _uiState.update { current ->
+                        if (current.transactionId != txId) {
+                            current
+                        } else {
+                            current.copy(
+                                hasConflict = true,
+                                conflictProposal = activeProposal,
+                                conflictProposedAmountMinor = decodedSnapshot?.amountMinor,
+                                conflictProposedOccurredAt = decodedSnapshot?.occurredAt,
+                                conflictProposedSourceAccountId = decodedSnapshot?.sourceAccountId,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Keep catalog lookup off the editor's critical loading path. Room can emit its
+            // merchant snapshot after the primary movement data is already ready.
+            head.payload.merchantId?.let { merchantId ->
+                viewModelScope.launch {
+                    try {
+                        val displayName = categoriesRepository.getMerchantById(MerchantId(merchantId))?.name
+                        if (displayName != null) {
+                            _uiState.update { current ->
+                                if (
+                                    current.transactionId == txId &&
+                                    current.selectedMerchantId == merchantId &&
+                                    current.selectedMerchantDisplayName == null
+                                ) {
+                                    current.copy(selectedMerchantDisplayName = displayName)
+                                } else {
+                                    current
+                                }
+                            }
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        // The movement remains editable using its stored merchant ID.
+                    }
+                }
             }
         }
     }
@@ -270,7 +331,14 @@ class MovementEditorViewModel @Inject constructor(
     }
 
     fun onMerchantChanged(merchant: String) {
-        _uiState.update { it.copy(merchantName = merchant) }
+        _uiState.update { current ->
+            if (merchant == current.merchantName) current
+            else current.copy(
+                merchantName = merchant,
+                selectedMerchantId = null,
+                selectedMerchantDisplayName = null,
+            )
+        }
     }
 
     fun onDateChanged(epochMilli: Long) {
@@ -343,8 +411,9 @@ class MovementEditorViewModel @Inject constructor(
                 sourceAccountId = currentState.selectedSourceAccountId,
                 destinationAccountId = if (currentState.movementType == MovementType.TRANSFER) currentState.selectedDestinationAccountId else null,
                 categoryId = if (currentState.movementType != MovementType.TRANSFER) currentState.selectedCategoryId else null,
-                merchantId = null,
-                merchantProvisionalText = currentState.merchantName.trim().takeIf { it.isNotBlank() },
+                merchantId = currentState.selectedMerchantId,
+                merchantProvisionalText = currentState.merchantName.trim()
+                    .takeIf { currentState.selectedMerchantId == null && it.isNotBlank() },
                 occurredAt = currentState.occurredAt,
                 note = currentState.note.trim().takeIf { it.isNotBlank() },
             )

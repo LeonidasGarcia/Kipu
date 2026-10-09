@@ -16,12 +16,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +48,7 @@ import java.text.DecimalFormatSymbols
 import java.util.Locale
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun DebtScheduleScreen(
     state: DebtScheduleUiState,
     onInstallmentCountChange: (String) -> Unit,
@@ -58,13 +66,15 @@ fun DebtScheduleScreen(
     var attemptedAction by remember(debt?.debtId) { mutableStateOf<CloseDebtAction?>(null) }
     Scaffold(
         topBar = {
-            Row(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                TextButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) { Text("Volver") }
-                Text("Cuotas y cierre", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
-            }
+            TopAppBar(
+                title = { Text("Cuotas y cierre") },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                    }
+                },
+                windowInsets = TopAppBarDefaults.windowInsets,
+            )
         },
     ) { insets ->
         Column(
@@ -109,13 +119,13 @@ fun DebtScheduleScreen(
                                     singleLine = true,
                                 )
                             }
-                            OutlinedTextField(
-                                value = state.firstDueDate,
-                                onValueChange = onFirstDueDateChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Primer vencimiento") },
-                                supportingText = { Text("Formato AAAA-MM-DD; las siguientes cuotas son mensuales") },
-                                singleLine = true,
+                            DebtDatePickerField(
+                                label = "Primer vencimiento",
+                                date = parseDebtDate(state.firstDueDate),
+                                onDateChange = { date -> date?.let { onFirstDueDateChange(it.toString()) } },
+                                pickerTag = "schedule_first_due_date_picker",
+                                calendarTag = "schedule_first_due_date_calendar",
+                                confirmTag = "schedule_confirm_first_due_date",
                             )
                             Button(
                                 onClick = onSchedule,
@@ -261,7 +271,7 @@ private fun DebtInstallmentRow(installment: DebtScheduleItem, currencyCode: Stri
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("Cuota ${installment.installmentNumber} · ${installment.dueDate}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Text("Cuota ${installment.installmentNumber} · ${formatDebtDate(installment.dueDate)}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Text(installmentStatus(installment.status), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Text(formatDebtAmount(installment.principalMinor, currencyCode), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)

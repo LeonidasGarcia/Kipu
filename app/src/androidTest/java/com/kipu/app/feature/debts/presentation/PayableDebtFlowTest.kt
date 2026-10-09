@@ -7,11 +7,14 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.domain.model.DebtOpeningMode
 import com.kipu.app.feature.debts.domain.model.DebtSummary
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -48,6 +51,39 @@ class PayableDebtFlowTest {
         compose.onNodeWithTag("save-debt").performClick()
 
         assertEquals(DebtOpeningMode.HISTORICAL, submittedMode)
+    }
+
+    @Test
+    fun dueDateUsesCalendarAndReturnsTheSelectedLocalDate() {
+        val state = mutableStateOf(
+            DebtFormUiState(counterpartyName = "Banco local", principalAmount = "50.00"),
+        )
+        compose.setContent {
+            PayableDebtFormScreen(
+                state = state.value,
+                onCounterpartyNameChange = { state.value = state.value.copy(counterpartyName = it) },
+                onPrincipalAmountChange = { state.value = state.value.copy(principalAmount = it) },
+                onCurrencyChange = { state.value = state.value.copy(currencyCode = it) },
+                onOpeningModeChange = { state.value = state.value.copy(openingMode = it) },
+                onAccountSelected = { state.value = state.value.copy(selectedAccountId = it) },
+                onDueDateChange = { state.value = state.value.copy(dueDate = it) },
+                onNotesChange = { state.value = state.value.copy(notes = it) },
+                onSave = {},
+                onNavigateBack = {},
+            )
+        }
+
+        compose.onNodeWithTag("debt_due_date_picker").performScrollTo().performClick()
+        compose.onNodeWithTag("due_date_calendar").assertIsDisplayed()
+        compose.onNodeWithText("15", substring = true, useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("confirm_due_date").performClick()
+
+        val selectedDate = requireNotNull(state.value.dueDate)
+        assertEquals(15, selectedDate.dayOfMonth)
+        val formattedDate = selectedDate.format(
+            DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy", Locale.forLanguageTag("es-PE")),
+        )
+        compose.onNodeWithText(formattedDate).assertIsDisplayed()
     }
 
     @Test

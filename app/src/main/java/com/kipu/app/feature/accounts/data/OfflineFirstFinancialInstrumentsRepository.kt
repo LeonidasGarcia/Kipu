@@ -43,6 +43,7 @@ import com.kipu.app.feature.accounts.domain.FinancialInstrumentsRepository
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
+import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
 import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
@@ -1607,6 +1608,27 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         }.distinctUntilChanged()
     }
 
+    override fun observeNextInstallmentPayment(cardId: CardId): Flow<CardPaymentSuggestion?> {
+        return sessionCoordinator.localAccess.flatMapLatest { access ->
+            when (access) {
+                is LocalAccess.Available -> combine(
+                    database.creditDao().observeNextInstallmentDueForCard(access.userId, cardId.value),
+                    cardDao.observeById(access.userId, cardId.value),
+                ) { due, card ->
+                    if (due == null || card == null || due.amountMinor <= 0L) {
+                        null
+                    } else {
+                        CardPaymentSuggestion(
+                            dueDate = LocalDate.ofEpochDay(due.dueDateEpochDay),
+                            amount = Money(due.amountMinor, Currency.fromCode(card.currency)),
+                        )
+                    }
+                }
+                else -> flowOf(null)
+            }
+        }.distinctUntilChanged()
+    }
+
     override fun observeMovementsByAccount(accountId: AccountId): Flow<List<FinancialMovement>> {
         return sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
@@ -1641,7 +1663,7 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         return sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
                 is LocalAccess.Available -> {
-                    movementDao.observeByCard(access.userId, cardId.value).map { list ->
+                    val legacyMovements = movementDao.observeByCard(access.userId, cardId.value).map { list ->
                         list.map { entity ->
                             FinancialMovement(
                                 id = MovementId(entity.id),
@@ -1660,6 +1682,42 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                                 createdAt = Instant.ofEpochMilli(entity.createdAt / 1000L),
                             )
                         }
+                    }
+                    val creditTransactions = database.movementDao()
+                        .observeCardTransactions(access.userId, cardId.value)
+                        .map { rows ->
+                            rows.mapNotNull { row ->
+                                val entity = row.transaction
+                                val kind = when (entity.operationKind) {
+                                    "CARD_PURCHASE" -> MovementKind.CREDIT_PURCHASE
+                                    "CARD_PAYMENT" -> MovementKind.CARD_PAYMENT_LIABILITY
+                                    else -> return@mapNotNull null
+                                }
+                                FinancialMovement(
+                                    id = MovementId(entity.id),
+                                    operationId = OperationId(entity.id),
+                                    sequence = 0,
+                                    userId = UserId(entity.userId),
+                                    kind = kind,
+                                    amountMinorUnits = entity.amountMinor,
+                                    currency = Currency.fromCode(entity.currencyCode),
+                                    accountId = entity.sourceAccountId?.let { AccountId(it) },
+                                    cardId = entity.cardId?.let { CardId(it) },
+                                    effectiveAt = Instant.ofEpochMilli(entity.occurredAt),
+                                    status = if (entity.syncStatus in setOf("PENDING", "IN_FLIGHT", "RETRY", "ERROR")) {
+                                        MovementStatus.PENDING
+                                    } else {
+                                        MovementStatus.POSTED
+                                    },
+                                    createdAt = Instant.ofEpochMilli(entity.createdAt),
+                                    merchantName = row.merchantName?.takeIf(String::isNotBlank),
+                                )
+                            }
+                        }
+                    combine(legacyMovements, creditTransactions) { legacy, current ->
+                        (current + legacy)
+                            .distinctBy { it.id.value }
+                            .sortedByDescending { it.effectiveAt }
                     }
                 }
                 else -> flowOf(emptyList())

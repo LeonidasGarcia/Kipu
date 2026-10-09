@@ -453,7 +453,13 @@ class MovementLocalDataSource @Inject constructor(
                 val eligible = if (isOld) true else (cat.isActive && !isPlanLockedCategory(userId, cat))
                 categoryMap[catId] = MovementCategoryReference(
                     userId = cat.userId ?: userId,
-                    type = MovementType.valueOf(cat.categoryType),
+                    type = when (CategoryType.fromStorage(cat.categoryType)) {
+                        CategoryType.EXPENSE -> MovementType.EXPENSE
+                        CategoryType.INCOME -> MovementType.INCOME
+                        // Legacy GENERAL categories can classify either flow. Use the
+                        // proposed movement type for reference validation.
+                        CategoryType.GENERAL -> newPayload.type
+                    },
                     eligible = eligible,
                 )
             }

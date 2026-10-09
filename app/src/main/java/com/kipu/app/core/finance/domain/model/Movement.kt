@@ -15,7 +15,8 @@ enum class MovementKind {
 }
 
 enum class MovementStatus {
-    POSTED
+    POSTED,
+    PENDING,
 }
 
 data class FinancialMovement(
@@ -32,7 +33,8 @@ data class FinancialMovement(
     val status: MovementStatus = MovementStatus.POSTED,
     val reversesMovementId: MovementId? = null,
     val adjustsMovementId: MovementId? = null,
-    val createdAt: Instant = Instant.now()
+    val createdAt: Instant = Instant.now(),
+    val merchantName: String? = null,
 ) {
     init {
         require(sequence >= 0) { "Sequence must be non-negative: $sequence" }
