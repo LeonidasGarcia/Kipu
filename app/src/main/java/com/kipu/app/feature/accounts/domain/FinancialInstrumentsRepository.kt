@@ -12,7 +12,6 @@ import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
-import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
 import com.kipu.app.feature.accounts.domain.model.DebitCard
 import java.time.Instant
@@ -34,6 +33,15 @@ interface FinancialInstrumentsRepository {
     suspend fun registerCreditCard(card: CreditCard, operationId: OperationId): Result<CreditCard>
     suspend fun updatePersonalTea(cardId: CardId, teaBps: Int?, operationId: OperationId): Result<Unit> =
         Result.failure(UnsupportedOperationException("Personal TEA updates are unavailable"))
+    suspend fun updateCreditCardTerms(
+        cardId: CardId,
+        creditLimitMinorUnits: Long,
+        billingDay: Int,
+        dueDay: Int,
+        lastFourDigits: String? = null,
+        alias: String? = null,
+        operationId: OperationId = OperationId.generate(),
+    ): Result<Unit> = Result.failure(UnsupportedOperationException("Credit card term updates are unavailable"))
     suspend fun getCreditProductCatalog(): Result<List<CreditProductReference>> =
         Result.failure(UnsupportedOperationException("Credit-product catalog is unavailable"))
     suspend fun getCreditUtilizationNotifications(cardId: String? = null): Result<List<CreditUtilizationNotification>> =
@@ -72,7 +80,6 @@ interface FinancialInstrumentsRepository {
     fun observeCardDebt(cardId: CardId): Flow<Money>
     fun observeMovementsByAccount(accountId: AccountId): Flow<List<FinancialMovement>>
     fun observeMovementsByCard(cardId: CardId): Flow<List<FinancialMovement>> = flowOf(emptyList())
-    fun observeNextInstallmentPayment(cardId: CardId): Flow<CardPaymentSuggestion?> = flowOf(null)
     fun observeActiveComputableCount(): Flow<Int>
     suspend fun getActiveComputableCount(): Int
     suspend fun hasCardWithIdentity(issuer: String, network: CardNetwork, lastFourDigits: String): Boolean

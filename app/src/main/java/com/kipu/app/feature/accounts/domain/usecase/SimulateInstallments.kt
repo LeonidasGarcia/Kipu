@@ -16,13 +16,15 @@ class SimulateInstallments @Inject constructor() {
         card: CreditCard,
         installmentsCount: Int = candidate.suggestedInstallments,
         acceptedReferenceTeaBps: Int? = null,
+        zeroInterestPromotion: Boolean = false,
     ): InstallmentSimulation {
         require(candidate.cardId == card.id) { "Purchase candidate belongs to another card" }
         require(candidate.amount.currency == card.currency) { "Purchase currency does not match the card" }
 
-        val personalTea = card.personalTeaBps?.takeIf { it > 0 }
-        val teaBps = personalTea ?: acceptedReferenceTeaBps?.takeIf { it > 0 }
+        val personalTea = if (zeroInterestPromotion) null else card.personalTeaBps?.takeIf { it > 0 }
+        val teaBps = if (zeroInterestPromotion) 0 else personalTea ?: acceptedReferenceTeaBps?.takeIf { it > 0 }
         val rateSource = when {
+            zeroInterestPromotion -> RateSource.NONE
             personalTea != null -> RateSource.PERSONAL_TEA
             teaBps != null -> RateSource.REFERENTIAL_CATALOG
             else -> RateSource.NONE
@@ -34,7 +36,7 @@ class SimulateInstallments @Inject constructor() {
             preferredDueDay = card.dueDay,
         )
 
-        return InstallmentCalculator.simulate(
+        val simulation = InstallmentCalculator.simulate(
             cardId = card.id,
             principal = candidate.amount,
             installmentsCount = installmentsCount,
@@ -44,5 +46,10 @@ class SimulateInstallments @Inject constructor() {
             rateSource = rateSource,
             candidateId = candidate.id,
         )
+        return if (zeroInterestPromotion) {
+            simulation.copy(
+                disclaimer = "Vista previa basada en la promoción sin intereses que indicaste del comercio. Kipu no verifica la promoción; el registro de la compra conserva únicamente el principal.",
+            )
+        } else simulation
     }
 }

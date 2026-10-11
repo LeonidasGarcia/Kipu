@@ -1,11 +1,13 @@
 package com.kipu.app.feature.accounts.presentation.detail
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import com.kipu.app.ui.motion.rememberReducedMotionEnabled
 import com.kipu.app.ui.theme.KipuMotionTokens
+import com.kipu.app.ui.theme.rememberCalmEmeraldColors
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,29 +27,49 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.rounded.AccountBalance
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CreditCard
+import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.LocalGasStation
+import androidx.compose.material.icons.rounded.Payments
+import androidx.compose.material.icons.rounded.Category
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Percent
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.ShoppingCart
+import androidx.compose.material.icons.rounded.Storefront
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -86,8 +109,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.core.finance.domain.CreditCalculations
+import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.core.finance.domain.model.Currency
 import com.kipu.app.core.finance.domain.model.FinancialMovement
 import com.kipu.app.core.finance.domain.model.Money
@@ -96,25 +121,29 @@ import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card as FinancialCard
-import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
-import com.kipu.app.feature.accounts.domain.model.CardPreset
 import com.kipu.app.feature.accounts.domain.model.CreditCard
 import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
+import com.kipu.app.feature.accounts.domain.model.PurchaseCandidate
+import com.kipu.app.feature.accounts.domain.usecase.SimulateInstallments
 import com.kipu.app.feature.accounts.presentation.AccountUiEvent
 import com.kipu.app.feature.accounts.presentation.AccountsViewModel
-import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.feature.accounts.presentation.components.CardStylePresets
 import com.kipu.app.feature.accounts.presentation.components.CardStyleType
+import com.kipu.app.feature.accounts.presentation.instruments.InstallmentSimulatorScreen
+import com.kipu.app.feature.accounts.presentation.instruments.CreditCardTermsDialog
 import com.kipu.app.feature.accounts.presentation.instruments.PayCardDialog
 import com.kipu.app.ui.component.MoneyText
+import com.kipu.app.ui.component.KipuBottomSheet
 import com.kipu.app.ui.component.formatMinorUnits
+import com.kipu.app.ui.component.symbol
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -155,29 +184,51 @@ fun AccountDetailScreen(
     val creditCardSummary = (card as? CreditCard)?.let { target ->
         dashboard.dashboardData?.creditCards?.firstOrNull { it.card.id == target.id }
     }
-    val observedCardMovementsFlow = remember(card?.id) {
-        val movementFlow = (card as? CreditCard)?.let { viewModel.observeCardMovements(it.id) }
-        if (movementFlow == null) {
-            flowOf<List<FinancialMovement>?>(null)
-        } else {
-            movementFlow.map { movements -> movements as List<FinancialMovement>? }
-        }
-    }
-    val observedCardMovements by observedCardMovementsFlow.collectAsStateWithLifecycle(initialValue = null)
-    val effectiveCardMovements = cardMovements ?: observedCardMovements.orEmpty()
-    val isCardMovementsLoading = card is CreditCard && cardMovements == null && observedCardMovements == null
-    val nextInstallmentPaymentFlow = remember(card?.id) {
-        (card as? CreditCard)?.let { viewModel.observeNextInstallmentPayment(it.id) }
-            ?: flowOf<CardPaymentSuggestion?>(null)
-    }
-    val nextInstallmentPayment by nextInstallmentPaymentFlow.collectAsStateWithLifecycle(initialValue = null)
+    val observedCardMovements by remember(card?.id) {
+        (card as? CreditCard)?.let { target ->
+            viewModel.observeCardMovements(target.id)
+        } ?: flowOf(emptyList())
+    }.collectAsStateWithLifecycle(initialValue = emptyList())
+    val effectiveCardMovements = cardMovements ?: observedCardMovements
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var isSubmitting by remember(instrumentId) { mutableStateOf(false) }
-    var keepDetailOpenAfterSave by remember(instrumentId) { mutableStateOf(false) }
     var showCardPayment by remember(instrumentId) { mutableStateOf(false) }
     var showPurchaseDraft by remember(instrumentId, startPurchaseOnOpen) { mutableStateOf(startPurchaseOnOpen) }
+    var purchaseMerchant by remember(instrumentId) { mutableStateOf("") }
+    var purchaseAmount by remember(instrumentId) { mutableStateOf("") }
+    var purchaseCategoryId by remember(instrumentId) { mutableStateOf<String?>(null) }
+    var purchaseCategoryMenuExpanded by remember(instrumentId) { mutableStateOf(false) }
+    var purchaseCandidate by remember(instrumentId) { mutableStateOf<PurchaseCandidate?>(null) }
+    var purchasePending by remember(instrumentId) { mutableStateOf(false) }
+    var cardTermsPending by remember(instrumentId) { mutableStateOf(false) }
+    var showCardTermsEditor by remember(instrumentId) { mutableStateOf(false) }
+    var lastConfirmedPurchase by remember(instrumentId) { mutableStateOf<PurchaseCandidate?>(null) }
+    var purchaseAvailableBefore by remember(instrumentId) { mutableStateOf<Long?>(null) }
+    var showPurchaseSuccess by remember(instrumentId) { mutableStateOf(false) }
+    val selectedPurchaseCategory = purchaseCategories.firstOrNull { it.id == purchaseCategoryId }
+    val draftPurchasePreview = remember(instrumentId, purchaseMerchant, purchaseAmount, purchaseCategoryId, selectedPurchaseCategory, card) {
+        val creditCard = card as? CreditCard
+        val amountMinor = MoneyInputParser.parseMinorUnits(purchaseAmount)
+        if (creditCard != null && isValidCreditPurchaseDraft(amountMinor, purchaseMerchant, selectedPurchaseCategory?.id)) {
+            PurchaseCandidate(
+                id = "preview-${creditCard.id.value}",
+                cardId = creditCard.id,
+                amount = Money(requireNotNull(amountMinor), creditCard.currency),
+                merchant = purchaseMerchant.trim(),
+                occurredAt = Instant.now(),
+                suggestedInstallments = 3,
+                categoryId = requireNotNull(selectedPurchaseCategory).id,
+            )
+        } else null
+    }
+
+    LaunchedEffect(purchaseCategories, purchaseCategoryId) {
+        if (purchaseCategoryId != null && purchaseCategories.none { it.id == purchaseCategoryId }) {
+            purchaseCategoryId = null
+        }
+    }
 
     LaunchedEffect(viewModel, instrumentId, isCard) {
         viewModel.refreshCreditUtilizationNotifications(instrumentId.takeIf { isCard })
@@ -187,21 +238,30 @@ fun AccountDetailScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is AccountUiEvent.ShowMessage -> {
-                    if (isSubmitting) {
+                    if (purchasePending) {
+                        purchasePending = false
                         isSubmitting = false
-                        if (keepDetailOpenAfterSave) {
-                            keepDetailOpenAfterSave = false
-                            snackbarHostState.showSnackbar(event.message)
-                        } else {
-                            onReturnToDashboard(event.message)
-                        }
+                        showPurchaseSuccess = true
+                        snackbarHostState.showSnackbar(event.message)
+                    } else if (cardTermsPending) {
+                        cardTermsPending = false
+                        isSubmitting = false
+                        snackbarHostState.showSnackbar(event.message)
+                    } else if (isSubmitting) {
+                        isSubmitting = false
+                        onReturnToDashboard(event.message)
                     } else {
                         snackbarHostState.showSnackbar(event.message)
                     }
                 }
                 is AccountUiEvent.Error -> {
+                    if (purchasePending) {
+                        purchasePending = false
+                        isSubmitting = false
+                        lastConfirmedPurchase?.let { purchaseCandidate = it }
+                    }
+                    if (cardTermsPending) cardTermsPending = false
                     isSubmitting = false
-                    keepDetailOpenAfterSave = false
                     snackbarHostState.showSnackbar(event.message)
                 }
             }
@@ -215,7 +275,6 @@ fun AccountDetailScreen(
         creditCardSummary = creditCardSummary,
         creditNotifications = creditNotifications.filter { it.cardId == instrumentId },
         cardMovements = effectiveCardMovements,
-        isCardMovementsLoading = isCardMovementsLoading,
         isLoading = instruments.isLoading,
         modifier = modifier,
         snackbarHostState = snackbarHostState,
@@ -227,21 +286,6 @@ fun AccountDetailScreen(
                 val iconToken = if (preset == target.preset) target.iconToken else preset?.defaultIconToken
                 viewModel.updateAppearance(
                     accountId = target.id,
-                    alias = alias,
-                    preset = preset,
-                    colorToken = colorToken,
-                    iconToken = iconToken,
-                )
-            }
-        },
-        onSaveCardAppearance = { alias, preset ->
-            (card as? CreditCard)?.let { target ->
-                isSubmitting = true
-                keepDetailOpenAfterSave = true
-                val colorToken = if (preset == target.preset) target.colorToken else preset?.defaultColorToken
-                val iconToken = if (preset == target.preset) target.iconToken else preset?.defaultIconToken
-                viewModel.updateCardAppearance(
-                    cardId = target.id,
                     alias = alias,
                     preset = preset,
                     colorToken = colorToken,
@@ -270,13 +314,27 @@ fun AccountDetailScreen(
         onPayCreditCard = { showCardPayment = true },
         onNavigateToRateCatalog = onNavigateToRateCatalog,
         onStartCreditPurchase = { showPurchaseDraft = true },
+        onEditCreditCardTerms = { showCardTermsEditor = true },
         isSubmitting = isSubmitting,
     )
+
+    if (showCardTermsEditor && card is CreditCard) {
+        CreditCardTermsDialog(
+            card = card,
+            isSaving = isSubmitting,
+            onDismiss = { if (!isSubmitting) showCardTermsEditor = false },
+            onSave = { limit, billingDay, dueDay, lastFourDigits, alias ->
+                cardTermsPending = true
+                isSubmitting = true
+                showCardTermsEditor = false
+                viewModel.updateCreditCardTerms(card.id, limit, billingDay, dueDay, lastFourDigits, alias)
+            },
+        )
+    }
 
     if (showCardPayment && creditCardSummary != null) {
         PayCardDialog(
             creditCardWithSummary = creditCardSummary,
-            nextInstallmentDue = nextInstallmentPayment,
             eligibleAccounts = dashboard.dashboardData?.liquidAccounts.orEmpty(),
             onPayCreditCard = viewModel::payCreditCard,
             onDismiss = { showCardPayment = false },
@@ -284,24 +342,482 @@ fun AccountDetailScreen(
     }
 
     if (showPurchaseDraft && card is CreditCard) {
-        CreditPurchaseDraftSheet(
-            card = card,
-            categories = purchaseCategories,
-            onDismiss = { showPurchaseDraft = false },
-            onConfirmPurchase = { candidate, installments ->
-                if (!isSubmitting) {
-                    isSubmitting = true
-                    viewModel.confirmCreditPurchase(
-                        cardId = card.id,
-                        amount = candidate.amount,
-                        merchant = candidate.merchant,
-                        effectiveAt = candidate.occurredAt,
-                        installments = installments,
-                        categoryId = requireNotNull(candidate.categoryId),
-                        merchantId = candidate.merchantId,
-                    )
-                    showPurchaseDraft = false
+        val availableMinor = creditCardSummary?.availableCredit?.minorUnits ?: card.creditLimitMinorUnits
+        val availableMoneyStr = "${card.currency.symbol()} ${formatMinorUnits(availableMinor)}"
+        val emeraldColors = rememberCalmEmeraldColors()
+        val parsedMinor = remember(purchaseAmount) { MoneyInputParser.parseMinorUnits(purchaseAmount) }
+        val canSimulate = isValidCreditPurchaseDraft(parsedMinor, purchaseMerchant, selectedPurchaseCategory?.id)
+
+        KipuBottomSheet(
+            onDismissRequest = { showPurchaseDraft = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                // Header: (X) Nueva compra   [• Simulador]
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        IconButton(
+                            onClick = { showPurchaseDraft = false },
+                            modifier = Modifier.size(36.dp),
+                        ) {
+                            Icon(Icons.Rounded.Close, contentDescription = "Cerrar")
+                        }
+                        Text(
+                            text = "Nueva compra",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = emeraldColors.incomeBg,
+                        border = BorderStroke(1.dp, emeraldColors.incomeBorder),
+                    ) {
+                        Text(
+                            text = "• Simulador",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = emeraldColors.incomeEmerald,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
                 }
+
+                // Banner: Simulación de consumo
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF0FDF4),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Info,
+                            contentDescription = null,
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Simulación de consumo",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF166534),
+                            )
+                            Text(
+                                text = "Este cálculo es referencial y no registra ningún gasto real en tu tarjeta.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF15803D),
+                            )
+                        }
+                    }
+                }
+
+                // Dark Card Preview
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F243A)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.CreditCard,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = card.alias ?: "${card.issuer} ${card.network}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                )
+                                Text(
+                                    text = "•••• ${card.lastFourDigits} · ${card.currency.name}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.7f),
+                                )
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "Línea de crédito",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF064E3B),
+                            ) {
+                                Text(
+                                    text = "• $availableMoneyStr libre",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF34D399),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Amount input field
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Importe a simular (${card.currency.name})",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    OutlinedTextField(
+                        value = purchaseAmount,
+                        onValueChange = { purchaseAmount = it },
+                        placeholder = { Text("0.00", style = MaterialTheme.typography.titleLarge) },
+                        prefix = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${card.currency.symbol()} ",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Text(
+                                    text = "${card.currency.name} ",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = emeraldColors.secondaryMuted,
+                                )
+                            }
+                        },
+                        trailingIcon = {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = emeraldColors.pillTrack,
+                                modifier = Modifier.padding(end = 8.dp),
+                            ) {
+                                Text(
+                                    text = if (card.currency == Currency.PEN) "Soles" else "Dólares",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = emeraldColors.primaryDeep,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        text = "Ingresa el monto que planeas consumir para calcular cuotas o interés.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = emeraldColors.secondaryMuted,
+                    )
+                }
+
+                // Selector: COMERCIO
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .background(emeraldColors.pillTrack, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Storefront,
+                                contentDescription = null,
+                                tint = emeraldColors.primaryDeep,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "COMERCIO",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = emeraldColors.secondaryMuted,
+                            )
+                            OutlinedTextField(
+                                value = purchaseMerchant,
+                                onValueChange = { purchaseMerchant = it.take(100) },
+                                placeholder = { Text("Ej. Bembos, Saga, etc.") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+
+                // Selector: CATEGORÍA
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Card(
+                        onClick = { purchaseCategoryMenuExpanded = true },
+                        enabled = purchaseCategories.isNotEmpty(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .background(emeraldColors.pillTrack, RoundedCornerShape(10.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Category,
+                                    contentDescription = null,
+                                    tint = emeraldColors.primaryDeep,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "CATEGORÍA",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = emeraldColors.secondaryMuted,
+                                )
+                                Text(
+                                    text = selectedPurchaseCategory?.name ?: "Seleccionar categoría de gasto",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (selectedPurchaseCategory != null) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (selectedPurchaseCategory != null) MaterialTheme.colorScheme.onSurface else emeraldColors.secondaryMuted,
+                                )
+                            }
+                            Text("›", fontSize = 20.sp, color = emeraldColors.secondaryMuted)
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = purchaseCategoryMenuExpanded,
+                        onDismissRequest = { purchaseCategoryMenuExpanded = false },
+                    ) {
+                        purchaseCategories.forEach { category ->
+                            DropdownMenuItem(
+                                text = { Text(category.name) },
+                                onClick = {
+                                    purchaseCategoryId = category.id
+                                    purchaseCategoryMenuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                if (draftPurchasePreview != null) {
+                    val preview = remember(draftPurchasePreview, card) {
+                        SimulateInstallments()(draftPurchasePreview, card, installmentsCount = 3)
+                    }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Simulación en tiempo real · 3 cuotas", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Cuota estimada")
+                                MoneyText(money = preview.schedule.first().amount, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(preview.disclaimer, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+
+                // CTA Button: Ver simulación
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Button(
+                        onClick = {
+                            val amountMinor = MoneyInputParser.parseMinorUnits(purchaseAmount)
+                            if (isValidCreditPurchaseDraft(amountMinor, purchaseMerchant, selectedPurchaseCategory?.id)) {
+                                purchaseCandidate = PurchaseCandidate(
+                                    id = UUID.randomUUID().toString(),
+                                    cardId = card.id,
+                                    amount = Money(requireNotNull(amountMinor), card.currency),
+                                    merchant = purchaseMerchant.trim(),
+                                    occurredAt = Instant.now(),
+                                    suggestedInstallments = 3,
+                                    categoryId = requireNotNull(selectedPurchaseCategory).id,
+                                )
+                                showPurchaseDraft = false
+                            } else {
+                                coroutineScope.launch {
+                                    val message = if (selectedPurchaseCategory == null) {
+                                        "Selecciona una categoría para clasificar la compra."
+                                    } else {
+                                        "Indica un comercio y un importe válido."
+                                    }
+                                    snackbarHostState.showSnackbar(message)
+                                }
+                            }
+                        },
+                        enabled = canSimulate,
+                        colors = ButtonDefaults.buttonColors(containerColor = emeraldColors.primaryDeep),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                    ) {
+                        Text("Ver simulación", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    }
+                    Text(
+                        text = if (canSimulate) "Calcula cuotas e intereses de esta compra" else "Ingresa un importe para calcular las cuotas",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = emeraldColors.secondaryMuted,
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
+    purchaseCandidate?.let { candidate ->
+        val creditCard = card as? CreditCard
+        if (creditCard != null) {
+            Dialog(onDismissRequest = { purchaseCandidate = null }) {
+                androidx.compose.material3.Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                ) {
+                    InstallmentSimulatorScreen(
+                        candidate = candidate,
+                        card = creditCard,
+                        teaBps = null,
+                        availableCredit = creditCardSummary?.availableCredit,
+                        onConfirmPurchase = { installments ->
+                            if (!isSubmitting) {
+                                isSubmitting = true
+                                purchasePending = true
+                                lastConfirmedPurchase = candidate.copy(suggestedInstallments = installments)
+                                purchaseAvailableBefore = creditCardSummary?.availableCredit?.minorUnits
+                                viewModel.confirmCreditPurchase(
+                                    cardId = creditCard.id,
+                                    amount = candidate.amount,
+                                    merchant = candidate.merchant,
+                                    effectiveAt = candidate.occurredAt,
+                                    installments = installments,
+                                    categoryId = requireNotNull(candidate.categoryId),
+                                )
+                                purchaseCandidate = null
+                            }
+                        },
+                        onRejectPurchase = { purchaseCandidate = null },
+                    )
+                }
+            }
+        }
+    }
+    if (showPurchaseSuccess && lastConfirmedPurchase != null && card is CreditCard) {
+        val savedPurchase = requireNotNull(lastConfirmedPurchase)
+        val availableBefore = purchaseAvailableBefore
+        val purchaseExcess = availableBefore?.let { available ->
+            (savedPurchase.amount.minorUnits - available).takeIf { it > 0L }
+        }
+        AlertDialog(
+            onDismissRequest = {
+                showPurchaseSuccess = false
+                lastConfirmedPurchase = null
+                purchaseAvailableBefore = null
+            },
+            title = { Text("Compra registrada") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(savedPurchase.merchant, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Principal registrado")
+                        MoneyText(money = savedPurchase.amount, fontWeight = FontWeight.SemiBold)
+                    }
+                    Text(
+                        if (savedPurchase.suggestedInstallments == 1) "Pago directo"
+                        else "Plan seleccionado: ${savedPurchase.suggestedInstallments} cuotas",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (availableBefore != null) {
+                        val availableAfter = (availableBefore - savedPurchase.amount.minorUnits).coerceAtLeast(0L)
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Crédito disponible")
+                            MoneyText(money = Money(availableAfter, card.currency))
+                        }
+                    } else {
+                        Text("El crédito disponible se actualizará cuando cargue la proyección de la tarjeta.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (purchaseExcess != null) {
+                        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Sobreutilización registrada", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Exceso sobre el disponible")
+                                    MoneyText(money = Money(purchaseExcess, card.currency))
+                                }
+                                Text("El principal completo se conserva; el disponible no se muestra en negativo.", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPurchaseSuccess = false
+                        lastConfirmedPurchase = null
+                        purchaseAvailableBefore = null
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) { Text("Listo") }
             },
         )
     }
@@ -317,7 +833,6 @@ fun AccountDetailContent(
     isLoading: Boolean,
     onNavigateBack: () -> Unit,
     onSaveAppearance: (alias: String, preset: AccountPreset?) -> Unit,
-    onSaveCardAppearance: (alias: String?, preset: CardPreset?) -> Unit = { _, _ -> },
     onCorrectOpeningBalance: (Long) -> Unit,
     onArchive: () -> Unit,
     onReactivate: () -> Unit,
@@ -326,8 +841,8 @@ fun AccountDetailContent(
     onPayCreditCard: () -> Unit = {},
     onNavigateToRateCatalog: (String) -> Unit = {},
     onStartCreditPurchase: () -> Unit = {},
+    onEditCreditCardTerms: () -> Unit = {},
     cardMovements: List<FinancialMovement> = emptyList(),
-    isCardMovementsLoading: Boolean = false,
     isSubmitting: Boolean = false,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
@@ -335,10 +850,6 @@ fun AccountDetailContent(
     val title = account?.alias ?: card?.alias ?: card?.let { "${it.issuer} ${it.network}" } ?: "Detalle"
     var alias by remember(instrumentKey, account?.alias) { mutableStateOf(account?.alias.orEmpty()) }
     var selectedPreset by remember(instrumentKey, account?.preset) { mutableStateOf(account?.preset) }
-    var presetMenuExpanded by remember(instrumentKey) { mutableStateOf(false) }
-    var cardAlias by remember(instrumentKey, card?.alias) { mutableStateOf(card?.alias.orEmpty()) }
-    var selectedCardPreset by remember(instrumentKey, card?.preset) { mutableStateOf(card?.preset) }
-    var cardPresetMenuExpanded by remember(instrumentKey) { mutableStateOf(false) }
     var showArchiveConfirmation by remember(instrumentKey) { mutableStateOf(false) }
     var showReactivateConfirmation by remember(instrumentKey) { mutableStateOf(false) }
     var showOpeningCorrection by remember(instrumentKey) { mutableStateOf(false) }
@@ -348,6 +859,7 @@ fun AccountDetailContent(
     var aliasError by remember(instrumentKey) { mutableStateOf<String?>(null) }
     var openingAmountError by remember(instrumentKey) { mutableStateOf<String?>(null) }
     val archived = account?.isArchived ?: card?.isArchived ?: false
+    val emeraldColors = rememberCalmEmeraldColors()
 
     Scaffold(
         topBar = {
@@ -362,29 +874,69 @@ fun AccountDetailContent(
                             overflow = TextOverflow.Ellipsis,
                         )
                         if (card is CreditCard) {
-                            Text(
-                                text = if (card.isArchived) "Tarjeta de Crédito archivada" else "Tarjeta de Crédito activa",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (card.isArchived) MaterialTheme.colorScheme.outline else emeraldColors.incomeEmerald),
+                                )
+                                Text(
+                                    text = if (card.isArchived) "Tarjeta archivada · Solo lectura" else "Tarjeta de crédito activa",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         } else if (card != null) {
-                            Text(
-                                text = if (card.isArchived) "Tarjeta de Débito archivada" else "Tarjeta de Débito activa",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        } else if (account != null && account.isArchived) {
-                            Text(
-                                text = "Cuenta archivada",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (card.isArchived) MaterialTheme.colorScheme.outline else emeraldColors.incomeEmerald),
+                                )
+                                Text(
+                                    text = if (card.isArchived) "Tarjeta de Débito archivada" else "Tarjeta de Débito activa",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else if (account != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (account.isArchived) MaterialTheme.colorScheme.outline else emeraldColors.incomeEmerald),
+                                )
+                                Text(
+                                    text = if (account.isArchived) "Cuenta archivada" else "Cuenta activa",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Atrás")
+                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Atrás")
+                    }
+                },
+                actions = {
+                    if (card is CreditCard && !archived) {
+                        IconButton(onClick = onEditCreditCardTerms) {
+                            Icon(Icons.Rounded.Tune, contentDescription = "Editar tarjeta")
+                        }
                     }
                 },
             )
@@ -414,7 +966,6 @@ fun AccountDetailContent(
                     .fillMaxSize()
                     .padding(innerPadding)
                     .padding(horizontal = 16.dp)
-                    .navigationBarsPadding()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -454,82 +1005,6 @@ fun AccountDetailContent(
                         summary = creditCardSummary,
                     )
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth().testTag("card_presentation_card"),
-                        shape = MaterialTheme.shapes.large,
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            Text("Identificación de la tarjeta", style = MaterialTheme.typography.titleMedium)
-                            OutlinedTextField(
-                                value = cardAlias,
-                                onValueChange = { cardAlias = it.take(80) },
-                                label = { Text("Nombre visible") },
-                                placeholder = { Text("${card.issuer} · ${card.network.name}") },
-                                singleLine = true,
-                                enabled = !isSubmitting,
-                                modifier = Modifier.fillMaxWidth().testTag("card_alias_field"),
-                            )
-                            Box {
-                                OutlinedButton(
-                                    onClick = { cardPresetMenuExpanded = true },
-                                    enabled = !isSubmitting,
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                        .testTag("card_preset_selector"),
-                                ) {
-                                    Icon(Icons.Default.CreditCard, contentDescription = null)
-                                    Text(
-                                        selectedCardPreset?.defaultName ?: "Diseño original",
-                                        modifier = Modifier.weight(1f).padding(start = 8.dp),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Elegir diseño")
-                                }
-                                DropdownMenu(
-                                    expanded = cardPresetMenuExpanded,
-                                    onDismissRequest = { cardPresetMenuExpanded = false },
-                                    modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                                ) {
-                                    CardPreset.entries.forEach { preset ->
-                                        DropdownMenuItem(
-                                            text = { Text(preset.defaultName) },
-                                            modifier = Modifier.testTag("card_preset_" + preset.name.lowercase()),
-                                            onClick = {
-                                                selectedCardPreset = preset
-                                                cardPresetMenuExpanded = false
-                                            },
-                                            trailingIcon = if (selectedCardPreset == preset) {
-                                                { Icon(Icons.Default.CheckCircle, contentDescription = "Seleccionado") }
-                                            } else {
-                                                null
-                                            },
-                                        )
-                                    }
-                                }
-                            }
-                            Text(
-                                "Los consumos, el límite y las fechas de pago no cambian.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Button(
-                                onClick = {
-                                    onSaveCardAppearance(cardAlias.trim().takeIf(String::isNotBlank), selectedCardPreset)
-                                },
-                                enabled = !isSubmitting,
-                                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                    .testTag("save_card_presentation"),
-                            ) {
-                                Text(if (isSubmitting) "Guardando..." else "Guardar cambios")
-                            }
-                        }
-                    }
-
                     // R10 CTAs and Actions
                     CreditCardActionsSection(
                         card = card,
@@ -539,6 +1014,7 @@ fun AccountDetailContent(
                         onStartCreditPurchase = onStartCreditPurchase,
                         onPayCreditCard = onPayCreditCard,
                         onNavigateToRateCatalog = onNavigateToRateCatalog,
+                        onEditCreditTerms = onEditCreditCardTerms,
                         onArchiveClick = { showArchiveConfirmation = true },
                         onReactivateClick = { showReactivateConfirmation = true },
                     )
@@ -546,8 +1022,6 @@ fun AccountDetailContent(
                     // R10 Movements Section
                     CreditCardMovementsSection(
                         movements = cardMovements,
-                        currency = card.currency,
-                        isLoading = isCardMovementsLoading,
                     )
                 } else {
                     // Liquid Account or Debit Card view (preserved in full)
@@ -584,147 +1058,63 @@ fun AccountDetailContent(
                         }
                     }
 
-                    account?.let {
-                        Card(
-                            modifier = Modifier.fillMaxWidth().testTag("account_presentation_card"),
-                            shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                    account?.let { target ->
+                        Text("Presentación", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        OutlinedTextField(
+                            value = alias,
+                            onValueChange = { value ->
+                                alias = value.take(80)
+                                aliasError = if (value.isBlank()) "Escribe un alias para identificar la cuenta." else null
+                            },
+                            label = { Text("Alias de la cuenta") },
+                            singleLine = true,
+                            isError = aliasError != null,
+                            supportingText = aliasError?.let { { Text(it) } },
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text("Institución / presentación", style = MaterialTheme.typography.titleSmall)
+                        AccountPreset.entries.chunked(3).forEach { presetRow ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text(
-                                    "Presentación",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    "Personaliza cómo identificas esta cuenta.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                OutlinedTextField(
-                                    value = alias,
-                                    onValueChange = { value ->
-                                        alias = value.take(80)
-                                        aliasError = if (value.isBlank()) "Escribe un alias para identificar la cuenta." else null
-                                    },
-                                    label = { Text("Nombre de la cuenta") },
-                                    singleLine = true,
-                                    isError = aliasError != null,
-                                    supportingText = aliasError?.let { { Text(it) } },
-                                    shape = MaterialTheme.shapes.medium,
-                                    modifier = Modifier.fillMaxWidth().testTag("account_alias_field"),
-                                )
-                                if (account.type != AccountType.CASH) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text("Institución", style = MaterialTheme.typography.labelLarge)
-                                    Box(modifier = Modifier.fillMaxWidth()) {
-                                        OutlinedButton(
-                                            onClick = { presetMenuExpanded = true },
-                                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                                                .testTag("account_preset_selector"),
-                                            shape = MaterialTheme.shapes.medium,
-                                            ) {
-                                                Icon(
-                                                    imageVector = selectedPreset?.let(::accountPresetIcon)
-                                                        ?: Icons.Default.AccountBalance,
-                                                    contentDescription = null,
-                                                )
-                                                Text(
-                                                    selectedPreset?.defaultName ?: "Elegir institución",
-                                                    modifier = Modifier.weight(1f).padding(start = 8.dp),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                )
-                                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Elegir institución")
-                                        }
-                                        DropdownMenu(
-                                            expanded = presetMenuExpanded,
-                                            onDismissRequest = { presetMenuExpanded = false },
-                                            modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
-                                        ) {
-                                            AccountPreset.entries.filter { preset ->
-                                                when (account.type) {
-                                                    AccountType.DIGITAL_WALLET -> preset == AccountPreset.YAPE ||
-                                                        preset == AccountPreset.PLIN || preset == AccountPreset.GENERIC
-                                                    AccountType.SAVINGS, AccountType.BANK -> preset != AccountPreset.CASH &&
-                                                        preset != AccountPreset.YAPE && preset != AccountPreset.PLIN
-                                                    AccountType.CASH -> false
-                                                    AccountType.CREDIT_LIABILITY -> preset != AccountPreset.CASH
-                                                }
-                                            }.forEach { preset ->
-                                                DropdownMenuItem(
-                                                    text = { Text(preset.defaultName) },
-                                                    leadingIcon = {
-                                                        Icon(
-                                                            imageVector = accountPresetIcon(preset),
-                                                            contentDescription = null,
-                                                        )
-                                                    },
-                                                    onClick = {
-                                                        selectedPreset = preset
-                                                        presetMenuExpanded = false
-                                                    },
-                                                    trailingIcon = if (selectedPreset == preset) {
-                                                        { Icon(Icons.Default.CheckCircle, contentDescription = "Seleccionada") }
-                                                    } else {
-                                                        null
-                                                    },
-                                                    modifier = Modifier.testTag("account_preset_" + preset.name.lowercase()),
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                                }
-                                Button(
-                                    onClick = {
-                                        if (alias.isBlank()) {
-                                            aliasError = "Escribe un alias para identificar la cuenta."
-                                        } else {
-                                            onSaveAppearance(alias.trim(), selectedPreset)
-                                        }
-                                    },
-                                    enabled = !isSubmitting && alias.isNotBlank(),
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                                        .testTag("save_account_presentation"),
-                                ) {
-                                    Text(if (isSubmitting) "Guardando..." else "Guardar presentación")
+                                presetRow.forEach { preset ->
+                                    FilterChip(
+                                        selected = selectedPreset == preset,
+                                        onClick = { selectedPreset = preset },
+                                        label = { Text(preset.defaultName) },
+                                        modifier = Modifier.weight(1f),
+                                    )
                                 }
                             }
                         }
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = MaterialTheme.shapes.large,
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Text(
-                                    "Saldo inicial",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    text = "Corregir solo si el saldo con el que abriste la cuenta fue registrado incorrectamente. La corrección conserva el historial original mediante un reverso y un nuevo ajuste auditado.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                OutlinedButton(
-                                    onClick = { showOpeningCorrection = true },
-                                    enabled = !isSubmitting,
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                                ) {
-                                    Text("Corregir saldo inicial")
+                        Button(
+                            onClick = {
+                                if (alias.isBlank()) {
+                                    aliasError = "Escribe un alias para identificar la cuenta."
+                                } else {
+                                    onSaveAppearance(alias.trim(), selectedPreset)
                                 }
-                            }
+                            },
+                            enabled = !isSubmitting && alias.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) {
+                            Text(if (isSubmitting) "Guardando..." else "Guardar presentación")
+                        }
+
+                        Text("Saldo inicial", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "Corregir solo si el saldo con el que abriste la cuenta fue registrado incorrectamente. La corrección conserva el historial original mediante un reverso y un nuevo ajuste auditado.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedButton(
+                            onClick = { showOpeningCorrection = true },
+                            enabled = !isSubmitting,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                        ) {
+                            Text("Corregir saldo inicial")
                         }
 
                         if (!archived) {
@@ -745,6 +1135,7 @@ fun AccountDetailContent(
                             }
                         }
                     }
+
                     if (card != null && card !is CreditCard) {
                         if (!archived) {
                             OutlinedButton(
@@ -856,12 +1247,12 @@ private fun Kibo3DCreditCard(
 ) {
     var isFlipped by remember { mutableStateOf(false) }
     val reducedMotion = rememberReducedMotionEnabled()
-    val rotation = animateFloatAsState(
+    val rotation by animateFloatAsState(
         targetValue = if (isFlipped) 180f else 0f,
         animationSpec = if (reducedMotion) {
             snap()
         } else {
-            tween(durationMillis = KipuMotionTokens.CardFlipMillis, easing = FastOutSlowInEasing)
+            tween(durationMillis = KipuMotionTokens.SlowMillis, easing = FastOutSlowInEasing)
         },
         label = "kibo3DCardRotationY",
     )
@@ -909,7 +1300,7 @@ private fun Kibo3DCreditCard(
                 .fillMaxWidth()
                 .height(204.dp)
                 .graphicsLayer {
-                    this.rotationY = rotation.value
+                    this.rotationY = rotation
                     this.cameraDistance = 12f * density
                 }
                 .clickable { isFlipped = !isFlipped }
@@ -938,31 +1329,25 @@ private fun Kibo3DCreditCard(
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = if (rotation.value <= 90f) 1f else 0f },
-                ) {
+                if (rotation <= 90f) {
                     CreditCardFrontContent(
                         card = card,
                         cardForeground = cardForeground,
                         accentColor = cardAccent,
                         networkDisplay = networkDisplay,
                     )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            rotationY = 180f
-                            alpha = if (rotation.value > 90f) 1f else 0f
-                        },
-                ) {
-                    CreditCardBackContent(
-                        card = card,
-                        cardForeground = cardForeground,
-                        accentColor = cardAccent,
-                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer { rotationY = 180f },
+                    ) {
+                        CreditCardBackContent(
+                            card = card,
+                            cardForeground = cardForeground,
+                            accentColor = cardAccent,
+                        )
+                    }
                 }
             }
         }
@@ -971,14 +1356,13 @@ private fun Kibo3DCreditCard(
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
-                .heightIn(min = 48.dp)
                 .clickable { isFlipped = !isFlipped }
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(
-                imageVector = Icons.Default.Refresh,
+                imageVector = Icons.Rounded.Refresh,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(16.dp),
@@ -1241,6 +1625,165 @@ private fun CreditCardPeriodPanel(
     summary: CreditCardWithSummary?,
     modifier: Modifier = Modifier,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
+    val debt = summary?.debt ?: Money(0L, card.currency)
+    val available = summary?.availableCredit ?: Money(card.creditLimitMinorUnits, card.currency)
+    val utilization = summary?.utilizationPercentage ?: 0.0
+
+    if (card.isArchived) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            modifier = modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                // Header: ESTADO FINAL AL ARCHIVAR + Badge Solo lectura
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.outline),
+                        )
+                        Text(
+                            text = "ESTADO FINAL AL ARCHIVAR",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Text(
+                            text = "Solo lectura",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                }
+
+                // Two columns: Deuda pendiente + Línea liberada
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "Deuda pendiente",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        MoneyText(
+                            money = debt,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (debt.minorUnits > 0L) emeraldColors.expenseCoral else MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = if (debt.minorUnits > 0L) "Pendiente de regularización" else "Sin deuda pendiente",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = "Línea liberada",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        MoneyText(
+                            money = available,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Línea total",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        )
+                    }
+                }
+
+                // Subcard: Ciclos congelados
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CalendarToday,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Ciclos congelados",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "No hay pagos pendientes ni cortes activos programados.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                // Info banner
+                Text(
+                    text = "Esta tarjeta fue archivada. Su historial de movimientos se conserva intacto, pero no se pueden registrar nuevos consumos ni simulaciones.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+
     val nextBilling = remember(card.billingDay) { CreditCalculations.calculateNextDate(card.billingDay) }
     val nextDue = remember(card.dueDay) { CreditCalculations.calculateNextDate(card.dueDay) }
     val now = remember { LocalDate.now() }
@@ -1250,10 +1793,6 @@ private fun CreditCardPeriodPanel(
     val daysUntilDue = remember(nextDue, now) {
         ChronoUnit.DAYS.between(now, nextDue).coerceAtLeast(0)
     }
-
-    val debt = summary?.debt ?: Money(0L, card.currency)
-    val available = summary?.availableCredit ?: Money(card.creditLimitMinorUnits, card.currency)
-    val utilization = summary?.utilizationPercentage ?: 0.0
 
     val targetProgress = (utilization / 100.0).toFloat().coerceIn(0f, 1f)
     val reducedMotion = rememberReducedMotionEnabled()
@@ -1270,18 +1809,64 @@ private fun CreditCardPeriodPanel(
         label = "creditUtilizationProgress",
     )
 
-    val progressColor = when {
-        utilization >= 80.0 -> MaterialTheme.colorScheme.error
-        utilization >= 50.0 -> MaterialTheme.colorScheme.tertiary
-        else -> Color(0xFF00B34D)
+    val progressColorTarget = when {
+        utilization >= 80.0 -> emeraldColors.expenseCoral
+        utilization >= 50.0 -> emeraldColors.warningAmber
+        else -> emeraldColors.incomeEmerald
     }
+    val progressColor = animateColorAsState(
+        targetValue = progressColorTarget,
+        animationSpec = if (reducedMotion) snap() else tween(
+            durationMillis = KipuMotionTokens.MediumMillis,
+            easing = FastOutSlowInEasing,
+        ),
+        label = "creditDetailUtilizationColor",
+    ).value
+
+    val utilizationStatusLabel = when {
+        utilization > 100.0 -> "Sobreutilizada"
+        utilization >= 80.0 -> "⚠ Utilización muy alta (> 80%)"
+        utilization >= 50.0 -> "Atención: > 50% utilizado"
+        utilization >= 30.0 -> "Utilización moderada (30-50%)"
+        else -> "✓ Utilización moderada (< 30%) · Óptimo"
+    }
+    val utilizationStatusBackgroundTarget = when {
+        utilization >= 80.0 -> emeraldColors.expenseBg
+        utilization >= 50.0 -> emeraldColors.warningBg
+        else -> emeraldColors.incomeBg
+    }
+    val utilizationStatusBorderTarget = when {
+        utilization >= 80.0 -> emeraldColors.expenseBorder
+        utilization >= 50.0 -> emeraldColors.warningBorder
+        else -> emeraldColors.incomeBorder
+    }
+    val utilizationStatusTextTarget = when {
+        utilization >= 80.0 -> emeraldColors.expenseCoral
+        utilization >= 50.0 -> emeraldColors.warningText
+        else -> emeraldColors.incomeEmerald
+    }
+    val utilizationStatusBackground = animateColorAsState(
+        utilizationStatusBackgroundTarget,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "creditDetailStatusBackground",
+    ).value
+    val utilizationStatusBorder = animateColorAsState(
+        utilizationStatusBorderTarget,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "creditDetailStatusBorder",
+    ).value
+    val utilizationStatusText = animateColorAsState(
+        utilizationStatusTextTarget,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "creditDetailStatusText",
+    ).value
 
     val dueFormatter = remember {
         DateTimeFormatter.ofPattern("d 'de' MMMM", Locale.forLanguageTag("es-PE"))
     }
 
     Card(
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
@@ -1304,8 +1889,8 @@ private fun CreditCardPeriodPanel(
                     Box(
                         modifier = Modifier
                             .size(10.dp)
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(Color(0xFF0F766E)),
+                            .clip(CircleShape)
+                            .background(emeraldColors.incomeEmerald),
                     )
                     Text(
                         text = "ESTADO DEL PERIODO ACTUAL",
@@ -1317,178 +1902,126 @@ private fun CreditCardPeriodPanel(
 
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFE8F5E9),
-                    border = BorderStroke(1.dp, Color(0xFFA5D6A7)),
+                    color = emeraldColors.incomeBg,
+                    border = BorderStroke(1.dp, emeraldColors.incomeBorder),
                 ) {
                     Text(
                         text = "Cierre en $daysUntilBilling días",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF2E7D32),
+                        color = emeraldColors.incomeEmerald,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }
             }
 
-            // Adaptive metrics layout: 3 Columns on standard width/normal text, stacked on compact width or fontScale > 1.25f
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val fontScale = LocalDensity.current.fontScale
-                val isStacked = maxWidth < 400.dp || fontScale > 1.25f
+            // Dual Column Metrics: Deuda actual vs Disponible de crédito
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "Deuda actual",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    MoneyText(
+                        money = debt,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (debt.minorUnits > 0L) emeraldColors.expenseCoral else MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "Facturado",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
 
-                if (isStacked) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "Disponible de crédito",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    MoneyText(
+                        money = available,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = emeraldColors.primaryDeep,
+                    )
+                    Text(
+                        text = "Línea libre",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
+            }
+
+            // Subcard: Fecha de pago configurada
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(emeraldColors.pillTrack),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text(
-                                    text = "Deuda actual",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                MoneyText(
-                                    money = debt,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (debt.minorUnits > 0L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = "Facturado",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                )
-                            }
-
-                            Column(
-                                modifier = Modifier.weight(1f),
-                                horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                Text(
-                                    text = "Disponible de crédito",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                MoneyText(
-                                    money = available,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = "Línea libre",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                )
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = "Fecha de pago configurada",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = nextDue.format(dueFormatter),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-                            Text(
-                                text = "En $daysUntilDue días",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.CalendarToday,
+                            contentDescription = null,
+                            tint = emeraldColors.primaryDeep,
+                            modifier = Modifier.size(18.dp),
+                        )
                     }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        // Column 1: Deuda actual
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = "Deuda actual",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            MoneyText(
-                                money = debt,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (debt.minorUnits > 0L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "Facturado",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
-                        }
+                        Text(
+                            text = "Fecha de pago configurada",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = nextDue.format(dueFormatter),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
 
-                        // Column 2: Disponible de crédito
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = "Disponible de crédito",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            MoneyText(
-                                money = available,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "Línea libre",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
-                        }
-
-                        // Column 3: Fecha de pago configurada
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            Text(
-                                text = "Fecha de pago configurada",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = nextDue.format(dueFormatter),
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text = "En $daysUntilDue días",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
-                        }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (daysUntilDue <= 2) emeraldColors.expenseBg else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, if (daysUntilDue <= 2) emeraldColors.expenseBorder else MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        Text(
+                            text = if (daysUntilDue <= 2) "¡Vence en $daysUntilDue días!" else "En $daysUntilDue días",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (daysUntilDue <= 2) FontWeight.SemiBold else FontWeight.Medium,
+                            color = if (daysUntilDue <= 2) emeraldColors.expenseCoral else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
                     }
                 }
             }
@@ -1506,7 +2039,7 @@ private fun CreditCardPeriodPanel(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = if (card.creditLimitMinorUnits == 0L) "No disponible" else "%.1f%% / 100%%".format(utilization),
+                        text = if (card.creditLimitMinorUnits == 0L) "No disponible" else "%.1f%% / 100%%".format(Locale.US, utilization),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = progressColor,
@@ -1516,7 +2049,7 @@ private fun CreditCardPeriodPanel(
                 LinearProgressIndicator(
                     progress = { animatedProgress },
                     color = progressColor,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    trackColor = emeraldColors.pillTrack,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp)
@@ -1524,65 +2057,24 @@ private fun CreditCardPeriodPanel(
                 )
             }
 
-            // Bottom: Factual utilization status on left, Línea total on right
+            // Status chip on left, Línea total on right
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (utilization < 50.0) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFE8F5E9),
-                        border = BorderStroke(1.dp, Color(0xFFA5D6A7)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Text(
-                                text = "Utilización baja (< 50%)",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Medium,
-                                color = Color(0xFF2E7D32),
-                            )
-                        }
-                    }
-                } else if (utilization < 80.0) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFFFF3E0),
-                        border = BorderStroke(1.dp, Color(0xFFFFB74D)),
-                    ) {
-                        Text(
-                            text = "Atención: > 50% utilizado",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFE65100),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                } else {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFFFEBEE),
-                        border = BorderStroke(1.dp, Color(0xFFEF9A9A)),
-                    ) {
-                        Text(
-                            text = "Alerta: alta utilización (≥ 80%)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = utilizationStatusBackground,
+                    border = BorderStroke(1.dp, utilizationStatusBorder),
+                ) {
+                    Text(
+                        text = utilizationStatusLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = utilizationStatusText,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
                 }
 
                 Text(
@@ -1590,6 +2082,42 @@ private fun CreditCardPeriodPanel(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            // High utilization financial risk banner (>= 80%)
+            if (utilization >= 80.0) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = emeraldColors.expenseBg),
+                    border = BorderStroke(1.dp, emeraldColors.expenseBorder),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Warning,
+                            contentDescription = null,
+                            tint = emeraldColors.expenseCoral,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Alerta de riesgo financiero: Consumo crítico",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = emeraldColors.expenseCoral,
+                            )
+                            Text(
+                                text = "Estás usando el ${"%.1f".format(Locale.US, utilization)}% de tu línea autorizada. Superar el 50% puede afectar tu score crediticio y generar comisiones por sobregiro.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = emeraldColors.expenseCoral,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -1604,103 +2132,260 @@ private fun CreditCardActionsSection(
     onStartCreditPurchase: () -> Unit,
     onPayCreditCard: () -> Unit,
     onNavigateToRateCatalog: (String) -> Unit,
+    onEditCreditTerms: () -> Unit,
     onArchiveClick: () -> Unit,
     onReactivateClick: () -> Unit,
 ) {
+    val emeraldColors = rememberCalmEmeraldColors()
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (!isArchived) {
             val hasDebt = (summary?.debt?.minorUnits ?: 0L) > 0L
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                OutlinedButton(
-                    onClick = onStartCreditPurchase,
-                    enabled = !isSubmitting,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp),
-                    shape = MaterialTheme.shapes.medium,
+            if (hasDebt) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text("Registrar consumo")
-                }
-
-                if (hasDebt) {
                     Button(
                         onClick = onPayCreditCard,
                         enabled = !isSubmitting,
+                        colors = ButtonDefaults.buttonColors(containerColor = emeraldColors.primaryDeep),
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp),
-                        shape = MaterialTheme.shapes.medium,
+                        shape = RoundedCornerShape(12.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Payments,
+                            imageVector = Icons.Rounded.Payments,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp),
                         )
                         Spacer(Modifier.width(6.dp))
-                        Text("Pagar tarjeta")
+                        Text("Pagar tarjeta", fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = onStartCreditPurchase,
+                        enabled = !isSubmitting,
+                        border = BorderStroke(1.5.dp, emeraldColors.primaryDeep),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            tint = emeraldColors.primaryDeep,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Registrar consumo", color = emeraldColors.primaryDeep, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onStartCreditPurchase,
+                    enabled = !isSubmitting,
+                    colors = ButtonDefaults.buttonColors(containerColor = emeraldColors.primaryDeep),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("Registrar consumo", fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Tasas referenciales y TEA personal with badge
+            OutlinedButton(
+                onClick = { onNavigateToRateCatalog(card.id.value) },
+                enabled = !isSubmitting,
+                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(emeraldColors.pillTrack),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Percent,
+                                contentDescription = null,
+                                tint = emeraldColors.primaryDeep,
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                        Text(
+                            text = "Tasas referenciales y TEA personal",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+
+                    if (card.personalTeaBps != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = emeraldColors.incomeBg,
+                            border = BorderStroke(1.dp, emeraldColors.incomeBorder),
+                        ) {
+                            Text(
+                                text = "${"%.1f".format(card.personalTeaBps / 100.0)}% TEA >",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = emeraldColors.incomeEmerald,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = ">",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
 
             OutlinedButton(
-                onClick = { onNavigateToRateCatalog(card.id.value) },
+                onClick = onEditCreditTerms,
                 enabled = !isSubmitting,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = MaterialTheme.shapes.medium,
+                border = BorderStroke(1.dp, emeraldColors.borderSubtle),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
             ) {
-                Text("Tasas referenciales y TEA personal")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Editar línea, ciclo y fechas", fontWeight = FontWeight.Medium)
+                }
             }
 
             OutlinedButton(
                 onClick = onArchiveClick,
                 enabled = !isSubmitting,
+                border = BorderStroke(1.dp, emeraldColors.expenseBorder),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(12.dp),
             ) {
-                Text("Archivar tarjeta", color = MaterialTheme.colorScheme.error)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Archive,
+                        contentDescription = null,
+                        tint = emeraldColors.expenseCoral,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text("Archivar tarjeta", color = emeraldColors.expenseCoral, fontWeight = FontWeight.Medium)
+                }
             }
         } else {
             Button(
                 onClick = onReactivateClick,
                 enabled = !isSubmitting,
+                colors = ButtonDefaults.buttonColors(containerColor = emeraldColors.primaryDeep),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
-                shape = MaterialTheme.shapes.medium,
+                shape = RoundedCornerShape(12.dp),
             ) {
-                Text("Reactivar tarjeta")
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Reactivar tarjeta", fontWeight = FontWeight.Bold)
+            }
+
+            OutlinedButton(
+                onClick = onArchiveClick,
+                enabled = !isSubmitting,
+                border = BorderStroke(1.dp, emeraldColors.expenseBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DeleteForever,
+                    contentDescription = null,
+                    tint = emeraldColors.expenseCoral,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("Eliminar tarjeta permanentemente", color = emeraldColors.expenseCoral, fontWeight = FontWeight.Medium)
             }
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun CreditCardMovementsSection(
     movements: List<FinancialMovement>,
-    currency: Currency,
-    isLoading: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val sortedMovements = remember(movements) {
-        movements.sortedByDescending { it.effectiveAt }
-    }
+    val emeraldColors = rememberCalmEmeraldColors()
+    var showAllMovements by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
+    var selectedTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "PURCHASES", "PAYMENTS"
+    var selectedPeriodFilter by remember { mutableStateOf("ALL") } // "ALL", "CYCLE"
+
+    val activeFilterCount = (if (selectedTypeFilter != "ALL") 1 else 0) + (if (selectedPeriodFilter != "ALL") 1 else 0)
 
     val dateFormatter = remember {
         DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.forLanguageTag("es-PE"))
             .withZone(ZoneId.systemDefault())
+    }
+
+    val filteredMovements = remember(movements, selectedTypeFilter, selectedPeriodFilter) {
+        val now = java.time.Instant.now()
+        val thirtyDaysAgo = now.minus(30, java.time.temporal.ChronoUnit.DAYS)
+        movements.filter { m ->
+            val matchesType = when (selectedTypeFilter) {
+                "PURCHASES" -> m.kind == MovementKind.CREDIT_PURCHASE
+                "PAYMENTS" -> m.kind == MovementKind.CARD_PAYMENT_LIABILITY || m.kind == MovementKind.CARD_PAYMENT_CASH
+                else -> true
+            }
+            val matchesPeriod = when (selectedPeriodFilter) {
+                "CYCLE" -> m.effectiveAt >= thirtyDaysAgo
+                else -> true
+            }
+            matchesType && matchesPeriod
+        }.sortedByDescending { it.effectiveAt }
     }
 
     Column(
@@ -1712,37 +2397,112 @@ private fun CreditCardMovementsSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "Movimientos de la tarjeta",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            if (sortedMovements.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
-                    text = "${sortedMovements.size} movimiento${if (sortedMovements.size != 1) "s" else ""}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "Movimientos de la tarjeta",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                 )
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(emeraldColors.pillTrack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "${filteredMovements.size}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = emeraldColors.primaryDeep,
+                    )
+                }
+            }
+
+            Surface(
+                onClick = { showFilterSheet = true },
+                shape = RoundedCornerShape(8.dp),
+                color = if (activeFilterCount > 0) emeraldColors.pillTrack else MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, if (activeFilterCount > 0) emeraldColors.primaryDeep else MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Tune,
+                        contentDescription = "Filtrar",
+                        tint = if (activeFilterCount > 0) emeraldColors.primaryDeep else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = if (activeFilterCount > 0) "Filtros ($activeFilterCount)" else "Filtrar",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (activeFilterCount > 0) FontWeight.Bold else FontWeight.Normal,
+                        color = if (activeFilterCount > 0) emeraldColors.primaryDeep else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
-        if (isLoading) {
-            Card(
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth().testTag("card_movements_loading"),
+        // Active filter chips row if filters are active
+        if (activeFilterCount > 0) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    contentAlignment = Alignment.Center,
+                if (selectedTypeFilter != "ALL") {
+                    AssistChip(
+                        onClick = { selectedTypeFilter = "ALL" },
+                        label = {
+                            Text(
+                                if (selectedTypeFilter == "PURCHASES") "Compras" else "Pagos",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(Icons.Rounded.Close, contentDescription = "Remover", modifier = Modifier.size(14.dp))
+                        },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = emeraldColors.pillTrack),
+                    )
+                }
+                if (selectedPeriodFilter != "ALL") {
+                    AssistChip(
+                        onClick = { selectedPeriodFilter = "ALL" },
+                        label = {
+                            Text(
+                                "Ciclo actual",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        },
+                        trailingIcon = {
+                            Icon(Icons.Rounded.Close, contentDescription = "Remover", modifier = Modifier.size(14.dp))
+                        },
+                        colors = AssistChipDefaults.assistChipColors(containerColor = emeraldColors.pillTrack),
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        selectedTypeFilter = "ALL"
+                        selectedPeriodFilter = "ALL"
+                    },
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                 ) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Text("Limpiar", style = MaterialTheme.typography.labelSmall, color = emeraldColors.primaryDeep)
                 }
             }
-        } else if (sortedMovements.isEmpty()) {
+        }
+
+        if (filteredMovements.isEmpty()) {
             Card(
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
@@ -1752,127 +2512,335 @@ private fun CreditCardMovementsSection(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(36.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(emeraldColors.pillTrack),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
+                            contentDescription = null,
+                            tint = emeraldColors.primaryDeep,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
                     Text(
-                        text = "Sin movimientos registrados",
+                        text = if (activeFilterCount > 0) "Sin movimientos con estos filtros" else "Sin consumos en el ciclo",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Los consumos y pagos con esta tarjeta aparecerán aquí.",
+                        text = if (activeFilterCount > 0) "Intenta cambiar o limpiar los filtros seleccionados para ver más movimientos." else "No has registrado compras ni pagos con esta tarjeta este mes.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     )
+                    if (activeFilterCount > 0) {
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedButton(
+                            onClick = {
+                                selectedTypeFilter = "ALL"
+                                selectedPeriodFilter = "ALL"
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                        ) {
+                            Text("Restablecer filtros")
+                        }
+                    }
                 }
             }
         } else {
             Card(
-                shape = MaterialTheme.shapes.large,
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(modifier = Modifier.padding(vertical = 8.dp)) {
-                    sortedMovements.forEachIndexed { index, movement ->
-                        val isNegative = movement.kind == MovementKind.CREDIT_PURCHASE
-                        val icon = when (movement.kind) {
-                            MovementKind.CREDIT_PURCHASE -> Icons.Default.CreditCard
-                            MovementKind.CARD_PAYMENT_LIABILITY, MovementKind.CARD_PAYMENT_CASH -> Icons.Default.Payments
-                            MovementKind.ADJUSTMENT -> Icons.Default.Refresh
-                            MovementKind.REVERSAL -> Icons.Default.Refresh
-                            MovementKind.OPENING -> Icons.Default.AccountBalance
-                        }
-                        val title = when (movement.kind) {
-                            MovementKind.CREDIT_PURCHASE -> movement.merchantName?.takeIf(String::isNotBlank) ?: "Consumo con tarjeta"
-                            MovementKind.CARD_PAYMENT_LIABILITY, MovementKind.CARD_PAYMENT_CASH -> "Pago amortizador"
-                            MovementKind.ADJUSTMENT -> "Ajuste de crédito"
-                            MovementKind.REVERSAL -> "Reverso de movimiento"
-                            MovementKind.OPENING -> "Apertura"
-                        }
-                        val formattedDate = remember(movement.effectiveAt) {
-                            dateFormatter.format(movement.effectiveAt)
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (isNegative) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f) else Color(0xFFE8F5E9),
-                                    modifier = Modifier.size(40.dp),
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = icon,
-                                            contentDescription = null,
-                                            tint = if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
-                                }
-
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                    )
-                                    Text(
-                                        text = formattedDate,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    if (movement.status == com.kipu.app.core.finance.domain.model.MovementStatus.PENDING) {
-                                        Text(
-                                            text = "Pendiente de sincronizar",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.tertiary,
-                                        )
-                                    }
-                                }
-                            }
-
-                            val absMoney = Money(kotlin.math.abs(movement.amountMinorUnits), movement.currency)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = if (isNegative) "- " else "+ ",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
-                                )
-                                MoneyText(
-                                    money = absMoney,
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isNegative) MaterialTheme.colorScheme.error else Color(0xFF2E7D32),
-                                )
-                            }
-                        }
-
-                        if (index < sortedMovements.size - 1) {
+                    filteredMovements.take(4).forEachIndexed { index, movement ->
+                        CreditCardMovementRow(movement, dateFormatter, emeraldColors)
+                        if (index < minOf(filteredMovements.size, 4) - 1) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(horizontal = 16.dp),
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                             )
                         }
                     }
+                    TextButton(
+                        onClick = { showAllMovements = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("card_movements_view_all"),
+                    ) {
+                        Text("Ver todos los movimientos de la tarjeta")
+                    }
                 }
             }
         }
+    }
+
+    if (showFilterSheet) {
+        KipuBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .navigationBarsPadding(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Filtros de movimientos",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    IconButton(onClick = { showFilterSheet = false }) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Cerrar")
+                    }
+                }
+
+                // Section: Tipo de movimiento
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Tipo de movimiento",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = selectedTypeFilter == "ALL",
+                            onClick = { selectedTypeFilter = "ALL" },
+                            label = { Text("Todos") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = emeraldColors.pillTrack,
+                                selectedLabelColor = emeraldColors.primaryDeep,
+                            ),
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == "PURCHASES",
+                            onClick = { selectedTypeFilter = "PURCHASES" },
+                            label = { Text("Compras") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = emeraldColors.pillTrack,
+                                selectedLabelColor = emeraldColors.primaryDeep,
+                            ),
+                        )
+                        FilterChip(
+                            selected = selectedTypeFilter == "PAYMENTS",
+                            onClick = { selectedTypeFilter = "PAYMENTS" },
+                            label = { Text("Pagos") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = emeraldColors.pillTrack,
+                                selectedLabelColor = emeraldColors.primaryDeep,
+                            ),
+                        )
+                    }
+                }
+
+                // Section: Período
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Período",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = selectedPeriodFilter == "ALL",
+                            onClick = { selectedPeriodFilter = "ALL" },
+                            label = { Text("Histórico completo") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = emeraldColors.pillTrack,
+                                selectedLabelColor = emeraldColors.primaryDeep,
+                            ),
+                        )
+                        FilterChip(
+                            selected = selectedPeriodFilter == "CYCLE",
+                            onClick = { selectedPeriodFilter = "CYCLE" },
+                            label = { Text("Ciclo actual (30 días)") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = emeraldColors.pillTrack,
+                                selectedLabelColor = emeraldColors.primaryDeep,
+                            ),
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            selectedTypeFilter = "ALL"
+                            selectedPeriodFilter = "ALL"
+                            showFilterSheet = false
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Restablecer")
+                    }
+                    Button(
+                        onClick = { showFilterSheet = false },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = emeraldColors.primaryDeep),
+                    ) {
+                        Text("Aplicar filtros", fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(Modifier.height(4.dp))
+            }
+        }
+    }
+
+    if (showAllMovements) {
+        KipuBottomSheet(
+            onDismissRequest = { showAllMovements = false },
+            header = {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Movimientos de la tarjeta (${filteredMovements.size})",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(
+                        onClick = { showAllMovements = false },
+                        modifier = Modifier.size(48.dp).testTag("card_movements_close"),
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Cerrar movimientos")
+                    }
+                }
+            },
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 620.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
+            ) {
+                items(items = filteredMovements, key = { it.id.value }) { movement ->
+                    CreditCardMovementRow(movement, dateFormatter, emeraldColors)
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreditCardMovementRow(
+    movement: FinancialMovement,
+    dateFormatter: DateTimeFormatter,
+    emeraldColors: com.kipu.app.ui.theme.CalmEmeraldColors,
+) {
+    val isPayment = movement.kind == MovementKind.CARD_PAYMENT_LIABILITY || movement.kind == MovementKind.CARD_PAYMENT_CASH
+    val isNegative = movement.kind == MovementKind.CREDIT_PURCHASE
+
+    val (icon, iconTint, boxBg) = when (movement.kind) {
+        MovementKind.CARD_PAYMENT_LIABILITY, MovementKind.CARD_PAYMENT_CASH ->
+            Triple(Icons.Rounded.Payments, emeraldColors.incomeEmerald, emeraldColors.incomeBg)
+        MovementKind.CREDIT_PURCHASE ->
+            Triple(Icons.Rounded.CreditCard, emeraldColors.expenseCoral, emeraldColors.expenseBg)
+        MovementKind.ADJUSTMENT ->
+            Triple(Icons.Rounded.Refresh, emeraldColors.secondaryMuted, emeraldColors.pillTrack)
+        MovementKind.REVERSAL ->
+            Triple(Icons.Rounded.Refresh, emeraldColors.expenseCoral, emeraldColors.expenseBg)
+        MovementKind.OPENING ->
+            Triple(Icons.Rounded.AccountBalance, emeraldColors.primaryDeep, emeraldColors.pillTrack)
+    }
+
+    val title = when (movement.kind) {
+        MovementKind.CARD_PAYMENT_LIABILITY, MovementKind.CARD_PAYMENT_CASH -> "Pago Tarjeta de Crédito"
+        MovementKind.CREDIT_PURCHASE -> "Consumo con tarjeta"
+        MovementKind.ADJUSTMENT -> "Ajuste de crédito"
+        MovementKind.REVERSAL -> "Reverso de movimiento"
+        MovementKind.OPENING -> "Apertura"
+    }
+
+    val badgeText = when (movement.kind) {
+        MovementKind.CARD_PAYMENT_LIABILITY, MovementKind.CARD_PAYMENT_CASH -> "Abono a línea"
+        MovementKind.CREDIT_PURCHASE -> "1 cuota"
+        else -> null
+    }
+
+    val formattedDate = remember(movement.effectiveAt) { dateFormatter.format(movement.effectiveAt) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = boxBg,
+            modifier = Modifier.size(42.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = formattedDate,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = emeraldColors.secondaryMuted,
+                )
+                if (badgeText != null) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    ) {
+                        Text(
+                            text = badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+            }
+        }
+
+        MoneyText(
+            amount = "${if (isNegative) "-" else if (isPayment) "+" else ""}${formatMinorUnits(kotlin.math.abs(movement.amountMinorUnits))}",
+            currencySymbol = movement.currency.symbol(),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (isPayment) emeraldColors.incomeEmerald else MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -1938,6 +2906,3 @@ private fun AccountType.toDetailLabel(): String = when (this) {
     AccountType.DIGITAL_WALLET -> "Billetera digital"
     AccountType.CREDIT_LIABILITY -> "Pasivo de tarjeta"
 }
-
-private fun accountPresetIcon(preset: AccountPreset) =
-    if (preset.defaultIconToken == "wallet") Icons.Default.AccountBalanceWallet else Icons.Default.AccountBalance

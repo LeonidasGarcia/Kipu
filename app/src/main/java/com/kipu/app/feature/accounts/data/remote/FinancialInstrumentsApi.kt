@@ -66,6 +66,10 @@ class FinancialInstrumentsApi @Inject constructor(
         return callRpc("update_card_personal_tea_v1", request)
     }
 
+    suspend fun updateCreditCardTerms(request: UpdateCreditCardTermsRequestDto): FinancialApiResponse<PersonalTeaCommandResponseDto> {
+        return callRpc("update_credit_card_terms_v1", request)
+    }
+
     suspend fun fetchCreditProducts(): FinancialApiResponse<List<CreditProductCatalogDto>> {
         return try {
             val auth = getAuthHeader() ?: return FinancialApiResponse.Error(401, "No active session")

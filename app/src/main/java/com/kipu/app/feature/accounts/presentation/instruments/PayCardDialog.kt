@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -31,7 +28,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -40,11 +36,8 @@ import com.kipu.app.core.finance.domain.model.CardId
 import com.kipu.app.core.finance.domain.model.Money
 import com.kipu.app.feature.accounts.domain.model.AccountWithBalance
 import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
-import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.ui.component.formatMinorUnits
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 typealias CreditCardPaymentHandler = (
     cardId: CardId,
@@ -58,7 +51,6 @@ typealias CreditCardPaymentHandler = (
 @Composable
 fun PayCardDialog(
     creditCardWithSummary: CreditCardWithSummary,
-    nextInstallmentDue: CardPaymentSuggestion? = null,
     eligibleAccounts: List<AccountWithBalance>,
     onPayCreditCard: CreditCardPaymentHandler,
     onDismiss: () -> Unit,
@@ -70,20 +62,10 @@ fun PayCardDialog(
     val matchingAccounts = remember(eligibleAccounts, card.currency) {
         eligibleCardPaymentAccounts(eligibleAccounts, card.currency)
     }
-    val nextDueSuggestion = nextInstallmentDue?.takeIf {
-        it.amount.minorUnits in 1L..debt.minorUnits
-    }
-    val nextDueAmount = nextDueSuggestion?.amount?.minorUnits
-    val initialPaymentAmount = nextDueAmount ?: debt.minorUnits
-    val dueDateFormatter = remember {
-        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.forLanguageTag("es-PE"))
-    }
 
     var selectedAccount by remember { mutableStateOf(matchingAccounts.firstOrNull()) }
     var isAccountDropdownExpanded by remember { mutableStateOf(false) }
-    var amountInput by remember(card.id, initialPaymentAmount) {
-        mutableStateOf(formatMinorUnits(initialPaymentAmount))
-    }
+    var amountInput by remember { mutableStateOf(formatMinorUnits(debt.minorUnits)) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSubmitting by remember { mutableStateOf(false) }
 
@@ -98,10 +80,7 @@ fun PayCardDialog(
         },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
@@ -110,37 +89,27 @@ fun PayCardDialog(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Deuda total: ${card.currency.name} ${formatMinorUnits(debt.minorUnits)}",
+                    text = "Deuda actual: ${card.currency.name} ${formatMinorUnits(debt.minorUnits)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
 
-                if (nextDueSuggestion != null && nextDueAmount != null) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                        modifier = Modifier.fillMaxWidth().testTag("card_next_installment_suggestion"),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text("Próxima cuota", style = MaterialTheme.typography.labelLarge)
-                                Text(
-                                    "Vence ${nextDueSuggestion.dueDate.format(dueDateFormatter)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
-                            }
-                            Text(
-                                "${card.currency.name} ${formatMinorUnits(nextDueAmount)}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
+                // Non-expense explanation
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Este pago reduce tu deuda y tus fondos disponibles como amortización; no suma como gasto operativo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(10.dp),
+                    )
                 }
+
+                Text(
+                    text = "Cuenta de Origen",
+                    style = MaterialTheme.typography.titleSmall,
+                )
 
                 if (matchingAccounts.isEmpty()) {
                     Text(
@@ -181,6 +150,11 @@ fun PayCardDialog(
                     }
                 }
 
+                Text(
+                    text = "Importe a Pagar",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+
                 OutlinedTextField(
                     value = amountInput,
                     onValueChange = {
@@ -194,20 +168,10 @@ fun PayCardDialog(
                     supportingText = {
                         errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     },
-                    modifier = Modifier.fillMaxWidth().testTag("credit_card_payment_amount"),
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (nextDueAmount != null) {
-                        FilterChip(
-                            selected = amountInput == formatMinorUnits(nextDueAmount),
-                            onClick = {
-                                amountInput = formatMinorUnits(nextDueAmount)
-                                errorMessage = null
-                            },
-                            label = { Text("Próxima cuota") },
-                        )
-                    }
                     FilterChip(
                         selected = amountInput == formatMinorUnits(debt.minorUnits),
                         onClick = {
@@ -217,12 +181,6 @@ fun PayCardDialog(
                         label = { Text("Total") },
                     )
                 }
-
-                Text(
-                    text = "El pago reduce tu deuda y el saldo de la cuenta; no se registra como otro gasto.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         },
         confirmButton = {

@@ -15,6 +15,25 @@ interface FinancialMovementDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertRaw(movement: FinancialMovementEntity)
 
+    @Query("""
+        INSERT OR IGNORE INTO financial_movements (
+            id, operation_id, operation_sequence, user_id, kind, amount_minor_units, currency,
+            account_id, card_id, opening_account_id, effective_at, status,
+            reverses_movement_id, adjusts_movement_id, category_id, merchant_id,
+            merchant_provisional_text, merchant_raw_text, created_at
+        )
+        SELECT t.id, COALESCE(r.idempotency_key, t.id), 0, t.user_id, 'CREDIT_PURCHASE',
+            t.amount_minor, t.currency_code, NULL, t.card_id, NULL, t.occurred_at * 1000,
+            'POSTED', NULL, NULL, t.category_id, t.merchant_id,
+            t.merchant_provisional_text, NULL, t.created_at * 1000
+        FROM transactions t
+        LEFT JOIN local_command_receipts r
+            ON r.user_id = t.user_id AND r.transaction_id = t.id
+        WHERE t.user_id = :userId AND t.card_id = :cardId
+            AND t.operation_kind = 'CARD_PURCHASE' AND t.status = 'ACTIVE'
+    """)
+    suspend fun backfillPostedCardPurchases(userId: String, cardId: String)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertLedgerEntry(entry: LedgerEntryEntity)
 

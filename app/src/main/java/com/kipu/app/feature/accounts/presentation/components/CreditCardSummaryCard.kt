@@ -1,5 +1,10 @@
 package com.kipu.app.feature.accounts.presentation.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,8 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.rounded.CalendarToday
+import androidx.compose.material.icons.rounded.CreditCard
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -41,6 +46,8 @@ import com.kipu.app.feature.accounts.domain.model.CreditCardWithSummary
 import com.kipu.app.ui.component.LocalBalanceMasked
 import com.kipu.app.ui.component.MaskedCardReference
 import com.kipu.app.ui.component.MoneyText
+import com.kipu.app.ui.motion.rememberReducedMotionEnabled
+import com.kipu.app.ui.theme.KipuMotionTokens
 import com.kipu.app.ui.theme.rememberCalmEmeraldColors
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -56,6 +63,7 @@ fun CreditCardSummaryCard(
     val nextBilling = remember(card.billingDay) { CreditCalculations.calculateNextDate(card.billingDay) }
     val nextDue = remember(card.dueDay) { CreditCalculations.calculateNextDate(card.dueDay) }
     val emeraldColors = rememberCalmEmeraldColors()
+    val reducedMotion = rememberReducedMotionEnabled()
 
     val dateFormatter = remember {
         DateTimeFormatter.ofPattern("d MMM yyyy", Locale.forLanguageTag("es-PE"))
@@ -64,13 +72,27 @@ fun CreditCardSummaryCard(
     val formattedBilling = remember(nextBilling) { nextBilling.format(dateFormatter) }
 
     val isMasked = LocalBalanceMasked.current
-    val progressColor = if (isMasked) {
+    val progressColorTarget = if (isMasked) {
         emeraldColors.secondaryMuted
     } else when {
         utilization >= 80.0 -> emeraldColors.expenseCoral
         utilization >= 50.0 -> emeraldColors.warningAmber
         else -> emeraldColors.incomeEmerald
     }
+    val progressColor = animateColorAsState(
+        targetValue = progressColorTarget,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "cardSummaryUtilizationColor",
+    ).value
+    val progressRatioTarget = remember(isMasked, utilization) {
+        if (isMasked) 0f else (utilization / 100.0).toFloat().coerceIn(0f, 1f)
+    }
+    val animatedProgress = animateFloatAsState(
+        targetValue = progressRatioTarget,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "cardSummaryUtilizationProgress",
+    ).value
+    val progressRatio = if (isMasked) 0f else animatedProgress
 
     val (statusLabel, statusBg, statusBorder, statusText) = when {
         card.isArchived -> Quadruple(
@@ -85,6 +107,30 @@ fun CreditCardSummaryCard(
             emeraldColors.warningBorder,
             emeraldColors.warningText,
         )
+        isMasked -> Quadruple(
+            "Uso oculto",
+            emeraldColors.pillTrack,
+            emeraldColors.borderSubtle,
+            emeraldColors.secondaryMuted,
+        )
+        utilization > 100.0 -> Quadruple(
+            "Sobreutilizada",
+            emeraldColors.expenseBg,
+            emeraldColors.expenseBorder,
+            emeraldColors.expenseCoral,
+        )
+        utilization >= 80.0 -> Quadruple(
+            "Uso alto",
+            emeraldColors.warningBg,
+            emeraldColors.warningBorder,
+            emeraldColors.warningText,
+        )
+        utilization >= 50.0 -> Quadruple(
+            "Uso moderado",
+            emeraldColors.warningBg,
+            emeraldColors.warningBorder,
+            emeraldColors.warningText,
+        )
         else -> Quadruple(
             "En uso normal",
             emeraldColors.incomeBg,
@@ -92,6 +138,21 @@ fun CreditCardSummaryCard(
             emeraldColors.incomeEmerald,
         )
     }
+    val animatedStatusBg = animateColorAsState(
+        targetValue = statusBg,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "cardSummaryStatusBackground",
+    ).value
+    val animatedStatusBorder = animateColorAsState(
+        targetValue = statusBorder,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "cardSummaryStatusBorder",
+    ).value
+    val animatedStatusText = animateColorAsState(
+        targetValue = statusText,
+        animationSpec = if (reducedMotion) snap() else tween(KipuMotionTokens.MediumMillis, easing = FastOutSlowInEasing),
+        label = "cardSummaryStatusText",
+    ).value
 
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -124,7 +185,7 @@ fun CreditCardSummaryCard(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.CreditCard,
+                                        imageVector = Icons.Rounded.CreditCard,
                                         contentDescription = null,
                                         tint = Color(0xFFFBBF24),
                                         modifier = Modifier.size(20.dp),
@@ -160,13 +221,13 @@ fun CreditCardSummaryCard(
                         // Status Badge
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = statusBg,
-                            border = BorderStroke(1.dp, statusBorder),
+                            color = animatedStatusBg,
+                            border = BorderStroke(1.dp, animatedStatusBorder),
                         ) {
                             Text(
                                 text = statusLabel,
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
-                                color = statusText,
+                                color = animatedStatusText,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
@@ -189,7 +250,7 @@ fun CreditCardSummaryCard(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = Icons.Default.CreditCard,
+                                        imageVector = Icons.Rounded.CreditCard,
                                         contentDescription = null,
                                         tint = Color(0xFFFBBF24),
                                         modifier = Modifier.size(20.dp),
@@ -226,13 +287,13 @@ fun CreditCardSummaryCard(
                         // Status Badge
                         Surface(
                             shape = RoundedCornerShape(6.dp),
-                            color = statusBg,
-                            border = BorderStroke(1.dp, statusBorder),
+                            color = animatedStatusBg,
+                            border = BorderStroke(1.dp, animatedStatusBorder),
                         ) {
                             Text(
                                 text = statusLabel,
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
-                                color = statusText,
+                                color = animatedStatusText,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             )
                         }
@@ -325,7 +386,11 @@ fun CreditCardSummaryCard(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Utilization Progress Bar
-                val displayedUtilization = if (isMasked) "••%" else "%.0f%%".format(utilization)
+                val displayedUtilization = remember(isMasked, utilization) { when {
+                    isMasked -> "••%"
+                    utilization > 100.0 -> "%.1f%%".format(Locale.US, utilization)
+                    else -> "%.0f%%".format(Locale.US, utilization)
+                } }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -361,7 +426,6 @@ fun CreditCardSummaryCard(
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
-                val progressRatio = if (isMasked) 0f else (utilization / 100.0).toFloat().coerceIn(0f, 1f)
                 LinearProgressIndicator(
                     progress = { progressRatio },
                     color = progressColor,
@@ -385,7 +449,7 @@ fun CreditCardSummaryCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CalendarToday,
+                            imageVector = Icons.Rounded.CalendarToday,
                             contentDescription = null,
                             tint = emeraldColors.incomeEmerald,
                             modifier = Modifier.size(15.dp),

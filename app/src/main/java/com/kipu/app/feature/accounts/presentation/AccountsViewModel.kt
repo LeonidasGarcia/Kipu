@@ -16,8 +16,6 @@ import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
 import com.kipu.app.feature.accounts.domain.model.Card
-import com.kipu.app.feature.accounts.domain.model.CardPreset
-import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
 import com.kipu.app.feature.accounts.domain.model.FinancialDashboardData
 import com.kipu.app.feature.accounts.domain.model.CreditProductReference
 import com.kipu.app.feature.accounts.domain.model.CreditUtilizationNotification
@@ -166,6 +164,32 @@ class AccountsViewModel @Inject constructor(
         }
     }
 
+    fun updateCreditCardTerms(
+        cardId: CardId,
+        creditLimitMinorUnits: Long,
+        billingDay: Int,
+        dueDay: Int,
+        lastFourDigits: String? = null,
+        alias: String? = null,
+    ) {
+        viewModelScope.launch {
+            financialInstrumentsRepository.updateCreditCardTerms(
+                cardId = cardId,
+                creditLimitMinorUnits = creditLimitMinorUnits,
+                billingDay = billingDay,
+                dueDay = dueDay,
+                lastFourDigits = lastFourDigits,
+                alias = alias,
+                operationId = OperationId.generate(),
+            ).fold(
+                onSuccess = {
+                    _eventChannel.send(AccountUiEvent.ShowMessage("Condiciones guardadas en este dispositivo · Pendientes de sincronización"))
+                },
+                onFailure = { _eventChannel.send(AccountUiEvent.Error(it.message ?: "No se pudieron guardar las condiciones de la tarjeta")) },
+            )
+        }
+    }
+
     fun confirmCreditPurchase(
         cardId: CardId,
         amount: Money,
@@ -173,7 +197,6 @@ class AccountsViewModel @Inject constructor(
         effectiveAt: Instant,
         installments: Int,
         categoryId: String,
-        merchantId: String? = null,
     ) {
         viewModelScope.launch {
             confirmCreditPurchaseUseCase(
@@ -183,7 +206,6 @@ class AccountsViewModel @Inject constructor(
                 effectiveAt = effectiveAt,
                 installments = installments,
                 categoryId = categoryId,
-                merchantId = merchantId,
             ).fold(
                 onSuccess = { _eventChannel.send(AccountUiEvent.ShowMessage("Compra registrada; pendiente de sincronización")) },
                 onFailure = { _eventChannel.send(AccountUiEvent.Error(it.message ?: "No se pudo confirmar la compra")) },
@@ -244,9 +266,6 @@ class AccountsViewModel @Inject constructor(
 
     fun observeCardMovements(cardId: CardId): Flow<List<FinancialMovement>> =
         financialInstrumentsRepository.observeMovementsByCard(cardId)
-
-    fun observeNextInstallmentPayment(cardId: CardId): Flow<CardPaymentSuggestion?> =
-        financialInstrumentsRepository.observeNextInstallmentPayment(cardId)
 
     fun observeAccountBalance(accountId: AccountId): Flow<Money> =
         financialInstrumentsRepository.observeAccountBalance(accountId)
@@ -346,32 +365,6 @@ class AccountsViewModel @Inject constructor(
                 onFailure = { error ->
                     _eventChannel.send(AccountUiEvent.Error(error.message ?: "Error al actualizar apariencia"))
                 }
-            )
-        }
-    }
-
-    fun updateCardAppearance(
-        cardId: CardId,
-        alias: String?,
-        preset: CardPreset?,
-        colorToken: String?,
-        iconToken: String?,
-        onSuccess: () -> Unit = {},
-    ) {
-        viewModelScope.launch {
-            financialInstrumentsRepository.updateCardAppearance(
-                cardId = cardId,
-                alias = alias,
-                preset = preset,
-                colorToken = colorToken,
-                iconToken = iconToken,
-                operationId = OperationId.generate(),
-            ).fold(
-                onSuccess = {
-                    _eventChannel.send(AccountUiEvent.ShowMessage("Tarjeta actualizada · Pendiente de sincronización"))
-                    onSuccess()
-                },
-                onFailure = { error -> _eventChannel.send(AccountUiEvent.Error(error.message ?: "Error al actualizar tarjeta")) },
             )
         }
     }

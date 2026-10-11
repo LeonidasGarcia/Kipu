@@ -22,6 +22,7 @@ import com.kipu.app.feature.accounts.data.remote.CreateAccountRequestDto
 import com.kipu.app.feature.accounts.data.remote.CommandResponseDto
 import com.kipu.app.feature.accounts.data.remote.CreditCommandRequestDto
 import com.kipu.app.feature.accounts.data.remote.UpdatePersonalTeaRequestDto
+import com.kipu.app.feature.accounts.data.remote.UpdateCreditCardTermsRequestDto
 import com.kipu.app.feature.accounts.data.remote.DeleteUnusedCardRequestDto
 import com.kipu.app.feature.accounts.data.remote.FinancialApiResponse
 import com.kipu.app.feature.accounts.data.remote.FinancialInstrumentsApi
@@ -142,6 +143,9 @@ class SyncInstrumentCommandsWorker @AssistedInject constructor(
         }
         if (cmd.commandType == "UPDATE_CARD_PERSONAL_TEA") {
             return processPersonalTeaCommand(cmd, nowMicros)
+        }
+        if (cmd.commandType == "UPDATE_CREDIT_CARD_TERMS") {
+            return processCreditCardTermsCommand(cmd, nowMicros)
         }
 
         val result: FinancialApiResponse<Any> = try {
@@ -355,6 +359,49 @@ class SyncInstrumentCommandsWorker @AssistedInject constructor(
                 "APPLIED", "DUPLICATE" -> {
                     response.data.revision?.let {
                         // Local card metadata remains owner-scoped; update revision after server acceptance.
+                        cardDao.updateRemoteRevision(cmd.userId, cmd.aggregateId, it, System.currentTimeMillis() * 1_000L)
+                    }
+                    syncDao.markSynced(cmd.userId, cmd.operationId, System.currentTimeMillis() * 1_000L)
+                    true
+                }
+                "CONFLICT", "REJECTED" -> {
+                    updateCreditCommandState(cmd, response.data.status, null, response.data.error?.code ?: response.data.status)
+                    true
+                }
+                else -> {
+                    updateCreditCommandState(cmd, "ERROR", nowMicros + 10_000_000L, "UNKNOWN_STATUS")
+                    false
+                }
+            }
+            is FinancialApiResponse.Error -> if (response.statusCode in 400..499 && response.statusCode != 408 && response.statusCode != 429) {
+                updateCreditCommandState(cmd, if (response.statusCode == 409) "CONFLICT" else "FAILED_PERMANENT", null, "HTTP_${response.statusCode}")
+                true
+            } else {
+                updateCreditCommandState(cmd, "ERROR", nowMicros + 30_000_000L, "HTTP_${response.statusCode}")
+                false
+            }
+            is FinancialApiResponse.NetworkFailure -> {
+                updateCreditCommandState(cmd, "ERROR", nowMicros + 30_000_000L, "NETWORK_ERROR")
+                false
+            }
+        }
+    }
+
+    private suspend fun processCreditCardTermsCommand(
+        cmd: InstrumentSyncOutboxEntity,
+        nowMicros: Long,
+    ): Boolean {
+        val request = try {
+            json.decodeFromString<UpdateCreditCardTermsRequestDto>(cmd.payloadJson)
+        } catch (_: Exception) {
+            updateCreditCommandState(cmd, "FAILED_PERMANENT", null, "INVALID_PAYLOAD")
+            return true
+        }
+        val response = api.updateCreditCardTerms(request)
+        return when (response) {
+            is FinancialApiResponse.Success -> when (response.data.status) {
+                "APPLIED", "DUPLICATE" -> {
+                    response.data.revision?.let {
                         cardDao.updateRemoteRevision(cmd.userId, cmd.aggregateId, it, System.currentTimeMillis() * 1_000L)
                     }
                     syncDao.markSynced(cmd.userId, cmd.operationId, System.currentTimeMillis() * 1_000L)

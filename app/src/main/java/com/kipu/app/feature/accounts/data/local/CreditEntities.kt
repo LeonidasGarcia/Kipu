@@ -76,11 +76,6 @@ data class CreditInstallmentOutstanding(
     @ColumnInfo(name = "purchase_occurred_at") val purchaseOccurredAt: Long,
 )
 
-data class CreditInstallmentDueSummary(
-    @ColumnInfo(name = "due_date") val dueDateEpochDay: Long,
-    @ColumnInfo(name = "amount_minor") val amountMinor: Long,
-)
-
 @androidx.room.Dao
 interface CreditDao {
     @androidx.room.Query(
@@ -177,28 +172,6 @@ interface CreditDao {
            ORDER BY i.due_date, t.occurred_at, i.installment_number, i.id""",
     )
     suspend fun getOutstandingInstallmentsForCard(userId: String, cardId: String): List<CreditInstallmentOutstanding>
-
-    @androidx.room.Query(
-        """SELECT i.due_date AS due_date,
-                  COALESCE(SUM(MAX(i.principal_minor - COALESCE(a.allocated_minor, 0), 0)), 0) AS amount_minor
-           FROM credit_installments i
-           JOIN transactions t ON t.user_id = i.user_id AND t.id = i.transaction_id
-           LEFT JOIN (
-             SELECT a.user_id, a.installment_id, SUM(a.allocated_minor) AS allocated_minor
-             FROM credit_payment_allocations a
-             JOIN transactions payment ON payment.user_id=a.user_id AND payment.id=a.payment_transaction_id
-             WHERE payment.status NOT IN ('VOIDED','FAILED')
-             GROUP BY a.user_id, a.installment_id
-           ) a ON a.user_id = i.user_id AND a.installment_id = i.id
-           WHERE i.user_id = :userId AND t.card_id = :cardId
-             AND i.deleted_at IS NULL AND i.status != 'VOIDED'
-             AND t.status = 'ACTIVE' AND t.sync_status != 'FAILED_PERMANENT'
-             AND i.principal_minor > COALESCE(a.allocated_minor, 0)
-           GROUP BY i.due_date
-           ORDER BY i.due_date
-           LIMIT 1""",
-    )
-    fun observeNextInstallmentDueForCard(userId: String, cardId: String): kotlinx.coroutines.flow.Flow<CreditInstallmentDueSummary?>
 
     @androidx.room.Query(
         """SELECT * FROM credit_installments

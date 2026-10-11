@@ -29,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,7 +36,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -70,40 +68,19 @@ fun InstrumentCardPreview(
     showCardHardware: Boolean = true,
 ) {
     val reducedMotion = rememberReducedMotionEnabled()
-    val settleProgress = remember { Animatable(1f) }
+    val rotationX = remember { Animatable(0f) }
+    val rotationY = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    var cardSize by remember { mutableStateOf(IntSize.Zero) }
-    var isDragging by remember { mutableStateOf(false) }
-    var dragRotationX by remember { mutableFloatStateOf(0f) }
-    var dragRotationY by remember { mutableFloatStateOf(0f) }
-    var settledRotationX by remember { mutableFloatStateOf(0f) }
-    var settledRotationY by remember { mutableFloatStateOf(0f) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
     var glarePosition by remember { mutableStateOf(Offset(0.5f, 0.5f)) }
     val shape = RoundedCornerShape(16.dp)
     val cardForeground = stylePreset?.textColor ?: foregroundColor
     val cardBrush = stylePreset?.gradientBrush ?: Brush.linearGradient(listOf(backgroundColor, backgroundColor))
     LaunchedEffect(reducedMotion) {
         if (reducedMotion) {
-            settleProgress.snapTo(1f)
-            isDragging = false
-            dragRotationX = 0f
-            dragRotationY = 0f
-            settledRotationX = 0f
-            settledRotationY = 0f
+            rotationX.snapTo(0f)
+            rotationY.snapTo(0f)
             glarePosition = Offset(0.5f, 0.5f)
-        }
-    }
-
-    fun settleTilt() {
-        settledRotationX = dragRotationX
-        settledRotationY = dragRotationY
-        isDragging = false
-        glarePosition = Offset(0.5f, 0.5f)
-        scope.launch {
-            settleProgress.snapTo(0f)
-            settleProgress.animateTo(1f, spring(dampingRatio = 0.78f, stiffness = 360f))
-            settledRotationX = 0f
-            settledRotationY = 0f
         }
     }
     val accessibleDescription = buildString {
@@ -123,23 +100,33 @@ fun InstrumentCardPreview(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 160.dp)
-            .onSizeChanged { cardSize = it }
-            .pointerInput(reducedMotion, cardSize) {
+            .onSizeChanged { size = it }
+            .pointerInput(reducedMotion, size) {
                 if (!reducedMotion) {
                     detectDragGestures(
-                        onDragStart = {
-                            isDragging = true
-                            scope.launch { settleProgress.snapTo(0f) }
+                        onDragEnd = {
+                            scope.launch {
+                                rotationX.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                                rotationY.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                            }
+                            glarePosition = Offset(0.5f, 0.5f)
                         },
-                        onDragEnd = ::settleTilt,
-                        onDragCancel = ::settleTilt,
+                        onDragCancel = {
+                            scope.launch {
+                                rotationX.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                                rotationY.animateTo(0f, spring(dampingRatio = 0.72f, stiffness = 420f))
+                            }
+                            glarePosition = Offset(0.5f, 0.5f)
+                        },
                     ) { change, _ ->
-                        val width = cardSize.width.coerceAtLeast(1).toFloat()
-                        val height = cardSize.height.coerceAtLeast(1).toFloat()
+                        val width = size.width.coerceAtLeast(1).toFloat()
+                        val height = size.height.coerceAtLeast(1).toFloat()
                         val x = (change.position.x / width).coerceIn(0f, 1f)
                         val y = (change.position.y / height).coerceIn(0f, 1f)
-                        dragRotationY = (x - 0.5f) * 12f
-                        dragRotationX = (0.5f - y) * 12f
+                        scope.launch {
+                            rotationY.snapTo((x - 0.5f) * 14f)
+                            rotationX.snapTo((0.5f - y) * 14f)
+                        }
                         glarePosition = Offset(x, y)
                         change.consume()
                     }
@@ -156,9 +143,8 @@ fun InstrumentCardPreview(
                 .heightIn(min = 160.dp)
                 .graphicsLayer {
                     if (!reducedMotion) {
-                        val recovery = if (isDragging) 0f else settleProgress.value
-                        this.rotationX = if (isDragging) dragRotationX else settledRotationX * (1f - recovery)
-                        this.rotationY = if (isDragging) dragRotationY else settledRotationY * (1f - recovery)
+                        this.rotationX = rotationX.value
+                        this.rotationY = rotationY.value
                         cameraDistance = 14f * density
                     }
                 }
@@ -194,19 +180,16 @@ fun InstrumentCardPreview(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .drawBehind {
-                                val center = Offset(
-                                    x = size.width * (0.76f + glarePosition.x * 0.20f),
-                                    y = size.height * (0.06f + glarePosition.y * 0.30f),
-                                )
-                                drawRect(
-                                    Brush.radialGradient(
-                                        colors = listOf(Color.White.copy(alpha = 0.12f), Color.Transparent),
-                                        center = center,
-                                        radius = size.width.coerceAtLeast(1f) * 0.24f,
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(Color.White.copy(alpha = 0.12f), Color.Transparent),
+                                    center = androidx.compose.ui.geometry.Offset(
+                                        x = size.width * (0.76f + glarePosition.x * 0.20f),
+                                        y = size.height * (0.06f + glarePosition.y * 0.30f),
                                     ),
-                                )
-                            },
+                                    radius = size.width.coerceAtLeast(1) * 0.24f,
+                                ),
+                            ),
                     )
                 }
                 Row(

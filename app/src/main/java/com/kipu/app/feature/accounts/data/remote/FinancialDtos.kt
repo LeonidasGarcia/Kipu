@@ -210,6 +210,23 @@ data class PersonalTeaCommandResponseDto(
 )
 
 @Serializable
+data class UpdateCreditCardTermsRequestDto(
+    @SerialName("contract_version") val contractVersion: Int = 1,
+    @SerialName("idempotency_key") val idempotencyKey: String,
+    @SerialName("request_hash") val requestHash: String,
+    @SerialName("card") val card: CreditCardTermsCommandDto,
+)
+
+@Serializable
+data class CreditCardTermsCommandDto(
+    @SerialName("id") val id: String,
+    @SerialName("credit_limit_minor_units") val creditLimitMinorUnits: Long,
+    @SerialName("billing_day") val billingDay: Int,
+    @SerialName("due_day") val dueDay: Int,
+    @SerialName("expected_revision") val expectedRevision: Long,
+)
+
+@Serializable
 data class PullChangesRequestDto(
     @SerialName("contract_version") val contractVersion: Int = 1,
     @SerialName("after_sequence") val afterSequence: Long,

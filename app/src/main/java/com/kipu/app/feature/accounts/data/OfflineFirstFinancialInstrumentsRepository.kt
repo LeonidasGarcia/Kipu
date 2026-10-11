@@ -36,6 +36,8 @@ import com.kipu.app.feature.accounts.data.remote.RecordOpeningAdjustmentRequestD
 import com.kipu.app.feature.accounts.data.remote.RegisterCardRequestDto
 import com.kipu.app.feature.accounts.data.remote.PersonalTeaCardCommandDto
 import com.kipu.app.feature.accounts.data.remote.UpdatePersonalTeaRequestDto
+import com.kipu.app.feature.accounts.data.remote.CreditCardTermsCommandDto
+import com.kipu.app.feature.accounts.data.remote.UpdateCreditCardTermsRequestDto
 import com.kipu.app.feature.accounts.data.remote.SetArchivedRequestDto
 import com.kipu.app.feature.accounts.data.remote.UpdateAppearanceRequestDto
 import com.kipu.app.feature.accounts.data.sync.InstrumentSyncScheduler
@@ -43,7 +45,6 @@ import com.kipu.app.feature.accounts.domain.FinancialInstrumentsRepository
 import com.kipu.app.feature.accounts.domain.model.Account
 import com.kipu.app.feature.accounts.domain.model.AccountPreset
 import com.kipu.app.feature.accounts.domain.model.AccountType
-import com.kipu.app.feature.accounts.domain.model.CardPaymentSuggestion
 import com.kipu.app.feature.accounts.domain.model.Card
 import com.kipu.app.feature.accounts.domain.model.CardNetwork
 import com.kipu.app.feature.accounts.domain.model.CardPreset
@@ -68,7 +69,9 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import java.util.UUID
@@ -648,6 +651,77 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         }
     }
 
+    override suspend fun updateCreditCardTerms(
+        cardId: CardId,
+        creditLimitMinorUnits: Long,
+        billingDay: Int,
+        dueDay: Int,
+        lastFourDigits: String?,
+        alias: String?,
+        operationId: OperationId,
+    ): Result<Unit> {
+        val userId = currentUserId() ?: return Result.failure(IllegalStateException("No active owner session"))
+        if (creditLimitMinorUnits < 0L) return Result.failure(IllegalArgumentException("La línea de crédito no puede ser negativa"))
+        if (billingDay !in 1..31 || dueDay !in 1..31) return Result.failure(IllegalArgumentException("Los días de corte y pago deben estar entre 1 y 31"))
+        val nowMicros = System.currentTimeMillis() * 1_000L
+
+        return runCatching {
+            database.withTransaction {
+                val card = cardDao.getById(userId, cardId.value)
+                    ?: throw IllegalArgumentException("Card not found: ${cardId.value}")
+                require(card.type == "CREDIT" && !card.isArchived) { "Only an active credit card can have terms updated" }
+                val digitsToSave = lastFourDigits?.trim()?.takeIf { it.length == 4 } ?: card.lastFourDigits
+                val aliasToSave = alias?.trim()?.ifBlank { null } ?: card.alias
+                check(
+                    cardDao.updateCreditTerms(
+                        userId = userId,
+                        id = cardId.value,
+                        creditLimitMinorUnits = creditLimitMinorUnits,
+                        billingDay = billingDay,
+                        dueDay = dueDay,
+                        lastFourDigits = digitsToSave,
+                        alias = aliasToSave,
+                        nowMicros = nowMicros,
+                    ) == 1,
+                ) { "Could not update credit card terms" }
+
+                val payload = UpdateCreditCardTermsRequestDto(
+                    idempotencyKey = operationId.value,
+                    requestHash = "pending",
+                    card = CreditCardTermsCommandDto(
+                        id = cardId.value,
+                        creditLimitMinorUnits = creditLimitMinorUnits,
+                        billingDay = billingDay,
+                        dueDay = dueDay,
+                        expectedRevision = card.remoteRevision,
+                    ),
+                )
+                val canonicalPayload = json.encodeToString(payload)
+                val request = payload.copy(requestHash = sha256(canonicalPayload))
+                val payloadJson = creditCommandJson.encodeToString(request)
+                val predecessor = syncDao.getLatestForAggregate(userId, "CARD", cardId.value)?.operationId
+                syncDao.insert(
+                    InstrumentSyncOutboxEntity(
+                        operationId = operationId.value,
+                        userId = userId,
+                        commandType = "UPDATE_CREDIT_CARD_TERMS",
+                        aggregateType = "CARD",
+                        aggregateId = cardId.value,
+                        predecessorOperationId = predecessor,
+                        expectedRevision = card.remoteRevision,
+                        contractVersion = 1,
+                        payloadJson = payloadJson,
+                        payloadHash = sha256(payloadJson),
+                        state = "PENDING",
+                        createdAt = nowMicros,
+                        updatedAt = nowMicros,
+                    ),
+                )
+            }
+            syncScheduler.scheduleSync(userId)
+        }
+    }
+
     override suspend fun getCreditProductCatalog(): Result<List<CreditProductReference>> {
         return when (val response = financialApi.fetchCreditProducts()) {
             is FinancialApiResponse.Success -> runCatching {
@@ -1125,12 +1199,12 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                 require(currentDebt == scheduledDebt) {
                     "Credit liability ledger does not match the installment schedule"
                 }
-                val debtAfterPurchase = Math.addExact(currentDebt, amount.minorUnits)
+                Math.addExact(currentDebt, amount.minorUnits) // Fail before writes if the outstanding balance would overflow.
                 val creditLimit = requireNotNull(card.creditLimitMinorUnits) {
                     "Credit card limit is not configured"
                 }
-                require(debtAfterPurchase <= creditLimit) {
-                    "Purchase would exceed the available credit limit"
+                require(creditLimit >= 0L) {
+                    "Credit card limit cannot be negative"
                 }
 
                 val peruDate = effectiveAt.atZone(ZoneId.of("America/Lima")).toLocalDate()
@@ -1173,6 +1247,24 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
                     installmentCount = installments,
                 )
                 database.movementDao().insertTransaction(transaction)
+                movementDao.insertRaw(
+                    FinancialMovementEntity(
+                        id = transactionId,
+                        operationId = operationId.value,
+                        operationSequence = 0,
+                        userId = userId,
+                        kind = MovementKind.CREDIT_PURCHASE.name,
+                        amountMinorUnits = amount.minorUnits,
+                        currency = amount.currency.name,
+                        cardId = cardId.value,
+                        effectiveAt = Math.multiplyExact(effectiveAt.toEpochMilli(), 1_000L),
+                        status = MovementStatus.POSTED.name,
+                        categoryId = categoryId,
+                        merchantId = merchantId,
+                        merchantProvisionalText = merchant.trim().takeIf { merchantId == null },
+                        createdAt = nowMicros,
+                    ),
+                )
                 database.movementDao().insertLedgerEntries(
                     listOf(
                         com.kipu.app.feature.movements.data.local.LedgerEntryEntity(
@@ -1608,27 +1700,6 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         }.distinctUntilChanged()
     }
 
-    override fun observeNextInstallmentPayment(cardId: CardId): Flow<CardPaymentSuggestion?> {
-        return sessionCoordinator.localAccess.flatMapLatest { access ->
-            when (access) {
-                is LocalAccess.Available -> combine(
-                    database.creditDao().observeNextInstallmentDueForCard(access.userId, cardId.value),
-                    cardDao.observeById(access.userId, cardId.value),
-                ) { due, card ->
-                    if (due == null || card == null || due.amountMinor <= 0L) {
-                        null
-                    } else {
-                        CardPaymentSuggestion(
-                            dueDate = LocalDate.ofEpochDay(due.dueDateEpochDay),
-                            amount = Money(due.amountMinor, Currency.fromCode(card.currency)),
-                        )
-                    }
-                }
-                else -> flowOf(null)
-            }
-        }.distinctUntilChanged()
-    }
-
     override fun observeMovementsByAccount(accountId: AccountId): Flow<List<FinancialMovement>> {
         return sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
@@ -1663,61 +1734,30 @@ class OfflineFirstFinancialInstrumentsRepository @Inject constructor(
         return sessionCoordinator.localAccess.flatMapLatest { access ->
             when (access) {
                 is LocalAccess.Available -> {
-                    val legacyMovements = movementDao.observeByCard(access.userId, cardId.value).map { list ->
-                        list.map { entity ->
-                            FinancialMovement(
-                                id = MovementId(entity.id),
-                                operationId = OperationId(entity.operationId),
-                                sequence = entity.operationSequence,
-                                userId = UserId(entity.userId),
-                                kind = MovementKind.valueOf(entity.kind),
-                                amountMinorUnits = entity.amountMinorUnits,
-                                currency = Currency.fromCode(entity.currency),
-                                accountId = entity.accountId?.let { AccountId(it) },
-                                cardId = entity.cardId?.let { CardId(it) },
-                                effectiveAt = Instant.ofEpochMilli(entity.effectiveAt / 1000L),
-                                status = MovementStatus.valueOf(entity.status),
-                                reversesMovementId = entity.reversesMovementId?.let { MovementId(it) },
-                                adjustsMovementId = entity.adjustsMovementId?.let { MovementId(it) },
-                                createdAt = Instant.ofEpochMilli(entity.createdAt / 1000L),
-                            )
-                        }
-                    }
-                    val creditTransactions = database.movementDao()
-                        .observeCardTransactions(access.userId, cardId.value)
-                        .map { rows ->
-                            rows.mapNotNull { row ->
-                                val entity = row.transaction
-                                val kind = when (entity.operationKind) {
-                                    "CARD_PURCHASE" -> MovementKind.CREDIT_PURCHASE
-                                    "CARD_PAYMENT" -> MovementKind.CARD_PAYMENT_LIABILITY
-                                    else -> return@mapNotNull null
+                    flow {
+                        movementDao.backfillPostedCardPurchases(access.userId, cardId.value)
+                        emitAll(
+                            movementDao.observeByCard(access.userId, cardId.value).map { list ->
+                                list.map { entity ->
+                                    FinancialMovement(
+                                        id = MovementId(entity.id),
+                                        operationId = OperationId(entity.operationId),
+                                        sequence = entity.operationSequence,
+                                        userId = UserId(entity.userId),
+                                        kind = MovementKind.valueOf(entity.kind),
+                                        amountMinorUnits = entity.amountMinorUnits,
+                                        currency = Currency.fromCode(entity.currency),
+                                        accountId = entity.accountId?.let { AccountId(it) },
+                                        cardId = entity.cardId?.let { CardId(it) },
+                                        effectiveAt = Instant.ofEpochMilli(entity.effectiveAt / 1000L),
+                                        status = MovementStatus.valueOf(entity.status),
+                                        reversesMovementId = entity.reversesMovementId?.let { MovementId(it) },
+                                        adjustsMovementId = entity.adjustsMovementId?.let { MovementId(it) },
+                                        createdAt = Instant.ofEpochMilli(entity.createdAt / 1000L),
+                                    )
                                 }
-                                FinancialMovement(
-                                    id = MovementId(entity.id),
-                                    operationId = OperationId(entity.id),
-                                    sequence = 0,
-                                    userId = UserId(entity.userId),
-                                    kind = kind,
-                                    amountMinorUnits = entity.amountMinor,
-                                    currency = Currency.fromCode(entity.currencyCode),
-                                    accountId = entity.sourceAccountId?.let { AccountId(it) },
-                                    cardId = entity.cardId?.let { CardId(it) },
-                                    effectiveAt = Instant.ofEpochMilli(entity.occurredAt),
-                                    status = if (entity.syncStatus in setOf("PENDING", "IN_FLIGHT", "RETRY", "ERROR")) {
-                                        MovementStatus.PENDING
-                                    } else {
-                                        MovementStatus.POSTED
-                                    },
-                                    createdAt = Instant.ofEpochMilli(entity.createdAt),
-                                    merchantName = row.merchantName?.takeIf(String::isNotBlank),
-                                )
                             }
-                        }
-                    combine(legacyMovements, creditTransactions) { legacy, current ->
-                        (current + legacy)
-                            .distinctBy { it.id.value }
-                            .sortedByDescending { it.effectiveAt }
+                        )
                     }
                 }
                 else -> flowOf(emptyList())
