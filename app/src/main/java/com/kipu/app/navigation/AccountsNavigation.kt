@@ -31,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kipu.app.feature.accounts.presentation.instruments.UnifiedInstrumentFormScreen
 import com.kipu.app.feature.accounts.presentation.instruments.RateCatalogScreen
 import com.kipu.app.feature.settings.presentation.SettingsViewModel
+import com.kipu.app.feature.debts.domain.model.DebtObligationType
 import com.kipu.app.feature.debts.presentation.DebtListScreen
 import com.kipu.app.feature.debts.presentation.DebtListViewModel
 
@@ -123,9 +124,10 @@ fun NavGraphBuilder.accountsDestinations(
                     selectedType = debtListState.selectedType,
                     onTypeSelected = debtListViewModel::selectType,
                     onDebtSelected = navController::navigateToDebtDetail,
+                    onAddPayable = { navController.navigateToDebtOpening(DebtObligationType.PAYABLE) },
+                    onAddReceivable = { navController.navigateToDebtOpening(DebtObligationType.RECEIVABLE) },
                     scheduledInstallments = debtListState.scheduledInstallments,
                     errorMessage = debtListState.errorMessage,
-                    isLoading = debtListState.isLoading,
                 )
             }
         }

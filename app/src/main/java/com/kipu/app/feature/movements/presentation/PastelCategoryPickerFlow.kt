@@ -595,8 +595,6 @@ fun PastelCategoryPickerBottomSheet(
                         onIconChange = { selectedIconId = it },
                         onColorChange = { selectedColorHex = it },
                         onParentIdChange = { selectedParentId = it?.value ?: "" },
-                        rememberFrequentMerchant = rememberFrequentMerchant,
-                        onRememberFrequentMerchantChange = { rememberFrequentMerchant = it },
                         onBack = { currentScreen = PastelFlowScreen.BROWSE_CATEGORIES },
                         onDismiss = onDismiss,
                         onConfirm = {
@@ -1416,8 +1414,6 @@ internal fun CreateSubcategoryView(
         onIconChange = onSelectQuickIcon,
         onColorChange = onSelectQuickColor,
         onParentIdChange = { /* updated via chooser */ },
-        rememberFrequentMerchant = rememberFrequentMerchant,
-        onRememberFrequentMerchantChange = onRememberFrequentMerchantChange,
         onBack = onBack,
         onDismiss = onDismiss,
         onConfirm = onSave,

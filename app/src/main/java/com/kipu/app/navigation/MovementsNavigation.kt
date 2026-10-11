@@ -80,7 +80,6 @@ fun NavGraphBuilder.movementsDestinations(
             ?: historyEntry?.savedStateHandle?.remove<String>("movement_editor_merchant_name")
         MovementEditorRoute(
             transactionId = transactionId,
-            merchantDisplayName = merchantName,
             onDismiss = { navController.popBackStack() },
             onSaved = { navController.previousBackStackEntry?.savedStateHandle?.set("movement_saved", true); navController.popBackStack() },
         )
@@ -98,9 +97,8 @@ internal fun MovementHistoryContent(navController: NavController, historyEntry: 
             onNavigateToSettings = { navController.navigate(PROFILE_SETTINGS_ROUTE) },
             onNavigateToNewAccount = { navController.navigateToAccountForm() },
             onNavigateToPlans = { navController.navigate(PLAN_PURCHASE_ROUTE) },
-            onNavigateToEditor = { transactionId, merchantName ->
-                historyEntry.savedStateHandle["movement_editor_merchant_name"] = merchantName
-                navController.navigateToMovementEditor(transactionId, merchantName)
+            onNavigateToEditor = { transactionId ->
+                navController.navigateToMovementEditor(transactionId)
             },
             openRegisterMovement = openRegisterMovement && (movementsSelected?.value != false),
             onConsumeRegisterMovement = { historyEntry.savedStateHandle["open_register_movement"] = false },

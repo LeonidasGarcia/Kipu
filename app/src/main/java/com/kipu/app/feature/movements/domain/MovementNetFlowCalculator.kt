@@ -14,7 +14,10 @@ object MovementNetFlowCalculator {
     fun calculate(transactions: Iterable<Transaction>): Map<String, BigInteger> {
         val totals = mutableMapOf<String, BigInteger>()
         for (transaction in transactions) {
-            if (transaction.status != TransactionStatus.ACTIVE && transaction.status != TransactionStatus.CONFIRMED) continue
+            if (transaction.status != TransactionStatus.ACTIVE &&
+                transaction.status != TransactionStatus.CONFIRMED &&
+                transaction.status != TransactionStatus.REVISED
+            ) continue
             val operationKind = transaction.operationKind ?: transaction.legacyKind
             if (transaction.legacyKind in nonFlowKinds ||
                 operationKind?.uppercase(Locale.ROOT) in nonOperatingDebtKinds ||
