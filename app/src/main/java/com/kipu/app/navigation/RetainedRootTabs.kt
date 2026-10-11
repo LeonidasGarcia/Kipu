@@ -26,6 +26,7 @@ internal fun RetainedRootTabs(
     val density = LocalDensity.current
     val durationMillis = if (reducedMotion) 0 else KipuMotionTokens.RootTabSwitchMillis
     val transition = updateTransition(selectedTabIndex.value, label = "retained_root_tabs")
+    val slideDistance = 64.dp
     val pageAlpha = (0..2).map { index ->
         transition.animateFloat(
             transitionSpec = { tween(durationMillis, easing = KipuEasingTokens.Standard) },
@@ -39,26 +40,19 @@ internal fun RetainedRootTabs(
         ) { targetIndex ->
             when {
                 targetIndex == index -> 0.dp
-                index < targetIndex -> (-8).dp
-                else -> 8.dp
+                index < targetIndex -> -slideDistance
+                else -> slideDistance
             }
         }
     }
 
-    // The outgoing and incoming pages are measured while a switch runs. At rest, only the
-    // selected page is measured, so hidden lists do not redo layout work on unrelated updates.
-    val visiblePageIndices = if (transition.currentState == transition.targetState) {
-        listOf(transition.targetState)
-    } else {
-        listOf(transition.currentState, transition.targetState).distinct()
-    }
     Layout(
         content = content,
         modifier = Modifier.fillMaxSize().clipToBounds(),
     ) { measurables, constraints ->
-        val pages = visiblePageIndices.associateWith { index -> measurables[index].measure(constraints) }
+        val pages = measurables.map { it.measure(constraints) }
         layout(constraints.maxWidth, constraints.maxHeight) {
-            pages.forEach { (index, page) ->
+            pages.forEachIndexed { index, page ->
                 page.placeRelativeWithLayer(
                     x = 0,
                     y = 0,

@@ -291,13 +291,8 @@ class MainActivity : FragmentActivity() {
                                                 }
                                             },
                                             onNavigateToDeudas = {
-                                                if (currentRoute == MOVEMENTS_HISTORY_ROUTE ||
-                                                    currentRoute == MOVEMENTS_HISTORY_PATTERN ||
-                                                    currentRoute.startsWith("movements/history")
-                                                ) {
-                                                    movementsSelected.value = true
-                                                }
                                                 debtsSelected.value = true
+                                                movementsSelected.value = false
                                                 if (currentRoute != ACCOUNTS_DASHBOARD_ROUTE) {
                                                     navController.navigateRootTab(ACCOUNTS_DASHBOARD_ROUTE)
                                                 }
@@ -317,7 +312,7 @@ class MainActivity : FragmentActivity() {
                                 },
                             ) { innerPadding ->
                                 val reducedMotion = rememberReducedMotionEnabled()
-                                val navigationOffset = with(LocalDensity.current) { 8.dp.roundToPx() }
+                                val navigationOffset = with(LocalDensity.current) { 24.dp.roundToPx() }
                                 // Keep this as a getter: root-tab click handlers update selection
                                 // immediately before navigating back to the retained dashboard.
                                 // A captured Boolean would still describe the outgoing debt tab

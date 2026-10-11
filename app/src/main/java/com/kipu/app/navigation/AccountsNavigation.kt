@@ -79,8 +79,6 @@ fun NavGraphBuilder.accountsDestinations(
     onBackFromDebtTab: () -> Unit = onSelectMoney,
 ) {
     composable(ACCOUNTS_DASHBOARD_ROUTE) { backStackEntry ->
-        val debtListViewModel: DebtListViewModel = hiltViewModel(backStackEntry)
-        val debtListState by debtListViewModel.state.collectAsStateWithLifecycle()
         val selectedTabIndex = remember(movementsSelected, debtsSelected) {
             derivedStateOf {
                 when {
@@ -119,16 +117,7 @@ fun NavGraphBuilder.accountsDestinations(
                     .then(if (debtTabSelected) Modifier else Modifier.clearAndSetSemantics { })
                     .rootTabInputShield(active = debtTabSelected),
             ) {
-                DebtListScreen(
-                    debts = debtListState.debts,
-                    selectedType = debtListState.selectedType,
-                    onTypeSelected = debtListViewModel::selectType,
-                    onDebtSelected = navController::navigateToDebtDetail,
-                    onAddPayable = { navController.navigateToDebtOpening(DebtObligationType.PAYABLE) },
-                    onAddReceivable = { navController.navigateToDebtOpening(DebtObligationType.RECEIVABLE) },
-                    scheduledInstallments = debtListState.scheduledInstallments,
-                    errorMessage = debtListState.errorMessage,
-                )
+                DebtRootContent(navController, backStackEntry)
             }
         }
     }
@@ -262,3 +251,20 @@ private fun AccountsRootContent(navController: NavController, backStackEntry: Na
             onConsumeRegisterMovement = { backStackEntry.savedStateHandle["open_register_movement"] = false },
         )
 }
+
+@Composable
+private fun DebtRootContent(navController: NavController, backStackEntry: NavBackStackEntry) {
+    val debtListViewModel: DebtListViewModel = hiltViewModel(backStackEntry)
+    val debtListState by debtListViewModel.state.collectAsStateWithLifecycle()
+    DebtListScreen(
+        debts = debtListState.debts,
+        selectedType = debtListState.selectedType,
+        onTypeSelected = debtListViewModel::selectType,
+        onDebtSelected = navController::navigateToDebtDetail,
+        onAddPayable = { navController.navigateToDebtOpening(DebtObligationType.PAYABLE) },
+        onAddReceivable = { navController.navigateToDebtOpening(DebtObligationType.RECEIVABLE) },
+        scheduledInstallments = debtListState.scheduledInstallments,
+        errorMessage = debtListState.errorMessage,
+    )
+}
+
