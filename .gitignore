@@ -79,3 +79,5 @@ supabase/sprint_3_remote_baseline_routines.sql
 /docs/ux-ui/evidence/auth-onboarding/
 /docs/ux-ui/implementation-evidence/*
 
+
+tmp/

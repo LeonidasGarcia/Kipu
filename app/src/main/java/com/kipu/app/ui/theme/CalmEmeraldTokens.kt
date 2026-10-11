@@ -8,12 +8,10 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Scoped visual tokens for the Calm Emerald fintech redesign.
- * Direct translation of the reference designs:
- * - Background mint: #F1FBF7 / #F5FAF8
- * - White cards: #FFFFFF with subtle border #DFEAE5
- * - Primary deep emerald: #075E52 / #0B6657
- * - Primary text: #102522
- * - Secondary muted text: #617773
+ * Calm Emerald design tokens from the Kipu V4.2 implementation brief:
+ * - Primary #0F766E, ink #0F172A, secondary text #475569
+ * - Background #F8FAFC, surface #FFFFFF
+ * - Income #16A34A, expense #E85D5D, warning #F59E0B
  * - Semantic Expense coral, Income emerald, Transfer blue
  */
 @Immutable
@@ -47,7 +45,11 @@ data class CalmEmeraldColors(
     val navSelectedPill: Color,
     val navSelectedContent: Color,
     val navUnselectedContent: Color,
-)
+) {
+    val primaryAction: Color get() = primaryDeep
+    val incomeAccent: Color get() = incomeEmerald
+    val expenseAccent: Color get() = expenseCoral
+}
 
 private val DarkCalmEmeraldColors = CalmEmeraldColors(
     isDark = true,
@@ -83,34 +85,34 @@ private val DarkCalmEmeraldColors = CalmEmeraldColors(
 
 private val LightCalmEmeraldColors = CalmEmeraldColors(
     isDark = false,
-    background = Color(0xFFF5FAF8),
+    background = Color(0xFFF8FAFC),
     surfaceCard = Color(0xFFFFFFFF),
-    borderSubtle = Color(0xFFDFEAE5),
+    borderSubtle = Color(0xFFE2E8F0),
     primaryDeep = KipuPrimary,
     onPrimaryDeep = Color(0xFFFFFFFF),
     primaryText = KipuOnSurface,
-    secondaryMuted = Color(0xFF617773),
-    heroGradientStart = Color(0xFF075E52),
-    heroGradientEnd = Color(0xFF05453C),
+    secondaryMuted = Color(0xFF475569),
+    heroGradientStart = Color(0xFF0F766E),
+    heroGradientEnd = Color(0xFF115E59),
     heroSubcardBg = Color(0x2E000000),
-    expenseCoral = Color(0xFFDC2626),
+    expenseCoral = Color(0xFFE85D5D),
     expenseBg = Color(0xFFFEF2F2),
     expenseBorder = Color(0xFFFECACA),
-    incomeEmerald = Color(0xFF0B6657),
+    incomeEmerald = Color(0xFF16A34A),
     incomeBg = Color(0xFFF0FDF4),
     incomeBorder = Color(0xFFBBF7D0),
     transferBlue = Color(0xFF2563EB),
     transferBg = Color(0xFFEFF6FF),
     transferBorder = Color(0xFFBFDBFE),
-    warningAmber = Color(0xFFD97706),
+    warningAmber = Color(0xFFF59E0B),
     warningText = Color(0xFF92400E),
     warningBg = Color(0xFFFEF3C7),
     warningBorder = Color(0xFFFDE68A),
-    pillTrack = Color(0xFFEEF5F2),
+    pillTrack = Color(0xFFF1F5F9),
     navCapsuleBg = Color(0xFFFFFFFF),
-    navSelectedPill = Color(0xFF075E52),
+    navSelectedPill = Color(0xFF0F766E),
     navSelectedContent = Color(0xFFFFFFFF),
-    navUnselectedContent = Color(0xFF617773),
+    navUnselectedContent = Color(0xFF475569),
 )
 
 @Composable
