@@ -9,7 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,21 +67,23 @@ fun NavController.navigateToDebtSchedule(debtId: String) {
 
 fun NavGraphBuilder.debtDestinations(navController: NavController) {
     composable(DEBT_LIST_ROUTE) { backStackEntry ->
-        // The account dashboard entry stays beneath this root tab. Scope the debt list state to it
-        // so switching tabs does not discard the list ViewModel and rerun its initial queries.
-        val rootOwner = remember(navController, backStackEntry) {
-            runCatching { navController.getBackStackEntry(ACCOUNTS_DASHBOARD_ROUTE) }.getOrNull()
-        }
-        val viewModel: DebtListViewModel = hiltViewModel(rootOwner ?: backStackEntry)
+        val viewModel: DebtListViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
+        val openRegisterMovement by backStackEntry.savedStateHandle
+            .getStateFlow("open_register_movement", false)
+            .collectAsStateWithLifecycle()
+
         DebtListScreen(
             debts = state.debts,
             selectedType = state.selectedType,
             onTypeSelected = viewModel::selectType,
             onDebtSelected = navController::navigateToDebtDetail,
+            onAddPayable = { navController.navigateToDebtOpening(DebtObligationType.PAYABLE) },
+            onAddReceivable = { navController.navigateToDebtOpening(DebtObligationType.RECEIVABLE) },
             scheduledInstallments = state.scheduledInstallments,
             errorMessage = state.errorMessage,
-            isLoading = state.isLoading,
+            openRegisterDebt = openRegisterMovement,
+            onConsumeRegisterDebt = { backStackEntry.savedStateHandle["open_register_movement"] = false },
         )
     }
     composable(
@@ -92,19 +93,12 @@ fun NavGraphBuilder.debtDestinations(navController: NavController) {
         val viewModel: DebtOpeningViewModel = hiltViewModel()
         val state by viewModel.state.collectAsStateWithLifecycle()
         LaunchedEffect(viewModel) {
-                viewModel.events.collect { event ->
-                    if (event is DebtOpeningUiEvent.Saved) {
-                        val returnRoute = if (
-                            runCatching { navController.getBackStackEntry(ACCOUNTS_DASHBOARD_ROUTE) }.isSuccess
-                        ) {
-                            ACCOUNTS_DASHBOARD_ROUTE
-                        } else {
-                            DEBT_LIST_ROUTE
-                        }
-                        navController.navigate("debts/detail/${event.debtId}") {
-                            popUpTo(returnRoute) { inclusive = false }
-                        }
+            viewModel.events.collect { event ->
+                if (event is DebtOpeningUiEvent.Saved) {
+                    navController.navigate("debts/detail/${event.debtId}") {
+                        popUpTo(DEBT_LIST_ROUTE) { inclusive = false }
                     }
+                }
             }
         }
         if (viewModel.obligationType == DebtObligationType.PAYABLE) {

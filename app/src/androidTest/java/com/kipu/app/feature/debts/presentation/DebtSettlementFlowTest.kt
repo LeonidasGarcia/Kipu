@@ -4,10 +4,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
@@ -165,8 +163,8 @@ class DebtSettlementFlowTest {
 
         compose.onNodeWithTag("debt-installment-plan").performScrollTo()
         compose.onNodeWithText("Plan de cuotas (no son pagos)").assertIsDisplayed()
-        compose.onNodeWithText("Cuota 1", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Pago parcial").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Cuota 1 · 2026-11-10").assertIsDisplayed()
+        compose.onNodeWithText("Pago parcial").assertIsDisplayed()
     }
 
     @Test
@@ -219,6 +217,8 @@ class DebtSettlementFlowTest {
                 selectedType = null,
                 onTypeSelected = {},
                 onDebtSelected = {},
+                onAddPayable = {},
+                onAddReceivable = {},
                 scheduledInstallments = mapOf(
                     pendingDebt.debtId to DebtScheduleItem(
                         id = "planned-1",
@@ -249,46 +249,6 @@ class DebtSettlementFlowTest {
         compose.onNodeWithText("Pendiente · no es pago").assertIsDisplayed()
         compose.onNodeWithText("Pago completado").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Pago parcial registrado").performScrollTo().assertIsDisplayed()
-    }
-
-    @Test
-    fun settledDebtShowsItsStateWithoutPaymentOrScheduleActions() {
-        val settled = debt(DebtObligationType.PAYABLE).copy(
-            remainingPrincipalMinor = 0L,
-            status = DebtLifecycleStatus.SETTLED,
-        )
-        compose.setContent {
-            DebtDetailScreen(
-                debt = settled,
-                hasFinancialHistory = true,
-                onNavigateBack = {},
-                onEdit = {},
-                onDelete = {},
-            )
-        }
-
-        compose.onNodeWithTag("debt-settled-state").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Deuda liquidada. El saldo quedó en cero y el historial se conserva.").assertIsDisplayed()
-        compose.onAllNodesWithText("Registrar pago").assertCountEquals(0)
-        compose.onAllNodesWithText("Gestionar cuotas").assertCountEquals(0)
-    }
-
-    @Test
-    fun emptyDebtListKeepsOneClearEmptyStateWithoutDuplicateActions() {
-        compose.setContent {
-            DebtListScreen(
-                debts = emptyList(),
-                selectedType = null,
-                onTypeSelected = {},
-                onDebtSelected = {},
-            )
-        }
-
-        compose.onNodeWithText("Deudas y préstamos").assertIsDisplayed()
-        compose.onNodeWithTag("debt_empty_state").assertIsDisplayed()
-        compose.onNodeWithText("Aún no tienes deudas ni préstamos").assertIsDisplayed()
-        compose.onAllNodesWithText("Me prestaron").assertCountEquals(0)
-        compose.onAllNodesWithText("Presté dinero").assertCountEquals(0)
     }
 
     private fun debt(type: DebtObligationType) = DebtSummary(

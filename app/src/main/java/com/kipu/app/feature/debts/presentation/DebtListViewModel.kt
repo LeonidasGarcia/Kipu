@@ -11,15 +11,10 @@ import com.kipu.app.feature.debts.domain.model.DebtScheduleItem
 import com.kipu.app.feature.debts.domain.model.DebtSummary
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -46,46 +41,32 @@ class DebtListViewModel @Inject constructor(
             _state.value = DebtListUiState(isLoading = false, errorMessage = "Inicia sesión para consultar tus deudas.")
         } else {
             viewModelScope.launch {
-                val installmentHighlights = debtDao.observeInstallmentHighlights(userId).map { rows ->
-                    rows.mapNotNull { row ->
-                        runCatching {
-                            row.debtId to DebtScheduleItem(
-                                id = row.id,
-                                installmentNumber = row.installmentNumber,
-                                dueDate = java.time.LocalDate.parse(row.dueDate),
-                                principalMinor = row.amountMinor,
-                                status = row.status,
-                                revision = row.revision,
-                            )
-                        }.getOrNull()
-                    }.toMap()
-                }.catch {
-                    // Schedule highlights are optional; a failed query must not hide debt rows.
-                    emit(emptyMap())
-                }.distinctUntilChanged()
-                    .flowOn(Dispatchers.Default)
-                    // Let the main debt query render as soon as it returns. The due-date
-                    // highlights fill in afterward instead of holding the whole screen on a spinner.
-                    .onStart { emit(emptyMap()) }
                 combine(
                     repository.observeDebts(userId),
-                    installmentHighlights,
-                ) { debts, highlights ->
+                    debtDao.observeInstallmentHighlights(userId),
+                ) { debts, installments ->
+                    val highlights = installments.groupBy { it.debtId }.mapValues { (_, items) ->
+                        val selected = items.firstOrNull { it.status == "PENDING" || it.status == "PARTIAL" }
+                            ?: items.lastOrNull { it.status == "PAID" }
+                        selected?.let { installment ->
+                            runCatching {
+                                DebtScheduleItem(
+                                    id = installment.id,
+                                    installmentNumber = installment.installmentNumber,
+                                    dueDate = java.time.LocalDate.parse(installment.dueDate),
+                                    principalMinor = installment.amountMinor,
+                                    status = installment.status,
+                                    revision = installment.revision,
+                                )
+                            }.getOrNull()
+                        }
+                    }.mapNotNull { (debtId, installment) -> installment?.let { debtId to it } }.toMap()
                     debts to highlights
                 }
-                    .catch {
-                        _state.update {
-                            it.copy(isLoading = false, errorMessage = "No se pudieron cargar tus deudas.")
-                        }
-                    }
+                    .catch { _state.update { it.copy(isLoading = false, errorMessage = "No se pudieron cargar tus deudas.") } }
                     .collect { (debts, highlights) ->
                         _state.update {
-                            it.copy(
-                                debts = debts,
-                                scheduledInstallments = highlights,
-                                isLoading = false,
-                                errorMessage = null,
-                            )
+                            it.copy(debts = debts, scheduledInstallments = highlights, isLoading = false, errorMessage = null)
                         }
                     }
             }

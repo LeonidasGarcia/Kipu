@@ -20,6 +20,7 @@ data class DebtFormUiState(
     val availableAccounts: List<DebtAccountOption> = emptyList(),
     val openedOn: LocalDate = LocalDate.now(),
     val dueDate: LocalDate? = null,
+    val dueDateInput: String = "",
     val reminderLeadDays: Int? = null,
     val notes: String = "",
     val isSaving: Boolean = false,
@@ -31,5 +32,6 @@ internal fun DebtFormUiState.isValidForSave(): Boolean {
     val accountIsValid = openingMode == DebtOpeningMode.HISTORICAL || availableAccounts.any { account ->
         account.id == selectedAccountId && account.currencyCode == currencyCode
     }
-    return counterpartyName.trim().isNotEmpty() && amountIsPositive && accountIsValid && !isSaving
+    val dueDateIsValid = dueDateInput.isBlank() || dueDate != null
+    return counterpartyName.trim().isNotEmpty() && amountIsPositive && accountIsValid && dueDateIsValid && !isSaving
 }

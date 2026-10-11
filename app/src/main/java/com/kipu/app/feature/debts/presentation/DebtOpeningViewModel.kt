@@ -58,7 +58,15 @@ class DebtOpeningViewModel @Inject constructor(
     fun onCounterpartyNameChange(value: String) = _state.update { it.copy(counterpartyName = value, errorMessage = null) }
     fun onPrincipalAmountChange(value: String) = _state.update { it.copy(principalAmount = value, errorMessage = null) }
     fun onOpeningModeChange(value: DebtOpeningMode) = _state.update { it.copy(openingMode = value, errorMessage = null) }
-    fun onDueDateChange(value: LocalDate?) = _state.update { it.copy(dueDate = value, errorMessage = null) }
+    fun onDueDateChange(value: String) = _state.update { current ->
+        current.copy(
+            dueDateInput = value,
+            dueDate = value.takeIf(String::isNotBlank)?.let { raw ->
+                runCatching { LocalDate.parse(raw) }.getOrNull()
+            },
+            errorMessage = null,
+        )
+    }
     fun onNotesChange(value: String) = _state.update { it.copy(notes = value, errorMessage = null) }
 
     fun onCurrencyChange(currencyCode: String) {

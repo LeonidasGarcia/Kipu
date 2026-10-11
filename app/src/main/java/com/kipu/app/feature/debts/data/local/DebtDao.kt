@@ -17,16 +17,6 @@ data class DebtSettlementActivityRow(
     val principalDeltaMinor: Long?,
 )
 
-data class DebtInstallmentHighlightRow(
-    val debtId: String,
-    val id: String,
-    val installmentNumber: Int,
-    val dueDate: String,
-    val amountMinor: Long,
-    val status: String,
-    val revision: Long,
-)
-
 @Dao
 interface DebtDao {
     @Query("SELECT * FROM debts WHERE user_id = :userId AND deleted_at IS NULL ORDER BY updated_at DESC, id ASC")
@@ -99,38 +89,12 @@ interface DebtDao {
     fun observeInstallments(userId: String, debtId: String): Flow<List<DebtInstallmentEntity>>
 
     @Query("""
-        SELECT chosen.debt_id AS debtId, chosen.id AS id,
-               chosen.installment_number AS installmentNumber, chosen.due_date AS dueDate,
-               chosen.amount_minor AS amountMinor, chosen.status AS status, chosen.revision AS revision
-        FROM debt_installments AS chosen
-        INNER JOIN (
-            SELECT base.user_id AS userId, base.debt_id AS debtId,
-                   (
-                       SELECT candidate.id
-                       FROM debt_installments AS candidate
-                       WHERE candidate.user_id = base.user_id
-                         AND candidate.debt_id = base.debt_id
-                         AND candidate.deleted_at IS NULL
-                         AND candidate.status IN ('PENDING', 'PARTIAL', 'PAID')
-                       ORDER BY
-                           CASE WHEN candidate.status IN ('PENDING', 'PARTIAL') THEN 0 ELSE 1 END ASC,
-                           CASE WHEN candidate.status IN ('PENDING', 'PARTIAL') THEN candidate.due_date END ASC,
-                           CASE WHEN candidate.status = 'PAID' THEN candidate.due_date END DESC,
-                           CASE WHEN candidate.status IN ('PENDING', 'PARTIAL') THEN candidate.installment_number END ASC,
-                           CASE WHEN candidate.status = 'PAID' THEN candidate.installment_number END DESC,
-                           candidate.id ASC
-                       LIMIT 1
-                   ) AS highlightId
-            FROM debt_installments AS base
-            WHERE base.user_id = :userId
-              AND base.deleted_at IS NULL
-              AND base.status IN ('PENDING', 'PARTIAL', 'PAID')
-            GROUP BY base.user_id, base.debt_id
-        ) AS highlight
-          ON chosen.user_id = highlight.userId AND chosen.id = highlight.highlightId
-        ORDER BY chosen.due_date ASC, chosen.installment_number ASC
+        SELECT * FROM debt_installments
+        WHERE user_id = :userId AND deleted_at IS NULL
+          AND status IN ('PENDING', 'PARTIAL', 'PAID')
+        ORDER BY due_date ASC, installment_number ASC
     """)
-    fun observeInstallmentHighlights(userId: String): Flow<List<DebtInstallmentHighlightRow>>
+    fun observeInstallmentHighlights(userId: String): Flow<List<DebtInstallmentEntity>>
 
     @Query("SELECT * FROM debt_installments WHERE user_id = :userId AND debt_id = :debtId AND deleted_at IS NULL ORDER BY installment_number ASC")
     suspend fun getInstallments(userId: String, debtId: String): List<DebtInstallmentEntity>

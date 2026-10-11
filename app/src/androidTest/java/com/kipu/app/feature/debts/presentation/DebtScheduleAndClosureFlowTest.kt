@@ -5,7 +5,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import com.kipu.app.feature.debts.data.sync.DebtReminderDestination
 import com.kipu.app.feature.debts.domain.model.DebtLifecycleStatus
 import com.kipu.app.feature.debts.domain.model.DebtObligationType
@@ -58,29 +57,6 @@ class DebtScheduleAndClosureFlowTest {
         compose.onNodeWithTag("debt-schedule-cancel").performClick()
         assertEquals(true, scheduleCancelled)
         assertEquals("kipu://debts/detail/$DEBT_ID", DebtReminderDestination.uri(DEBT_ID))
-    }
-
-    @Test
-    fun firstScheduledDueDateUsesCalendarInsteadOfManualText() {
-        var selectedDate = "2026-11-10"
-        compose.setContent {
-            DebtScheduleScreen(
-                state = DebtScheduleUiState(debt = debt(), firstDueDate = selectedDate),
-                onInstallmentCountChange = {},
-                onFirstDueDateChange = { selectedDate = it },
-                onReminderLeadDaysChange = {},
-                onSchedule = {},
-                onCancelSchedule = {},
-                onCloseDebt = { _, _ -> },
-                onNavigateBack = {},
-            )
-        }
-
-        compose.onNodeWithTag("schedule_first_due_date_picker").performScrollTo().performClick()
-        compose.onNodeWithTag("schedule_first_due_date_calendar").assertIsDisplayed()
-        compose.onNodeWithTag("schedule_confirm_first_due_date").performClick()
-
-        assertEquals("2026-11-10", selectedDate)
     }
 
     @Test

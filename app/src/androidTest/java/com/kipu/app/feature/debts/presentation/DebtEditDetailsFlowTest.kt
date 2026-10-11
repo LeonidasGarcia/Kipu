@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -47,32 +46,5 @@ class DebtEditDetailsFlowTest {
 
         assertEquals("Banco actualizado", savedName)
         assertEquals("Acuerdo actualizado", savedNotes)
-    }
-
-    @Test
-    fun dueDateUsesCalendarAndKeepsTheSelectedDate() {
-        val state = mutableStateOf(
-            DebtEditUiState(
-                counterpartyName = "Banco local",
-                dueDate = "2026-11-10",
-                revision = 1L,
-            ),
-        )
-        compose.setContent {
-            DebtEditDetailsScreen(
-                state = state.value,
-                onCounterpartyNameChange = { state.value = state.value.copy(counterpartyName = it) },
-                onDueDateChange = { state.value = state.value.copy(dueDate = it) },
-                onNotesChange = { state.value = state.value.copy(notes = it) },
-                onSave = {},
-                onNavigateBack = {},
-            )
-        }
-
-        compose.onNodeWithTag("edit_debt_due_date_picker").performScrollTo().performClick()
-        compose.onNodeWithTag("edit_debt_due_date_calendar").assertIsDisplayed()
-        compose.onNodeWithTag("edit_debt_confirm_due_date").performClick()
-
-        assertEquals("2026-11-10", state.value.dueDate)
     }
 }
