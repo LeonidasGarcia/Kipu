@@ -16,6 +16,7 @@ import dagger.assisted.AssistedInject
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
 
 @HiltWorker
@@ -27,6 +28,8 @@ class SyncPlanSelectionWorker @AssistedInject constructor(
     private val sessions: AuthenticatedSessionProvider,
     private val clock: Clock,
 ) : CoroutineWorker(context, params) {
+    private fun parseRemoteInstant(value: String): Instant = OffsetDateTime.parse(value).toInstant()
+
     override suspend fun doWork(): Result {
         val startedAt = clock.instant()
         dao.recoverExpiredLeases(startedAt)
@@ -55,8 +58,8 @@ class SyncPlanSelectionWorker @AssistedInject constructor(
                         response.value.result.toDomain(),
                         response.value.acceptedRevision.toLong(),
                         preference.selection.toDomain(),
-                        Instant.parse(preference.selectedAt),
-                        Instant.parse(preference.updatedAt),
+                        parseRemoteInstant(preference.selectedAt),
+                        parseRemoteInstant(preference.updatedAt),
                     )
                 }
                 is ApiResult.Failure -> when {

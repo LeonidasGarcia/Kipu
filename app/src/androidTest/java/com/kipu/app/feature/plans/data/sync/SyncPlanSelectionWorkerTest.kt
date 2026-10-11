@@ -235,11 +235,11 @@ class SyncPlanSelectionWorkerTest {
           "accepted_revision":"$revision",
           "current_preference":{
             "selection":"TRIAL_INTENT",
-            "selected_at":"2026-09-14T15:03:12.123456Z",
-            "updated_at":"2026-09-14T15:03:13.123456Z"
+            "selected_at":"2026-09-14T15:03:12.123456+00:00",
+            "updated_at":"2026-09-14T15:03:13.123456+00:00"
           },
           "free_limits":{"policy_version":1,"instruments":4,"custom_categories":5,"debts":2,"goals":2,"budgets":2},
-          "server_time":"2026-09-14T15:03:13.123456Z"
+          "server_time":"2026-09-14T15:03:13.123456+00:00"
         }
     """.trimIndent()
 

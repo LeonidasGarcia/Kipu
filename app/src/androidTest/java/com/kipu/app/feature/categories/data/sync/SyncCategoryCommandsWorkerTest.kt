@@ -84,7 +84,7 @@ class SyncCategoryCommandsWorkerTest {
             listOf(
                 CategoryCatalogItemDto(
                     id = "00000000-0000-0000-0000-000000000001", name = "Alimentación", origin = "SYSTEM",
-                    isActive = true, remoteRevision = 1L, createdAt = "2026-09-23T00:00:00Z", updatedAt = "2026-09-23T00:00:00Z",
+                    isActive = true, remoteRevision = 1L, createdAt = "2026-09-23T00:00:00.000000+00:00", updatedAt = "2026-09-23T00:00:00.000000+00:00",
                 ),
                 CategoryCatalogItemDto(
                     id = "00000000-0000-0000-0000-000000000002", name = "Transporte", origin = "SYSTEM",

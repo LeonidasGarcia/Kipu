@@ -36,6 +36,7 @@ import com.kipu.app.feature.categories.data.remote.UpsertMerchantCategoryPrefere
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.time.Instant
+import java.time.OffsetDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.serialization.json.Json
@@ -64,6 +65,8 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
     }
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    private fun parseRemoteInstant(value: String): Instant = OffsetDateTime.parse(value).toInstant()
 
     override suspend fun doWork(): Result {
         val userId = inputData.getString(KEY_USER_ID) ?: return Result.failure()
@@ -121,8 +124,8 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                             categoryType = dto.categoryType,
                             isActive = dto.isActive,
                             remoteRevision = dto.remoteRevision,
-                            createdAt = Instant.parse(dto.createdAt).toEpochMilli(),
-                            updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
+                            createdAt = parseRemoteInstant(dto.createdAt).toEpochMilli(),
+                            updatedAt = parseRemoteInstant(dto.updatedAt).toEpochMilli(),
                         )
                         if (existing == null) {
                             categoryDao.insertCategory(entity)
@@ -150,7 +153,7 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                             icon = dto.icon,
                             color = dto.color,
                             remoteRevision = dto.remoteRevision,
-                            updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
+                            updatedAt = parseRemoteInstant(dto.updatedAt).toEpochMilli(),
                         )
                         if (existing == null) {
                             categoryDao.insertPresentation(entity)
@@ -168,7 +171,7 @@ class SyncCategoryCommandsWorker @AssistedInject constructor(
                     categoryId = dto.id, userId = userId, name = dto.name,
                     icon = dto.iconKey ?: "category", color = "#757575",
                     remoteRevision = dto.remoteRevision,
-                    updatedAt = Instant.parse(dto.updatedAt).toEpochMilli(),
+                    updatedAt = parseRemoteInstant(dto.updatedAt).toEpochMilli(),
                 )
             })
         } catch (e: Exception) {
