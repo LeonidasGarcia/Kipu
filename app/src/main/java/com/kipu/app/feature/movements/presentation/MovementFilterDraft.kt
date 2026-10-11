@@ -3,6 +3,7 @@ package com.kipu.app.feature.movements.presentation
 import com.kipu.app.core.finance.domain.MoneyInputParser
 import com.kipu.app.feature.movements.domain.model.MovementFinancialState
 import com.kipu.app.feature.movements.domain.model.MovementSyncStatus
+import com.kipu.app.feature.movements.domain.model.MovementType
 import java.math.BigDecimal
 import java.time.LocalDate
 import java.time.ZoneId
@@ -19,6 +20,8 @@ data class MovementFilterDraft(
     val currency: String? = null,
     val fromDate: String = "",
     val toDate: String = "",
+    val movementType: MovementType? = null,
+    val comparePreviousMonth: Boolean = false,
 ) {
     fun validate(zone: ZoneId = ZoneId.systemDefault()): FilterDraftValidation {
         val errors = mutableMapOf<String, FilterDraftError>()
@@ -46,7 +49,12 @@ data class MovementFilterDraft(
     }
 
     companion object {
-        fun fromApplied(filters: AdvancedFiltersState, zone: ZoneId = ZoneId.systemDefault()) = MovementFilterDraft(
+        fun fromApplied(
+            filters: AdvancedFiltersState,
+            zone: ZoneId = ZoneId.systemDefault(),
+            movementType: MovementType? = null,
+            comparePreviousMonth: Boolean = false,
+        ) = MovementFilterDraft(
             accountIds = filters.accountIds, categoryIds = filters.categoryIds,
             cardIds = filters.cardIds, merchantIds = filters.merchantIds,
             financialStates = filters.financialStates, syncStatuses = filters.syncStatuses,
@@ -55,6 +63,8 @@ data class MovementFilterDraft(
             currency = filters.currency,
             fromDate = filters.fromDate?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toString() }.orEmpty(),
             toDate = filters.toDate?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalDate().minusDays(1).toString() }.orEmpty(),
+            movementType = movementType,
+            comparePreviousMonth = comparePreviousMonth,
         )
     }
 }

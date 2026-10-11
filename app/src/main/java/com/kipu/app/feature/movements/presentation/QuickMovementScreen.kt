@@ -82,8 +82,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -292,8 +290,6 @@ fun QuickMovementContent(
     val scrollState = rememberScrollState()
     val emeraldColors = rememberCalmEmeraldColors()
     val reducedMotion = rememberReducedMotionEnabled()
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
     val animDuration = if (reducedMotion) 0 else KipuMotionTokens.SegmentMillis
     var showCategoryPicker by remember { mutableStateOf(false) }
     var showSourceAccountPicker by remember { mutableStateOf(false) }
@@ -813,11 +809,7 @@ fun QuickMovementContent(
                         uiState.type == MovementType.INCOME -> "Opcional"
                         else -> "Selecciona una categoría requerida"
                     },
-                    onClick = {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                        showCategoryPicker = true
-                    },
+                    onClick = { showCategoryPicker = true },
                     isError = uiState.categoryError != null,
                     errorMessage = uiState.categoryError,
                     modifier = Modifier.testTag("category_picker_open"),
@@ -1020,7 +1012,7 @@ fun QuickMovementContent(
                     .heightIn(min = 52.dp)
                     .testTag("btn_save_transaction")
                     .semantics {
-                        contentDescription = if (uiState.isSaving) "Guardando transacción" else (if (hasGeneralError) "Reintentar guardar" else saveButtonText.removePrefix("✓ "))
+                        contentDescription = if (uiState.isSaving) "Guardando transacción" else (if (hasGeneralError) "Reintentar guardar" else saveButtonText)
                     },
             ) {
                 Row(

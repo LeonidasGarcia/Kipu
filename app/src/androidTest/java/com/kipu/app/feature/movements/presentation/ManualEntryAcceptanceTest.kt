@@ -4,7 +4,6 @@ import android.os.SystemClock
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -92,11 +91,8 @@ class ManualEntryAcceptanceTest {
         }
 
         compose.onNodeWithTag("input_amount").performTextInput("12.50")
-        compose.onNodeWithTag("category_picker_open").performScrollTo().performClick()
-        compose.waitForIdle()
-        compose.onNodeWithTag("pastel_category_picker_sheet").assertIsDisplayed()
-        compose.onNodeWithTag("category_root_acceptance-food").performClick()
-        compose.onNodeWithTag("btn_save_transaction").performClick()
+        compose.onNodeWithTag("chip_cat_acceptance-food").performScrollTo().performClick()
+        compose.onNodeWithTag("btn_save_transaction").performScrollTo().performClick()
         compose.waitForIdle()
         val elapsedMillis = SystemClock.elapsedRealtime() - startedAt
 

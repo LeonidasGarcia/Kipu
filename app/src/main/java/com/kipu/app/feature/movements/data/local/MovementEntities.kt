@@ -1,7 +1,6 @@
 package com.kipu.app.feature.movements.data.local
 
 import androidx.room.ColumnInfo
-import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -70,11 +69,6 @@ data class TransactionEntity(
     @ColumnInfo(name = "acknowledged_revision") val acknowledgedRevision: Long? = null,
     @ColumnInfo(name = "current_revision_id") val currentRevisionId: String? = null,
     @ColumnInfo(name = "source") val source: String? = null,
-)
-
-data class CardTransactionRow(
-    @Embedded val transaction: TransactionEntity,
-    @ColumnInfo(name = "merchant_name") val merchantName: String?,
 )
 
 data class MovementHistoryCountRow(

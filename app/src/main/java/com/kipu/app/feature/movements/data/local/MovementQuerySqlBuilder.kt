@@ -32,9 +32,7 @@ object MovementQuerySqlBuilder {
         )
         val args = mutableListOf<Any>()
         appendFilters(sql, args, userId, query, includeCursor = false)
-        // A revised movement still represents its current financial effect. Revisions replace
-        // the payload while preserving the transaction row, so they remain part of net flow.
-        sql.append(" AND status IN ('ACTIVE', 'CONFIRMED', 'REVISED')")
+        sql.append(" AND status IN ('ACTIVE', 'CONFIRMED')")
         sql.append(" AND type != 'TRANSFER'")
         sql.append(" AND (legacy_kind IS NULL OR legacy_kind NOT IN ('OPENING', 'ADJUSTMENT', 'REVERSAL', 'CARD_PAYMENT_CASH'))")
         sql.append(" GROUP BY UPPER(currency_code)")

@@ -1,5 +1,10 @@
 package com.kipu.app.feature.movements.presentation
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,16 +30,16 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.automirrored.rounded.ReceiptLong
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.FilterList
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -69,6 +74,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -109,7 +115,7 @@ fun MovementHistoryRoute(
     onNavigateToSettings: () -> Unit = {},
     onNavigateToNewAccount: () -> Unit = {},
     onNavigateToPlans: () -> Unit = {},
-    onNavigateToEditor: (String, String?) -> Unit = { _, _ -> },
+    onNavigateToEditor: (String) -> Unit = {},
     viewModel: MovementHistoryViewModel = hiltViewModel(),
     prewarmQuickMovement: Boolean = false,
     modifier: Modifier = Modifier,
@@ -119,6 +125,7 @@ fun MovementHistoryRoute(
     onConsumeRegisterMovement: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val voidBalances by viewModel.voidBalanceState.collectAsStateWithLifecycle()
     val quickMovementViewModel = if (prewarmQuickMovement) hiltViewModel<QuickMovementViewModel>() else null
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -126,6 +133,39 @@ fun MovementHistoryRoute(
     val voidedText = stringResource(R.string.history_voided_pending)
     val emeraldColors = rememberCalmEmeraldColors()
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val receiptPreferences = remember(context) {
+        context.getSharedPreferences("movement_receipts_v1", Context.MODE_PRIVATE)
+    }
+    val detailItem = uiState.selectedDetail
+    var receiptUriText by remember(detailItem?.transaction?.userId, detailItem?.transaction?.id) {
+        mutableStateOf(detailItem?.let { row ->
+            receiptPreferences.getString(movementReceiptPreferenceKey(row), null)
+        })
+    }
+    val receiptPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val row = detailItem
+        if (uri != null && row != null) {
+            val isPdf = runCatching { context.contentResolver.getType(uri)?.substringBefore(';') }
+                .getOrNull()
+                ?.let { it == "application/pdf" } ?: true
+            val persisted = isPdf && runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }.isSuccess
+            if (persisted) {
+                receiptPreferences.edit()
+                    .putString(movementReceiptPreferenceKey(row), uri.toString())
+                    .apply()
+                receiptUriText = uri.toString()
+                scope.launch { snackbarHostState.showSnackbar("Comprobante PDF guardado en este dispositivo") }
+            } else {
+                scope.launch { snackbarHostState.showSnackbar("No se pudo guardar el acceso al PDF. Elige otro archivo.") }
+            }
+        }
+    }
 
     LaunchedEffect(listState) {
         snapshotFlow {
@@ -218,7 +258,7 @@ fun MovementHistoryRoute(
                             .semantics { contentDescription = "Ajustes" }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Settings,
+                            imageVector = Icons.Rounded.Settings,
                             contentDescription = null,
                             tint = emeraldColors.secondaryMuted,
                             modifier = Modifier.size(20.dp),
@@ -257,7 +297,7 @@ fun MovementHistoryRoute(
                         },
                         leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.Search,
+                                imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
                                 tint = emeraldColors.secondaryMuted,
                                 modifier = Modifier.size(20.dp),
@@ -274,7 +314,7 @@ fun MovementHistoryRoute(
                                             .semantics { contentDescription = "Limpiar búsqueda" }
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Close,
+                                            imageVector = Icons.Rounded.Close,
                                             contentDescription = null,
                                             tint = emeraldColors.secondaryMuted,
                                             modifier = Modifier.size(18.dp),
@@ -289,7 +329,7 @@ fun MovementHistoryRoute(
                                         .semantics { contentDescription = "Abrir filtros" }
                                 ) {
                                     Icon(
-                                        Icons.Default.FilterList,
+                                        Icons.Rounded.FilterList,
                                         contentDescription = null,
                                         tint = if (uiState.hasActiveAdvancedFilters) emeraldColors.primaryDeep else emeraldColors.secondaryMuted,
                                         modifier = Modifier.size(20.dp),
@@ -312,7 +352,7 @@ fun MovementHistoryRoute(
                             .testTag("input_search_movements"),
                     )
 
-                    // Type Filter Chips: Todos, Gastos, Ingresos, Transferencias.
+                    // Type Filter Chips: Todos, Gastos, Ingresos, Transf.
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -340,7 +380,7 @@ fun MovementHistoryRoute(
                             modifier = Modifier.testTag("chip_filter_income"),
                         )
                         CalmEmeraldTypeChip(
-                            label = "Transferencias",
+                            label = "Transf.",
                             dotColor = emeraldColors.transferBlue,
                             selected = uiState.selectedFilterType == MovementType.TRANSFER,
                             onClick = { viewModel.onFilterTypeSelected(MovementType.TRANSFER) },
@@ -609,7 +649,7 @@ fun MovementHistoryRoute(
                                 TransactionRow(
                                     item = item,
                                     onClick = { viewModel.onOpenDetail(item) },
-                                    onEditClick = { onNavigateToEditor(item.transaction.id, item.merchantName) },
+                                    onEditClick = { onNavigateToEditor(item.transaction.id) },
                                     onVoidClick = { viewModel.onSelectTransactionForVoid(item) },
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -688,11 +728,27 @@ fun MovementHistoryRoute(
             uiState.detailLoading,
             uiState.detailError,
             onDismiss = viewModel::onCloseDetail,
-            onEdit = {
-                viewModel.onCloseDetail()
-                onNavigateToEditor(item.transaction.id, item.merchantName)
+            onEdit = { viewModel.onCloseDetail(); onNavigateToEditor(item.transaction.id) },
+            onVoid = { viewModel.onCloseDetail(); viewModel.onSelectTransactionForVoid(item) },
+            receiptAttached = !receiptUriText.isNullOrBlank(),
+            onAttachReceipt = { receiptPicker.launch(arrayOf("application/pdf")) },
+            onOpenReceipt = {
+                val uri = receiptUriText?.let(Uri::parse)
+                if (uri != null) {
+                    runCatching {
+                        val intent = Intent(Intent.ACTION_VIEW)
+                            .setDataAndType(uri, "application/pdf")
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        context.startActivity(Intent.createChooser(intent, "Abrir comprobante"))
+                    }.onFailure {
+                        scope.launch { snackbarHostState.showSnackbar("No se pudo abrir el comprobante PDF") }
+                    }
+                }
             },
-            onVoid = { viewModel.onCloseDetail(); viewModel.onSelectTransactionForVoid(item) }
+            onRemoveReceipt = {
+                receiptPreferences.edit().remove(movementReceiptPreferenceKey(item)).apply()
+                receiptUriText = null
+            },
         )
     }
 
@@ -712,6 +768,8 @@ fun MovementHistoryRoute(
             },
             isVoiding = uiState.isVoiding,
             errorMessage = uiState.voidErrorMessage,
+            currentSourceBalanceMinor = voidBalances.sourceMinorUnits,
+            currentDestinationBalanceMinor = voidBalances.destinationMinorUnits,
         )
     }
 
@@ -919,7 +977,7 @@ fun TransactionRow(
                             .semantics { contentDescription = "Opciones del movimiento" }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MoreVert,
+                            imageVector = Icons.Rounded.MoreVert,
                             contentDescription = null,
                             tint = emeraldColors.secondaryMuted,
                             modifier = Modifier.size(18.dp)
@@ -1019,7 +1077,7 @@ private fun CalmEmeraldTypeChip(
         ) {
             if (hasCheck && selected) {
                 Icon(
-                    imageVector = Icons.Default.Check,
+                    imageVector = Icons.Rounded.Check,
                     contentDescription = null,
                     tint = contentColor,
                     modifier = Modifier.size(14.dp),
@@ -1053,7 +1111,7 @@ fun SyncStatusIcon(
     when (status) {
         MovementSyncStatus.SYNCED, MovementSyncStatus.MIGRATED_LOCAL -> {
             Icon(
-                imageVector = Icons.Default.CheckCircle,
+                imageVector = Icons.Rounded.CheckCircle,
                 contentDescription = if (status == MovementSyncStatus.MIGRATED_LOCAL) {
                     "Movimiento histórico conservado localmente"
                 } else {
@@ -1065,7 +1123,7 @@ fun SyncStatusIcon(
         }
         MovementSyncStatus.PENDING, MovementSyncStatus.IN_FLIGHT -> {
             Icon(
-                imageVector = Icons.Default.Sync,
+                imageVector = Icons.Rounded.Sync,
                 contentDescription = stringResource(R.string.movements_sync_pending),
                 tint = emeraldColors.primaryDeep,
                 modifier = modifier.size(13.dp)
@@ -1073,7 +1131,7 @@ fun SyncStatusIcon(
         }
         MovementSyncStatus.CONFLICT, MovementSyncStatus.FAILED_PERMANENT -> {
             Icon(
-                imageVector = Icons.Default.ErrorOutline,
+                imageVector = Icons.Rounded.ErrorOutline,
                 contentDescription = stringResource(R.string.movements_sync_error),
                 tint = emeraldColors.expenseCoral,
                 modifier = modifier.size(13.dp)
@@ -1125,7 +1183,7 @@ fun CalmEmeraldEmptyMovementsState(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ReceiptLong,
+                        imageVector = Icons.AutoMirrored.Rounded.ReceiptLong,
                         contentDescription = null,
                         tint = emeraldColors.incomeEmerald,
                         modifier = Modifier.size(32.dp),
@@ -1208,3 +1266,6 @@ private fun formatSignedBigIntegerMinor(minor: BigInteger): Pair<String, String>
     }.format(bd)
     return prefix to formatted
 }
+
+private fun movementReceiptPreferenceKey(item: TransactionItem): String =
+    "${item.transaction.userId}:${item.transaction.id}"

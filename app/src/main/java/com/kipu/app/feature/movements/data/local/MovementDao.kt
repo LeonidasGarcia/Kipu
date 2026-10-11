@@ -32,22 +32,6 @@ interface MovementDao {
     )
     fun observeRecentTransactions(userId: String, limit: Int): Flow<List<TransactionEntity>>
 
-    @Query(
-        """
-        SELECT transactions.*,
-               COALESCE(merchant_catalog_cache.name, transactions.merchant_provisional_text) AS merchant_name
-        FROM transactions
-        LEFT JOIN merchant_catalog_cache ON merchant_catalog_cache.id = transactions.merchant_id
-        WHERE transactions.user_id = :userId
-          AND transactions.card_id = :cardId
-          AND transactions.status = 'ACTIVE'
-          AND transactions.sync_status != 'FAILED_PERMANENT'
-          AND transactions.operation_kind IN ('CARD_PURCHASE', 'CARD_PAYMENT')
-        ORDER BY transactions.occurred_at DESC, transactions.created_at DESC
-        """,
-    )
-    fun observeCardTransactions(userId: String, cardId: String): Flow<List<CardTransactionRow>>
-
     @Query("SELECT * FROM transactions WHERE user_id = :userId AND id = :transactionId")
     suspend fun getTransactionById(userId: String, transactionId: String): TransactionEntity?
 

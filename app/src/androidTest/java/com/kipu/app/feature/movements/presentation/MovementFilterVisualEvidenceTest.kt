@@ -32,7 +32,6 @@ class MovementFilterVisualEvidenceTest {
                     minAmountMinor = 10000, maxAmountMinor = 5000)),
                 onDismiss = {}, onApply = { it.validate() })
         } }
-        save("$prefix-overview-${if (dark) "dark" else "light"}.png", hasTestTag("panel_advanced_filters"))
         compose.onNodeWithTag("btn_apply_filters").performClick()
         compose.onNodeWithTag("input_filter_max_amount").performScrollTo()
         save("$prefix-amount-${if (dark) "dark" else "light"}.png", hasTestTag("panel_advanced_filters"))

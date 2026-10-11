@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -93,6 +95,11 @@ private data class VoidDialogState(
     val errorMessage: String? = null,
 )
 
+data class MovementVoidBalanceState(
+    val sourceMinorUnits: Long? = null,
+    val destinationMinorUnits: Long? = null,
+)
+
 data class AdvancedFiltersState(
     val showPanel: Boolean = false,
     val accountIds: Set<String> = emptySet(),
@@ -129,6 +136,24 @@ class MovementHistoryViewModel @Inject constructor(
     private val _selectedFilterType = MutableStateFlow<MovementType?>(null)
     private val _showRegisterSheet = MutableStateFlow(false)
     private val _voidState = MutableStateFlow(VoidDialogState())
+    val voidBalanceState: StateFlow<MovementVoidBalanceState> = _voidState
+        .flatMapLatest { dialog ->
+            val tx = dialog.selectedItem?.transaction
+            if (tx == null) {
+                flowOf(MovementVoidBalanceState())
+            } else {
+                val sourceBalance = tx.sourceAccountId?.let { accountId ->
+                    movementRepository.observeBalance(tx.userId, accountId)
+                } ?: flowOf(null)
+                val destinationBalance = tx.destinationAccountId?.let { accountId ->
+                    movementRepository.observeBalance(tx.userId, accountId)
+                } ?: flowOf(null)
+                combine(sourceBalance, destinationBalance) { source, destination ->
+                    MovementVoidBalanceState(source, destination)
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MovementVoidBalanceState())
     private val _advancedFilters = MutableStateFlow(AdvancedFiltersState())
     private val _detail = MutableStateFlow(HistoryDetailState())
     private val _recovery = MutableStateFlow(HistoryAccessRecovery.IDLE)
@@ -212,9 +237,12 @@ class MovementHistoryViewModel @Inject constructor(
             accessRefresh = accessRefresh,
             retry = retry,
             invalidation = 0,
+            entitlementTick = 0,
         )
-    }.combine(_datasetInvalidation) { request, invalidation ->
-        request.copy(invalidation = invalidation)
+    }.combine(combine(_datasetInvalidation, _entitlementTick) { invalidation, entitlementTick ->
+        invalidation to entitlementTick
+    }) { request, (invalidation, entitlementTick) ->
+        request.copy(invalidation = invalidation, entitlementTick = entitlementTick)
     }.distinctUntilChanged { previous, next -> previous.key == next.key }
 
     init {
@@ -223,7 +251,6 @@ class MovementHistoryViewModel @Inject constructor(
         }
         viewModelScope.launch {
             historyRequests.combine(_advancedFilters) { request, filters -> request to filters.showPanel }
-                .combine(_entitlementTick) { requestAndPanel, _ -> requestAndPanel }
                 .collect { (request, showPanel) ->
                     val decision = try {
                         queryMovementHistoryUseCase?.evaluateAccess(
@@ -236,13 +263,7 @@ class MovementHistoryViewModel @Inject constructor(
                     } catch (_: Exception) {
                         MovementHistoryAccessDecision.RevalidationRequired(request.query.toBasicFallback())
                     }
-                    if (isCurrent(request)) {
-                        val previous = _panelAccess.value
-                        val accessChangedForAdvancedQuery = previous.key == request.key &&
-                            previous.decision != decision && request.query.requiresAdvancedAccess
-                        _panelAccess.value = PanelAccess(request.key, showPanel, decision)
-                        if (accessChangedForAdvancedQuery) _datasetInvalidation.update { it + 1 }
-                    }
+                    if (isCurrent(request)) _panelAccess.value = PanelAccess(request.key, showPanel, decision)
                 }
         }
         queryMovementHistoryUseCase?.let { useCase ->
@@ -378,7 +399,10 @@ class MovementHistoryViewModel @Inject constructor(
 
     fun onApplyFilterDraft(draft: MovementFilterDraft): FilterDraftValidation {
         val result = draft.validate()
-        result.filters?.let { _advancedFilters.value = it.copy(showPanel = false) }
+        result.filters?.let {
+            _advancedFilters.value = it.copy(showPanel = false)
+            _selectedFilterType.value = draft.movementType
+        }
         return result
     }
 
@@ -600,6 +624,7 @@ class MovementHistoryViewModel @Inject constructor(
             accessRefresh = _accessRefresh.value,
             retry = _readRetry.value,
             invalidation = _datasetInvalidation.value,
+            entitlementTick = _entitlementTick.value,
         )
     }
 
@@ -701,9 +726,10 @@ private data class HistoryRequest(
     val accessRefresh: Int,
     val retry: Int,
     val invalidation: Int,
+    val entitlementTick: Int,
 ) {
     // Access refreshes and dataset invalidations intentionally produce a new generation, not a new page cursor.
-    val key = HistoryKey(ownerId, query, accessRefresh, retry, invalidation)
+    val key = HistoryKey(ownerId, query, accessRefresh, retry, invalidation, entitlementTick)
 }
 
 private data class HistoryKey(
@@ -712,6 +738,7 @@ private data class HistoryKey(
     val accessRefresh: Int,
     val retry: Int,
     val invalidation: Int,
+    val entitlementTick: Int,
 )
 
 private data class HistoryLoadState(

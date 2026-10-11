@@ -189,7 +189,7 @@ class MovementUxRefinementTest {
             compose.onNodeWithTag("tx_row_ux-voided").performScrollTo().performClick()
             compose.onNodeWithText("Movimiento anulado · Solo lectura").assertIsDisplayed()
             compose.onNodeWithTag("detail_edit").assertDoesNotExist()
-            compose.onNodeWithContentDescription("Cerrar detalle").performClick()
+            compose.onNodeWithText("Cerrar detalle").performScrollTo().performClick()
             compose.runOnIdle { model.onAccountFilterToggled("cash") }
             compose.waitUntil(5_000) { model.uiState.value.fallbackUsed }
             compose.onNodeWithTag("input_search_movements").performScrollTo()
